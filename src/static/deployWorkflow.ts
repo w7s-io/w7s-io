@@ -2,11 +2,7 @@ const W7S_DEPLOY_ACTION = "w7s-io/w7s-cloud@v1";
 
 export const minimalDeployWorkflowYaml = `name: Deploy
 
-on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+on: push
 
 permissions:
   contents: read
