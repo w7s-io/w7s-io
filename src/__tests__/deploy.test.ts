@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { zipSync } from "fflate";
 import { app } from "../worker";
 import { createTestEnv } from "./mocks";
-import { loadDeploymentRecord } from "../storage/deployments";
+import { loadCustomDomainMapping, loadDeploymentRecord } from "../storage/deployments";
 
 const zipBytes = (files: Record<string, string>) =>
   zipSync(
@@ -86,6 +86,60 @@ describe("deploy API", () => {
     expect(response.status).toBe(200);
     const body = await response.json() as { data?: { url?: string } };
     expect(body.data?.url).toBe("https://guerrerocarlos.w7s.cloud/");
+  });
+
+  it("reads frontend CNAME files and stores custom domain mappings", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "guerrerocarlos/whereis" });
+        }
+        if (url === "https://api.cloudflare.com/client/v4/zones?per_page=100") {
+          return Response.json({
+            success: true,
+            result: [{ id: "zone-1", name: "carlosguerrero.com" }]
+          });
+        }
+        if (url.includes("/workers/routes") && init?.method === "GET") {
+          return Response.json({ success: true, result: [] });
+        }
+        if (url.includes("/workers/routes") && init?.method === "POST") {
+          return Response.json({ success: true, result: { id: "route-1" } });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv({
+      CLOUDFLARE_API_TOKEN: "cf-token"
+    });
+    const response = await app.fetch(
+      deployRequest(
+        {
+          "frontend/CNAME": "whereis.carlosguerrero.com\n",
+          "frontend/dist/index.html": "<h1>Hello</h1>"
+        },
+        {
+          "x-github-repository": "guerrerocarlos/whereis"
+        }
+      ),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      data?: {
+        url?: string;
+        customDomains?: string[];
+      };
+    };
+    expect(body.data?.url).toBe("https://whereis.carlosguerrero.com/");
+    expect(body.data?.customDomains).toEqual(["whereis.carlosguerrero.com"]);
+    const record = await loadDeploymentRecord(env, "production", "guerrerocarlos", "whereis");
+    expect(record?.customDomains).toEqual(["whereis.carlosguerrero.com"]);
+    const mapping = await loadCustomDomainMapping(env, "whereis.carlosguerrero.com");
+    expect(mapping?.repoSlug).toBe("whereis");
   });
 
   it("rejects unauthorized GitHub tokens", async () => {

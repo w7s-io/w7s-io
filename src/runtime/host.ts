@@ -8,7 +8,7 @@ export type RuntimeHost = {
   environments: string[];
 };
 
-const cleanHost = (value: string) => value.trim().toLowerCase().replace(/:\d+$/, "");
+export const cleanHost = (value: string) => value.trim().toLowerCase().replace(/:\d+$/, "");
 
 export const getBaseDomain = (env: { W7S_BASE_DOMAIN?: string }) =>
   cleanHost(env.W7S_BASE_DOMAIN || DEFAULT_BASE_DOMAIN);
@@ -44,4 +44,3 @@ export const resolveRuntimeHost = (
     environments: ["production"]
   };
 };
-

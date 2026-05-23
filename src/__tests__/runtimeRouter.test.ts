@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { app } from "../worker";
 import { createTestEnv } from "./mocks";
-import { storeDeploymentRecord, storeStaticSiteManifest } from "../storage/deployments";
+import {
+  storeCustomDomainMappings,
+  storeDeploymentRecord,
+  storeStaticSiteManifest
+} from "../storage/deployments";
 import type { DeploymentRecord, StaticSiteManifest } from "../storage/deployments";
 
 const storeStaticDeployment = async (
@@ -66,6 +70,7 @@ const storeStaticDeployment = async (
     }
   };
   await storeDeploymentRecord(env, record);
+  return record;
 };
 
 const storeStaticDemoDeployment = async (env: ReturnType<typeof createTestEnv>) =>
@@ -181,6 +186,47 @@ describe("runtime router", () => {
 
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("Demo App");
+  });
+
+  it("serves static deployments from custom domain mappings", async () => {
+    const env = createTestEnv();
+    const record = await storeStaticDeployment(env, {
+      orgSlug: "guerrerocarlos",
+      repoSlug: "whereis",
+      files: {
+        "index.html": {
+          body: "<h1>Where is Carlos?</h1>",
+          contentType: "text/html; charset=utf-8"
+        },
+        "assets/app.js": {
+          body: "console.log('whereis')",
+          contentType: "application/javascript; charset=utf-8"
+        }
+      }
+    });
+    await storeCustomDomainMappings(env, record, ["whereis.carlosguerrero.com"]);
+
+    const rootResponse = await app.fetch(
+      new Request("https://whereis.carlosguerrero.com/", {
+        headers: {
+          host: "whereis.carlosguerrero.com"
+        }
+      }),
+      env
+    );
+    const assetResponse = await app.fetch(
+      new Request("https://whereis.carlosguerrero.com/assets/app.js", {
+        headers: {
+          host: "whereis.carlosguerrero.com"
+        }
+      }),
+      env
+    );
+
+    expect(rootResponse.status).toBe(200);
+    expect(await rootResponse.text()).toContain("Where is Carlos?");
+    expect(assetResponse.status).toBe(200);
+    expect(await assetResponse.text()).toContain("whereis");
   });
 
   it("dispatches native worker requests with repo path stripped", async () => {

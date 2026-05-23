@@ -29,6 +29,7 @@ export type DeploymentRecord = {
   branch: string;
   commitSha: string;
   deployedAt: string;
+  customDomains?: string[];
   targets: {
     worker?: {
       namespace: string;
@@ -46,11 +47,24 @@ export type DeploymentRecord = {
   };
 };
 
+export type CustomDomainMapping = {
+  version: 1;
+  hostname: string;
+  orgSlug: string;
+  repoSlug: string;
+  environment: string;
+  repository: string;
+  deployedAt: string;
+};
+
 export const deploymentKey = (environment: string, orgSlug: string, repoSlug: string) =>
   `deployment:v1:${sanitizeScriptPart(environment)}:${sanitizeScriptPart(orgSlug)}:${sanitizeScriptPart(repoSlug)}`;
 
 export const staticManifestKey = (environment: string, orgSlug: string, repoSlug: string) =>
   `static_manifest:v1:${sanitizeScriptPart(environment)}:${sanitizeScriptPart(orgSlug)}:${sanitizeScriptPart(repoSlug)}`;
+
+export const customDomainKey = (hostname: string) =>
+  `custom_domain:v1:${hostname.trim().toLowerCase()}`;
 
 export const storeDeploymentRecord = async (env: Env, record: DeploymentRecord) => {
   await env.DEPLOYMENTS_KV.put(
@@ -88,6 +102,37 @@ export const loadDeploymentRecordWithCandidates = async (
   return null;
 };
 
+export const storeCustomDomainMappings = async (
+  env: Env,
+  record: DeploymentRecord,
+  hostnames: string[]
+) => {
+  await Promise.all(
+    hostnames.map((hostname) =>
+      env.DEPLOYMENTS_KV.put(
+        customDomainKey(hostname),
+        JSON.stringify({
+          version: 1,
+          hostname,
+          orgSlug: record.orgSlug,
+          repoSlug: record.repoSlug,
+          environment: record.environment,
+          repository: record.repository,
+          deployedAt: record.deployedAt
+        } satisfies CustomDomainMapping)
+      )
+    )
+  );
+};
+
+export const loadCustomDomainMapping = async (env: Env, hostname: string) => {
+  const raw = await env.DEPLOYMENTS_KV.get(customDomainKey(hostname), "json");
+  if (!raw || typeof raw !== "object") return null;
+  const mapping = raw as Partial<CustomDomainMapping>;
+  if (mapping.version !== 1 || typeof mapping.hostname !== "string") return null;
+  return mapping as CustomDomainMapping;
+};
+
 export const storeStaticSiteManifest = async (
   env: Env,
   manifest: StaticSiteManifest
@@ -104,4 +149,3 @@ export const loadStaticSiteManifest = async (env: Env, key: string) => {
   if (manifest.version !== 1 || typeof manifest.assetPrefix !== "string") return null;
   return manifest as StaticSiteManifest;
 };
-

@@ -6,6 +6,7 @@
   "workers_dev": true,
   "vars": {
     "W7S_BASE_DOMAIN": "w7s.cloud",
+    "W7S_WORKER_NAME": "w7s-io",
     "CLOUDFLARE_DISPATCH_NAMESPACE": "w7s-isolate",
     "CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE": "2026-05-23"
   },

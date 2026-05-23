@@ -5,8 +5,13 @@ import { parseGitHubRepository, verifyGitHubRepoAccess } from "../deploy/githubA
 import { archiveHasPrefix, readDeployArchive } from "../deploy/archive";
 import { detectWorkerEntrypoint, publishIsolateWorker } from "../deploy/isolatePublisher";
 import { hasFrontendDist, publishStaticSite } from "../deploy/staticPublisher";
+import { attachCustomDomainRoutes, readCustomDomains } from "../deploy/customDomains";
 import { buildStableScriptName, requireSlug, resolveEnvironment } from "../names";
-import { storeDeploymentRecord, type DeploymentRecord } from "../storage/deployments";
+import {
+  storeCustomDomainMappings,
+  storeDeploymentRecord,
+  type DeploymentRecord
+} from "../storage/deployments";
 
 type HonoContext = Context<{ Bindings: Env }>;
 
@@ -23,7 +28,8 @@ const isZipRequest = (request: Request) => {
   return contentType.includes("application/zip") || contentType.includes("application/octet-stream");
 };
 
-const publicDeploymentUrl = (env: Env, orgSlug: string, repoSlug: string) => {
+const publicDeploymentUrl = (env: Env, orgSlug: string, repoSlug: string, customDomains: string[]) => {
+  if (customDomains[0]) return `https://${customDomains[0]}/`;
   const baseDomain = env.W7S_BASE_DOMAIN?.trim() || "w7s.cloud";
   if (repoSlug === orgSlug) return `https://${orgSlug}.${baseDomain}/`;
   return `https://${orgSlug}.${baseDomain}/${repoSlug}/`;
@@ -83,6 +89,12 @@ export const handleDeploy = async (c: HonoContext) => {
   const hasBackend = archiveHasPrefix(archive, "backend/");
   const hasNativeBackend = hasWorker || hasBackend;
   const hasStatic = hasFrontendDist(archive);
+  let customDomains: string[];
+  try {
+    customDomains = readCustomDomains(archive);
+  } catch (error) {
+    return jsonError(error instanceof Error ? error.message : String(error), 400);
+  }
   if (!hasNativeBackend && !hasStatic) {
     return jsonError("Archive must contain worker/, backend/, or frontend/dist.", 400);
   }
@@ -123,6 +135,10 @@ export const handleDeploy = async (c: HonoContext) => {
         hasIndex: publishedStatic.manifest.hasIndex
       };
     }
+
+    if (customDomains.length > 0) {
+      await attachCustomDomainRoutes(c.env, customDomains);
+    }
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : String(error), 500);
   }
@@ -136,12 +152,17 @@ export const handleDeploy = async (c: HonoContext) => {
     branch,
     commitSha,
     deployedAt,
+    ...(customDomains.length > 0 ? { customDomains } : {}),
     targets
   };
   await storeDeploymentRecord(c.env, record);
+  if (customDomains.length > 0) {
+    await storeCustomDomainMappings(c.env, record, customDomains);
+  }
 
   return jsonSuccess({
     deployment: record,
-    url: publicDeploymentUrl(c.env, orgSlug, repoSlug)
+    url: publicDeploymentUrl(c.env, orgSlug, repoSlug, customDomains),
+    ...(customDomains.length > 0 ? { customDomains } : {})
   });
 };

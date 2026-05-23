@@ -12,6 +12,7 @@ export interface Env {
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_DISPATCH_NAMESPACE?: string;
   CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE?: string;
+  W7S_WORKER_NAME?: string;
   W7S_BASE_DOMAIN?: string;
   APP_COMMIT_ID?: string;
   APP_DEPLOY_BRANCH?: string;

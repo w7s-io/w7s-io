@@ -72,6 +72,14 @@ https://guerrerocarlos.w7s.cloud/assets/app.js
 
 Repo-prefixed deployments keep priority. If `guerrerocarlos/w7s-io-demo` exists, then `/w7s-io-demo/*` routes to that repo before W7S tries the org-root app.
 
+Custom domains are resolved from KV mappings created during deploy from `frontend/CNAME` or `frontend/dist/CNAME`. A custom hostname routes directly to its mapped deployment without a repo prefix:
+
+```text
+https://whereis.carlosguerrero.com/
+https://whereis.carlosguerrero.com/api/profile
+https://whereis.carlosguerrero.com/assets/app.js
+```
+
 Reserved platform paths:
 
 - `/api/v1/*`
@@ -85,6 +93,14 @@ Reserved paths are handled by the core Worker and are not routed to deployed app
 ```text
 deployment:v1:<environment>:<orgSlug>:<repoSlug>
 ```
+
+Custom domains first load:
+
+```text
+custom_domain:v1:<hostname>
+```
+
+and then load the mapped deployment record.
 
 If the host has multiple environment candidates, W7S tries them in order.
 

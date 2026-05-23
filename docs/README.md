@@ -22,5 +22,6 @@ Start here:
 - `frontend/dist` is published to R2 and served as static assets;
 - public repo apps are routed as `https://<org>.w7s.cloud/<repo>/*`;
 - same-name repos such as `github.com/<org>/<org>` can also serve `https://<org>.w7s.cloud/*`.
+- custom domains can be declared with `frontend/CNAME` or `frontend/dist/CNAME` when DNS is managed separately.
 
 The old workflow editor, `jsInterpreter`, plugin bridge, DB control, and telemetry stack are not part of this core.

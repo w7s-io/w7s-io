@@ -68,6 +68,21 @@ frontend/dist/
 
 Both native backend and static frontend can be present in the same archive.
 
+Optional custom domain declaration:
+
+```text
+frontend/CNAME
+frontend/dist/CNAME
+```
+
+The `CNAME` file should contain one hostname, for example:
+
+```text
+whereis.carlosguerrero.com
+```
+
+W7S reads `frontend/CNAME` first and `frontend/dist/CNAME` second, stores a host mapping in KV, and attaches a Cloudflare Worker route for `<hostname>/*` when the domain's Cloudflare zone is available to the W7S API token. The actual DNS record still has to resolve to Cloudflare. For a typical proxied Cloudflare zone, create a `CNAME` record for the host that points at `w7s.cloud`.
+
 ## Native Backend Rules
 
 The native backend is published to Cloudflare Workers for Platforms.
@@ -125,9 +140,11 @@ Example:
           "fileCount": 3,
           "hasIndex": true
         }
-      }
+      },
+      "customDomains": ["whereis.carlosguerrero.com"]
     },
-    "url": "https://guerrerocarlos.w7s.cloud/w7s-io-demo/"
+    "url": "https://whereis.carlosguerrero.com/",
+    "customDomains": ["whereis.carlosguerrero.com"]
   }
 }
 ```
@@ -153,5 +170,9 @@ For same-name repos, the public URL is the org root. A deploy from `guerrerocarl
   - Archive does not contain a deployable root.
 - `400 Native backend deploy requires ...`
   - `backend/` or `worker/` exists but no supported `index.*` entrypoint exists.
+- `400 Invalid custom domain in CNAME file`
+  - `frontend/CNAME` or `frontend/dist/CNAME` does not contain a valid hostname.
+- `500 Unable to find a Cloudflare zone for custom domain`
+  - W7S could not attach the Worker route for that hostname.
 - `500 Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID`
   - Core Worker secrets are missing; deploy cannot publish native Workers.

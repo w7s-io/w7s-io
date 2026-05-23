@@ -1,6 +1,9 @@
 import type { Env } from "../env";
-import { loadDeploymentRecordWithCandidates } from "../storage/deployments";
-import { resolveRuntimeHost } from "./host";
+import {
+  loadCustomDomainMapping,
+  loadDeploymentRecordWithCandidates
+} from "../storage/deployments";
+import { cleanHost, resolveRuntimeHost } from "./host";
 import { resolveStaticAssetResponse } from "./static";
 import { normalizeSlug } from "../names";
 
@@ -20,7 +23,7 @@ const splitRepoPath = (path: string) => {
 type RouteCandidate = {
   repoSlug: string;
   repoPath: string;
-  mount: "repo-prefix" | "org-root";
+  mount: "repo-prefix" | "org-root" | "custom-domain";
 };
 
 const rootRepoPath = (path: string) => path || "/";
@@ -102,19 +105,32 @@ const dispatchWorker = async (params: {
 
 export const resolveRuntimeRequest = async (request: Request, env: Env) => {
   const url = new URL(request.url);
-  if (isReservedPlatformPath(url.pathname)) return null;
-
   const host = resolveRuntimeHost(request, env);
-  if (!host) return null;
+  if (host && isReservedPlatformPath(url.pathname)) return null;
 
-  const candidates = routeCandidates(url.pathname, host.orgSlug);
+  const customDomain = host
+    ? null
+    : await loadCustomDomainMapping(env, cleanHost(request.headers.get("host") || url.host));
+  if (!host && !customDomain) return null;
+
+  const orgSlug = host?.orgSlug ?? customDomain!.orgSlug;
+  const environments = host?.environments ?? [customDomain!.environment];
+  const candidates = customDomain
+    ? [
+        {
+          repoSlug: customDomain.repoSlug,
+          repoPath: url.pathname || "/",
+          mount: "custom-domain" as const
+        }
+      ]
+    : routeCandidates(url.pathname, orgSlug);
   if (candidates.length === 0) return null;
 
   for (const candidate of candidates) {
     const deployment = await loadDeploymentRecordWithCandidates(
       env,
-      host.environments,
-      host.orgSlug,
+      environments,
+      orgSlug,
       candidate.repoSlug
     );
     if (!deployment) continue;
@@ -143,7 +159,7 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
         request,
         repoPath: candidate.repoPath,
         repoSlug: candidate.repoSlug,
-        orgSlug: host.orgSlug,
+        orgSlug,
         scriptName: workerTarget.scriptName
       });
       if (!shouldFallbackFromWorkerToStatic(request, workerResponse)) {

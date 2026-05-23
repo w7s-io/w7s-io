@@ -176,6 +176,7 @@ const config = {
   workers_dev: true,
   vars: {
     W7S_BASE_DOMAIN: zoneName,
+    W7S_WORKER_NAME: workerName,
     CLOUDFLARE_DISPATCH_NAMESPACE: dispatchNamespace,
     CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE: compatibilityDate,
     ...(appCommitId ? { APP_COMMIT_ID: appCommitId } : {}),
