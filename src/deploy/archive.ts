@@ -76,11 +76,12 @@ export const readDeployArchive = async (request: Request): Promise<DeployArchive
   }
 
   const rawEntries = Object.entries(unzipped)
+    .filter(([path]) => !path.replace(/\\/g, "/").endsWith("/"))
     .map(([path, entryBytes]) => ({
       path: normalizeArchivePath(path),
       bytes: entryBytes
     }))
-    .filter((entry) => entry.path && !entry.path.endsWith("/"));
+    .filter((entry) => entry.path);
 
   const entries = stripCommonRoot(rawEntries).filter((entry) => entry.path);
   const files = new Map(entries.map((entry) => [entry.path, entry.bytes]));

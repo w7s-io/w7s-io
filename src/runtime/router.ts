@@ -15,9 +15,10 @@ const splitRepoPath = (path: string) => {
   const segments = path.split("/").map((segment) => segment.trim()).filter(Boolean);
   const repoSlug = normalizeSlug(segments[0] ?? "");
   if (!repoSlug) return null;
+  const trailingSlash = path.endsWith("/") ? "/" : "";
   return {
     repoSlug,
-    repoPath: segments.length > 1 ? `/${segments.slice(1).join("/")}` : "/"
+    repoPath: segments.length > 1 ? `/${segments.slice(1).join("/")}${trailingSlash}` : "/"
   };
 };
 

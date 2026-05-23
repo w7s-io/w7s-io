@@ -38,4 +38,16 @@ describe("readDeployArchive", () => {
     expect(readTextFile(archive, "dist/index.html")).toBe("hello");
     expect(readTextFile(archive, "index.html")).toBeNull();
   });
+
+  it("ignores zip directory entries", async () => {
+    const archive = await readDeployArchive(
+      zipRequest({
+        "build/docs/": "",
+        "build/docs/index.html": "docs"
+      })
+    );
+
+    expect(readTextFile(archive, "build/docs")).toBeNull();
+    expect(readTextFile(archive, "build/docs/index.html")).toBe("docs");
+  });
 });

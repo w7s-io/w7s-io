@@ -112,6 +112,41 @@ describe("runtime router", () => {
     expect(response.headers.get("location")).toBe("https://w7s-io.w7s.cloud/demo/?from=test");
   });
 
+  it("serves nested static directory indexes from repo routes", async () => {
+    const env = createTestEnv();
+    await storeStaticDeployment(env, {
+      orgSlug: "w7s-io",
+      repoSlug: "docs",
+      files: {
+        "index.html": {
+          body: "<h1>Docs</h1>",
+          contentType: "text/html; charset=utf-8"
+        },
+        "deploy-from-github": {
+          body: "",
+          contentType: "application/octet-stream"
+        },
+        "deploy-from-github/index.html": {
+          body: "<h1>Deploy From GitHub</h1>",
+          contentType: "text/html; charset=utf-8"
+        }
+      }
+    });
+
+    const response = await app.fetch(
+      new Request("https://w7s-io.w7s.cloud/docs/deploy-from-github/", {
+        headers: {
+          host: "w7s-io.w7s.cloud"
+        }
+      }),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    expect(await response.text()).toContain("Deploy From GitHub");
+  });
+
   it("shows contextual deploy help for empty org root hosts", async () => {
     const env = createTestEnv();
 
