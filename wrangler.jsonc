@@ -19,8 +19,8 @@
   "kv_namespaces": [
     {
       "binding": "DEPLOYMENTS_KV",
-      "id": "replace-with-production-kv-id",
-      "preview_id": "replace-with-preview-kv-id"
+      "id": "8352f7268600497592a71a666b73ab1a",
+      "preview_id": "8352f7268600497592a71a666b73ab1a"
     }
   ],
   "r2_buckets": [
@@ -38,7 +38,7 @@
     {
       "pattern": "*.w7s.cloud/*",
       "custom_domain": false,
-      "zone_id": "replace-with-w7s-cloud-zone-id"
+      "zone_id": "ab38dab446e5d4229068bc1ab1cd36ae"
     }
   ]
 }
