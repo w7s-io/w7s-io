@@ -1,0 +1,83 @@
+# Architecture
+
+## Purpose
+
+`w7s-io` is a small Cloudflare Worker that replaces the workflow-first runtime with a repo deploy core. Its job is to accept deploy archives, publish backend/frontend targets, store routing metadata, and route public requests to the deployed targets.
+
+## Non-Goals
+
+These are intentionally outside the core:
+
+- workflow graph execution;
+- `jsInterpreter`;
+- built-in plugin globals;
+- editor APIs;
+- DB/migration control;
+- telemetry UI;
+- per-plugin config UI.
+
+Those can be rebuilt later as W7S-deployed apps/components on top of this core.
+
+## Main Components
+
+- `src/worker.ts`
+  - Hono entrypoint.
+  - Registers `GET /api/v1/health` and `POST /api/v1/deploy`.
+  - Sends all other requests through runtime routing, then falls back to the placeholder landing page.
+- `src/api/deploy.ts`
+  - Implements the deploy API.
+  - Validates GitHub auth and archive shape.
+  - Publishes native Workers and static frontend assets.
+  - Stores one deployment record per org/repo/environment.
+- `src/deploy/archive.ts`
+  - Reads zip archives into normalized file maps.
+  - Strips common GitHub archive roots while preserving W7S app roots.
+- `src/deploy/isolatePublisher.ts`
+  - Publishes `backend/` or `worker/` apps into a Workers for Platforms dispatch namespace.
+  - Supports local relative JS/TS module graphs only.
+- `src/deploy/staticPublisher.ts`
+  - Publishes `frontend/dist` files to R2.
+  - Stores a static manifest in KV.
+- `src/runtime/router.ts`
+  - Resolves org/repo requests.
+  - Serves exact static assets first.
+  - Dispatches to native Workers.
+  - Falls back to `index.html` for static SPA routes.
+- `src/storage/deployments.ts`
+  - Defines KV keys and persisted deployment/static manifest shapes.
+- `scripts/prepare-cloudflare-config.mjs`
+  - GitHub Actions helper that generates `wrangler.generated.jsonc`.
+  - Creates or finds KV/R2/dispatch namespace resources.
+  - Attaches routes when requested by repo variables.
+
+## Request Flow
+
+```text
+POST /api/v1/deploy
+  -> verify GitHub token can access x-github-repository
+  -> unzip archive
+  -> detect backend/ or worker/
+  -> publish native Worker to dispatch namespace
+  -> detect frontend/dist
+  -> upload static files to R2
+  -> store deployment record in KV
+```
+
+```text
+GET https://<org>.w7s.cloud/<repo>/<path>
+  -> resolve org from host
+  -> resolve repo from first path segment
+  -> load deployment record from KV
+  -> serve exact static asset if present
+  -> dispatch to native Worker if present
+  -> if native Worker returns 404/405, serve static SPA fallback if present
+```
+
+## Compatibility Choices
+
+- `worker/` and `backend/` are both accepted as native backend roots.
+- If both roots are present, `worker/` entrypoints are preferred because their candidates are listed first.
+- `frontend/dist` is treated as already-built output.
+- W7S does not install dependencies or run user builds during deploy.
+- Bare package imports inside native backend code are not supported by deploy-time publishing. Repos should upload bundled code or use relative local modules only.
+

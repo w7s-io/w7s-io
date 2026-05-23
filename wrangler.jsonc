@@ -1,0 +1,44 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "w7s-io",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-05-23",
+  "workers_dev": true,
+  "vars": {
+    "W7S_BASE_DOMAIN": "w7s.cloud",
+    "CLOUDFLARE_DISPATCH_NAMESPACE": "w7s-isolate",
+    "CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE": "2026-05-23"
+  },
+  "dispatch_namespaces": [
+    {
+      "binding": "DISPATCHER",
+      "namespace": "w7s-isolate",
+      "remote": true
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "DEPLOYMENTS_KV",
+      "id": "replace-with-production-kv-id",
+      "preview_id": "replace-with-preview-kv-id"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "STATIC_ASSETS",
+      "bucket_name": "w7s-io-static-assets",
+      "preview_bucket_name": "w7s-io-static-assets-preview"
+    }
+  ],
+  "routes": [
+    {
+      "pattern": "w7s.cloud",
+      "custom_domain": true
+    },
+    {
+      "pattern": "*.w7s.cloud/*",
+      "custom_domain": false,
+      "zone_id": "replace-with-w7s-cloud-zone-id"
+    }
+  ]
+}
