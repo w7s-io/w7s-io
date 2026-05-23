@@ -37,7 +37,7 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
   - Publishes `backend/` or `worker/` apps into a Workers for Platforms dispatch namespace.
   - Supports local relative JS/TS module graphs only.
 - `src/deploy/staticPublisher.ts`
-  - Publishes `frontend/dist` files to R2.
+  - Publishes detected static frontend output files to R2.
   - Stores a static manifest in KV.
 - `src/runtime/router.ts`
   - Resolves org/repo requests.
@@ -60,7 +60,7 @@ POST /api/v1/deploy
   -> unzip archive
   -> detect backend/ or worker/
   -> publish native Worker to dispatch namespace
-  -> detect frontend/dist
+  -> detect static frontend output
   -> upload static files to R2
   -> store deployment record in KV
 ```
@@ -79,6 +79,6 @@ GET https://<org>.w7s.cloud/<repo>/<path>
 
 - `worker/` and `backend/` are both accepted as native backend roots.
 - If both roots are present, `worker/` entrypoints are preferred because their candidates are listed first.
-- `frontend/dist` is treated as already-built output.
+- `frontend/dist`, `dist/client`, `dist`, `build`, and `out` are treated as already-built frontend output.
 - W7S does not install dependencies or run user builds during deploy.
 - Bare package imports inside native backend code are not supported by deploy-time publishing. Repos should upload bundled code or use relative local modules only.

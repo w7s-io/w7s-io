@@ -8,8 +8,8 @@ As of the latest docs update:
 - `W7S_ATTACH_WILDCARD_ROUTE=true` is set in GitHub repo variables.
 - The Worker route `*.w7s.cloud/*` is attached by the deploy workflow.
 - Wildcard DNS is expected to be managed manually.
-- `backend/`, `worker/`, and `frontend/dist` deploys are supported.
-- `frontend/CNAME` and `frontend/dist/CNAME` can attach app custom-domain routes when the W7S token can manage that Cloudflare zone.
+- `backend/`, `worker/`, and static frontend deploys are supported.
+- Root `CNAME` files can attach app custom-domain routes when the W7S token can manage that Cloudflare zone.
 - Empty org roots such as `https://sadasant.w7s.cloud/` show deploy-help HTML instead of a plain 404.
 - The demo repo `guerrerocarlos/w7s-io-demo` deploys successfully through the reusable deploy action.
 - The example repo `w7s-io/example-fullstack-ts` exists as a reusable fullstack TypeScript starter.
@@ -31,7 +31,7 @@ The point of this repo is to keep the core deploy/routing plane small.
 
 - W7S does not build user repos. CI must upload ready-to-run files.
 - Native backend deploy supports only relative local imports.
-- Static hosting only supports `frontend/dist`.
+- Static hosting supports `frontend/dist`, `dist/client`, `dist`, `build`, and `out`.
 - Custom-domain DNS is manual; W7S only stores the host mapping and attaches a Worker route.
 - No rollback UI or deployment history API yet.
 - No user-facing logs yet.

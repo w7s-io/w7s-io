@@ -2,7 +2,15 @@ import type { DeployArchive } from "./archive";
 import { readTextFile } from "./archive";
 import type { Env } from "../env";
 
-const CNAME_PATHS = ["frontend/CNAME", "frontend/dist/CNAME"];
+const CNAME_PATHS = [
+  "CNAME",
+  "frontend/CNAME",
+  "frontend/dist/CNAME",
+  "dist/client/CNAME",
+  "dist/CNAME",
+  "build/CNAME",
+  "out/CNAME"
+];
 const DEFAULT_WORKER_NAME = "w7s-io";
 const HOSTNAME_PATTERN =
   /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])$/;

@@ -10,9 +10,9 @@ This repo is the greenfield replacement core for W7S. It keeps the platform smal
 - `POST /api/v1/deploy` accepts GitHub Actions repo zips;
 - deployments are authorized by the GitHub token's access to the source repo;
 - `worker/` or `backend/` apps publish to Workers for Platforms;
-- `frontend/dist` assets publish to R2 and are served from `https://<org>.w7s.cloud/<repo>/*`.
+- static frontend assets publish to R2 and are served from `https://<org>.w7s.cloud/<repo>/*`.
 - same-name repos such as `github.com/<org>/<org>` can serve directly from `https://<org>.w7s.cloud/*`.
-- `frontend/CNAME` or `frontend/dist/CNAME` can declare one custom domain for a deployment.
+- `CNAME` can declare one custom domain for a deployment.
 
 The old workflow interpreter and hard-coded plugin bridge are intentionally not part of this core. They can be rebuilt later as W7S apps/components on top of this deploy surface.
 
@@ -52,6 +52,20 @@ backend/index.ts
 ```
 
 Frontend:
+
+```text
+dist/index.html
+dist/assets/app.js
+```
+
+or:
+
+```text
+dist/client/index.html
+dist/client/assets/app.js
+```
+
+or:
 
 ```text
 frontend/dist/index.html

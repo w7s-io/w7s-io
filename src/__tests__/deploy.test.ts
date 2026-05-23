@@ -59,6 +59,32 @@ describe("deploy API", () => {
     expect(record?.targets.worker).toBeUndefined();
   });
 
+  it("publishes root dist static deployments", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "w7s-io/demo" });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv();
+    const response = await app.fetch(
+      deployRequest({
+        "dist/index.html": "<h1>Hello</h1>",
+        "dist/assets/app.js": "console.log('ok')"
+      }),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const record = await loadDeploymentRecord(env, "production", "w7s-io", "demo");
+    expect(record?.targets.static?.fileCount).toBe(2);
+    expect(record?.targets.static?.hasIndex).toBe(true);
+  });
+
   it("returns org root URLs for same-name repo deployments", async () => {
     vi.stubGlobal(
       "fetch",
@@ -88,7 +114,7 @@ describe("deploy API", () => {
     expect(body.data?.url).toBe("https://guerrerocarlos.w7s.cloud/");
   });
 
-  it("reads frontend CNAME files and stores custom domain mappings", async () => {
+  it("reads root CNAME files and stores custom domain mappings", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -117,8 +143,8 @@ describe("deploy API", () => {
     const response = await app.fetch(
       deployRequest(
         {
-          "frontend/CNAME": "whereis.carlosguerrero.com\n",
-          "frontend/dist/index.html": "<h1>Hello</h1>"
+          "CNAME": "whereis.carlosguerrero.com\n",
+          "dist/client/index.html": "<h1>Hello</h1>"
         },
         {
           "x-github-repository": "guerrerocarlos/whereis"
@@ -150,7 +176,7 @@ describe("deploy API", () => {
     const env = createTestEnv();
     const response = await app.fetch(
       deployRequest({
-        "frontend/dist/index.html": "<h1>Hello</h1>"
+        "dist/index.html": "<h1>Hello</h1>"
       }),
       env
     );

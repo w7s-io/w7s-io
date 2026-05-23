@@ -89,7 +89,7 @@ https://github.com/guerrerocarlos/w7s-io-demo
 It contains:
 
 - `backend/index.js`;
-- `frontend/dist`;
+- built static frontend output;
 - GitHub workflow using `w7s-io/w7s-cloud/.github/actions/w7s-deploy@main`.
 
 The deploy action lives in:

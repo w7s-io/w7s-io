@@ -31,7 +31,16 @@ export const normalizeArchivePath = (value: string) => {
 };
 
 const stripCommonRoot = (entries: ArchiveEntry[]) => {
-  const platformRoots = new Set(["worker", "frontend", "backend", "db", ".github"]);
+  const platformRoots = new Set([
+    "worker",
+    "frontend",
+    "backend",
+    "dist",
+    "build",
+    "out",
+    "db",
+    ".github"
+  ]);
   const topLevels = new Set<string>();
   let allNested = entries.length > 0;
   for (const entry of entries) {

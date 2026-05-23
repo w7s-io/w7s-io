@@ -130,7 +130,7 @@ describe("runtime router", () => {
     expect(body).toContain("This space is ready for an app.");
     expect(body).toContain("https://sadasant.w7s.cloud/example-fullstack-ts/");
     expect(body).toContain("w7s-io/w7s-cloud@v1");
-    expect(body).toContain("frontend/CNAME");
+    expect(body).toContain("CNAME");
   });
 
   it("keeps missing repo-prefixed deployments as 404s", async () => {

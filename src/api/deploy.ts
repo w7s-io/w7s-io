@@ -4,7 +4,7 @@ import { jsonError, jsonSuccess, parseBearerToken } from "../http";
 import { parseGitHubRepository, verifyGitHubRepoAccess } from "../deploy/githubAuth";
 import { archiveHasPrefix, readDeployArchive } from "../deploy/archive";
 import { detectWorkerEntrypoint, publishIsolateWorker } from "../deploy/isolatePublisher";
-import { hasFrontendDist, publishStaticSite } from "../deploy/staticPublisher";
+import { hasStaticSite, publishStaticSite } from "../deploy/staticPublisher";
 import { attachCustomDomainRoutes, readCustomDomains } from "../deploy/customDomains";
 import { buildStableScriptName, requireSlug, resolveEnvironment } from "../names";
 import {
@@ -88,7 +88,7 @@ export const handleDeploy = async (c: HonoContext) => {
   const hasWorker = archiveHasPrefix(archive, "worker/");
   const hasBackend = archiveHasPrefix(archive, "backend/");
   const hasNativeBackend = hasWorker || hasBackend;
-  const hasStatic = hasFrontendDist(archive);
+  const hasStatic = hasStaticSite(archive);
   let customDomains: string[];
   try {
     customDomains = readCustomDomains(archive);
@@ -96,7 +96,7 @@ export const handleDeploy = async (c: HonoContext) => {
     return jsonError(error instanceof Error ? error.message : String(error), 400);
   }
   if (!hasNativeBackend && !hasStatic) {
-    return jsonError("Archive must contain worker/, backend/, or frontend/dist.", 400);
+    return jsonError("Archive must contain worker/, backend/, or static frontend output.", 400);
   }
 
   const deployedAt = new Date().toISOString();

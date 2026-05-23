@@ -86,7 +86,7 @@ https://sadasant.w7s.cloud/example-fullstack-ts/
 
 Missing repo-prefixed paths still return `404 Deployment not found.`.
 
-Custom domains are resolved from KV mappings created during deploy from `frontend/CNAME` or `frontend/dist/CNAME`. A custom hostname routes directly to its mapped deployment without a repo prefix:
+Custom domains are resolved from KV mappings created during deploy from `CNAME` or supported legacy/static-output CNAME paths. A custom hostname routes directly to its mapped deployment without a repo prefix:
 
 ```text
 https://whereis.carlosguerrero.com/
@@ -122,7 +122,7 @@ If the host has multiple environment candidates, W7S tries them in order.
 
 For repo requests:
 
-1. Exact static asset from `frontend/dist`.
+1. Exact static asset from the detected static frontend root.
 2. Native Worker dispatch through `env.DISPATCHER`.
 3. Static SPA fallback (`index.html`) when native Worker returns `404` or `405`.
 4. `404`.

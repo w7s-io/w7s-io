@@ -26,5 +26,16 @@ describe("readDeployArchive", () => {
     expect(readTextFile(archive, "worker/index.js")).toBe("export default {}");
     expect(readTextFile(archive, "frontend/dist/index.html")).toBe("hello");
   });
-});
 
+  it("keeps static output roots when an archive only contains build artifacts", async () => {
+    const archive = await readDeployArchive(
+      zipRequest({
+        "dist/index.html": "hello",
+        "dist/assets/app.js": "console.log('ok')"
+      })
+    );
+
+    expect(readTextFile(archive, "dist/index.html")).toBe("hello");
+    expect(readTextFile(archive, "index.html")).toBeNull();
+  });
+});

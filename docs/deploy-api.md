@@ -64,6 +64,10 @@ Static frontend root:
 
 ```text
 frontend/dist/
+dist/client/
+dist/
+build/
+out/
 ```
 
 Both native backend and static frontend can be present in the same archive.
@@ -71,8 +75,13 @@ Both native backend and static frontend can be present in the same archive.
 Optional custom domain declaration:
 
 ```text
+CNAME
 frontend/CNAME
 frontend/dist/CNAME
+dist/client/CNAME
+dist/CNAME
+build/CNAME
+out/CNAME
 ```
 
 The `CNAME` file should contain one hostname, for example:
@@ -81,7 +90,7 @@ The `CNAME` file should contain one hostname, for example:
 whereis.carlosguerrero.com
 ```
 
-W7S reads `frontend/CNAME` first and `frontend/dist/CNAME` second, stores a host mapping in KV, and attaches a Cloudflare Worker route for `<hostname>/*` when the domain's Cloudflare zone is available to the W7S API token. The actual DNS record still has to resolve to Cloudflare. For a typical proxied Cloudflare zone, create a `CNAME` record for the host that points at `w7s.cloud`.
+W7S reads root `CNAME` first, then static-output and legacy `frontend` CNAME paths. It stores a host mapping in KV and attaches a Cloudflare Worker route for `<hostname>/*` when the domain's Cloudflare zone is available to the W7S API token. The actual DNS record still has to resolve to Cloudflare. For a typical proxied Cloudflare zone, create a `CNAME` record for the host that points at `w7s.cloud`.
 
 ## Native Backend Rules
 
@@ -101,7 +110,15 @@ If a repo needs dependencies, it should bundle in CI and upload the bundled back
 
 ## Static Frontend Rules
 
-Every file under `frontend/dist` is uploaded to R2.
+Every file under the first detected static root is uploaded to R2. Detection order is:
+
+1. `frontend/dist`
+2. `dist/client`
+3. `dist`
+4. `build`
+5. `out`
+
+Legacy `frontend/dist` is accepted as an explicit W7S root. The other roots are accepted when they contain `index.html`, which prevents W7S from publishing unrelated build folders by accident.
 
 Static routes:
 
@@ -166,12 +183,12 @@ For same-name repos, the public URL is the org root. A deploy from `guerrerocarl
   - `Authorization: Bearer ...` is absent.
 - `401 Bearer token is not authorized`
   - GitHub token cannot read the repo in `x-github-repository`.
-- `400 Archive must contain worker/, backend/, or frontend/dist`
+- `400 Archive must contain worker/, backend/, or static frontend output`
   - Archive does not contain a deployable root.
 - `400 Native backend deploy requires ...`
   - `backend/` or `worker/` exists but no supported `index.*` entrypoint exists.
 - `400 Invalid custom domain in CNAME file`
-  - `frontend/CNAME` or `frontend/dist/CNAME` does not contain a valid hostname.
+  - A `CNAME` file does not contain a valid hostname.
 - `500 Unable to find a Cloudflare zone for custom domain`
   - W7S could not attach the Worker route for that hostname.
 - `500 Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID`

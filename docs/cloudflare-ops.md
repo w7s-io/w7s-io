@@ -116,11 +116,21 @@ curl: (6) Could not resolve host: <org>.w7s.cloud
 
 ## App Custom Domains
 
-Deploy archives can declare one custom domain in either:
+Deploy archives can declare one custom domain in a root `CNAME` file:
+
+```text
+CNAME
+```
+
+W7S also supports legacy/static-output CNAME locations:
 
 ```text
 frontend/CNAME
 frontend/dist/CNAME
+dist/client/CNAME
+dist/CNAME
+build/CNAME
+out/CNAME
 ```
 
 Example file content:

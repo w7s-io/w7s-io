@@ -19,10 +19,10 @@ Start here:
 - GitHub Actions uploads full repo zip archives to `POST /api/v1/deploy`;
 - deploy auth is the caller's GitHub token checked against the source repo;
 - `backend/` or `worker/` is published as a native Workers for Platforms user Worker;
-- `frontend/dist` is published to R2 and served as static assets;
+- static frontend output is published to R2 and served as static assets;
 - public repo apps are routed as `https://<org>.w7s.cloud/<repo>/*`;
 - same-name repos such as `github.com/<org>/<org>` can also serve `https://<org>.w7s.cloud/*`.
 - empty org roots such as `https://sadasant.w7s.cloud/` show deploy-help HTML;
-- custom domains can be declared with `frontend/CNAME` or `frontend/dist/CNAME` when DNS is managed separately.
+- custom domains can be declared with `CNAME` when DNS is managed separately.
 
 The old workflow editor, `jsInterpreter`, plugin bridge, DB control, and telemetry stack are not part of this core.
