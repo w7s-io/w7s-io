@@ -54,12 +54,6 @@ export const landingHtml = (target?: DeployShowcaseTarget) => `<!doctype html>
         margin: 0 auto;
         padding: 52px 0;
       }
-      h1 {
-        margin: 0 0 12px;
-        font-size: 44px;
-        line-height: 1;
-        letter-spacing: 0;
-      }
       p {
         margin: 0;
         color: #525252;
@@ -149,7 +143,6 @@ export const landingHtml = (target?: DeployShowcaseTarget) => `<!doctype html>
   </head>
   <body>
     <main>
-      <h1>W7S</h1>
       ${deployTargetHtml(target)}
       <pre><code>${deployWorkflowHtml()}</code></pre>
       <p class="deploy-copy">Add this GitHub Actions workflow to any repo and push to <code>main</code>. W7S verifies the deploy with the repo's GitHub token and serves it at <code>&lt;owner&gt;.w7s.cloud/&lt;repo&gt;/</code>.</p>

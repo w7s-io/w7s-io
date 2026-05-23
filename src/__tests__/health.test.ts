@@ -31,6 +31,7 @@ describe("landing page", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
+    expect(body).not.toContain("<h1>");
     expect(body).toContain("name: Deploy");
     expect(body).toContain("on: push");
     expect(body).toContain("w7s-io/w7s-cloud@v1");

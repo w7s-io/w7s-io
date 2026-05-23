@@ -127,6 +127,7 @@ describe("runtime router", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
+    expect(body).not.toContain("<h1>");
     expect(body).toContain("<h2>Status:</h2>");
     expect(body).not.toContain("Deploy target");
     expect(body).toContain("Nothing is deployed at <code>https://sadasant.w7s.cloud/</code> yet.");
@@ -161,6 +162,7 @@ describe("runtime router", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
+    expect(body).not.toContain("<h1>");
     expect(body).toContain("<h2>Status:</h2>");
     expect(body).not.toContain("Deploy target");
     expect(body).toContain("Nothing is deployed at <code>https://sadasant.w7s.cloud/missing-repo/</code> yet.");
