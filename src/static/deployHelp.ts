@@ -1,3 +1,5 @@
+import { minimalDeployWorkflowYaml } from "./deployWorkflow";
+
 const EXAMPLE_REPO_SLUG = "example-fullstack-ts";
 const EXAMPLE_TEMPLATE_URL = "https://github.com/w7s-io/example-fullstack-ts/";
 
@@ -14,28 +16,6 @@ export const orgDeployHelpHtml = (params: { host: string; orgSlug: string }) => 
   const rootUrl = `https://${host}/`;
   const exampleUrl = `https://${host}/${EXAMPLE_REPO_SLUG}/`;
   const exampleRepoPath = `${orgSlug}/${EXAMPLE_REPO_SLUG}`;
-  const actionYaml = `name: Deploy
-
-on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: w7s-io/w7s-cloud@v1
-        with:
-          token: \${{ github.token }}
-          install-command: npm ci
-          build-command: npm run build`;
-
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -231,8 +211,8 @@ jobs:
 
         <section>
           <h2>GitHub Action</h2>
-          <p>Add this workflow as <code>.github/workflows/deploy.yml</code>. W7S verifies deploy access with the repo's GitHub token.</p>
-          <pre><code>${escapeHtml(actionYaml)}</code></pre>
+          <p>Add this workflow as <code>.github/workflows/deploy.yml</code>. That is all W7S needs to verify deploy access with the repo's GitHub token.</p>
+          <pre><code>${escapeHtml(minimalDeployWorkflowYaml)}</code></pre>
         </section>
       </div>
     </main>

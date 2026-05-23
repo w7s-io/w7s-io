@@ -23,3 +23,18 @@ describe("health endpoint", () => {
     }
   });
 });
+
+describe("landing page", () => {
+  it("shows the minimal GitHub Actions deploy workflow", async () => {
+    const response = await app.fetch(new Request("https://w7s.cloud/"), createTestEnv());
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    expect(body).toContain("name: Deploy");
+    expect(body).toContain("w7s-io/w7s-cloud@v1");
+    expect(body).toContain("token: ${{ github.token }}");
+    expect(body).not.toContain("install-command");
+    expect(body).not.toContain("build-command");
+  });
+});
