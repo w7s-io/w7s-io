@@ -59,6 +59,35 @@ describe("deploy API", () => {
     expect(record?.targets.worker).toBeUndefined();
   });
 
+  it("returns org root URLs for same-name repo deployments", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "guerrerocarlos/guerrerocarlos" });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv();
+    const response = await app.fetch(
+      deployRequest(
+        {
+          "frontend/dist/index.html": "<h1>Hello</h1>"
+        },
+        {
+          "x-github-repository": "guerrerocarlos/guerrerocarlos"
+        }
+      ),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data?: { url?: string } };
+    expect(body.data?.url).toBe("https://guerrerocarlos.w7s.cloud/");
+  });
+
   it("rejects unauthorized GitHub tokens", async () => {
     vi.stubGlobal(
       "fetch",

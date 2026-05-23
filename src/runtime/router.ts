@@ -17,6 +17,35 @@ const splitRepoPath = (path: string) => {
   };
 };
 
+type RouteCandidate = {
+  repoSlug: string;
+  repoPath: string;
+  mount: "repo-prefix" | "org-root";
+};
+
+const rootRepoPath = (path: string) => path || "/";
+
+const routeCandidates = (path: string, orgSlug: string) => {
+  const candidates: RouteCandidate[] = [];
+  const repoInfo = splitRepoPath(path);
+  if (repoInfo) {
+    candidates.push({
+      ...repoInfo,
+      mount: "repo-prefix"
+    });
+  }
+
+  if (!repoInfo || repoInfo.repoSlug !== orgSlug) {
+    candidates.push({
+      repoSlug: orgSlug,
+      repoPath: rootRepoPath(path),
+      mount: "org-root"
+    });
+  }
+
+  return candidates;
+};
+
 const shouldFallbackFromWorkerToStatic = (request: Request, response: Response) => {
   if (request.method !== "GET" && request.method !== "HEAD") return false;
   return response.status === 404 || response.status === 405;
@@ -78,55 +107,61 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
   const host = resolveRuntimeHost(request, env);
   if (!host) return null;
 
-  const repoInfo = splitRepoPath(url.pathname);
-  if (!repoInfo) return null;
+  const candidates = routeCandidates(url.pathname, host.orgSlug);
+  if (candidates.length === 0) return null;
 
-  const deployment = await loadDeploymentRecordWithCandidates(
-    env,
-    host.environments,
-    host.orgSlug,
-    repoInfo.repoSlug
-  );
-  if (!deployment) {
-    return new Response("Deployment not found.", { status: 404 });
-  }
+  for (const candidate of candidates) {
+    const deployment = await loadDeploymentRecordWithCandidates(
+      env,
+      host.environments,
+      host.orgSlug,
+      candidate.repoSlug
+    );
+    if (!deployment) continue;
 
-  if (deployment.targets.static && shouldRedirectStaticRepoRoot(request, repoInfo.repoPath)) {
-    return redirectToDirectoryPath(request);
-  }
+    if (
+      candidate.mount === "repo-prefix" &&
+      deployment.targets.static &&
+      shouldRedirectStaticRepoRoot(request, candidate.repoPath)
+    ) {
+      return redirectToDirectoryPath(request);
+    }
 
-  const exactStatic = await resolveStaticAssetResponse({
-    env,
-    request,
-    deployment,
-    repoPath: repoInfo.repoPath,
-    mode: "exact"
-  });
-  if (exactStatic) return exactStatic;
-
-  const workerTarget = deployment.targets.worker;
-  if (workerTarget) {
-    const workerResponse = await dispatchWorker({
+    const exactStatic = await resolveStaticAssetResponse({
       env,
       request,
-      repoPath: repoInfo.repoPath,
-      repoSlug: repoInfo.repoSlug,
-      orgSlug: host.orgSlug,
-      scriptName: workerTarget.scriptName
+      deployment,
+      repoPath: candidate.repoPath,
+      mode: "exact"
     });
-    if (!shouldFallbackFromWorkerToStatic(request, workerResponse)) {
-      return workerResponse;
+    if (exactStatic) return exactStatic;
+
+    const workerTarget = deployment.targets.worker;
+    if (workerTarget) {
+      const workerResponse = await dispatchWorker({
+        env,
+        request,
+        repoPath: candidate.repoPath,
+        repoSlug: candidate.repoSlug,
+        orgSlug: host.orgSlug,
+        scriptName: workerTarget.scriptName
+      });
+      if (!shouldFallbackFromWorkerToStatic(request, workerResponse)) {
+        return workerResponse;
+      }
     }
+
+    const fallbackStatic = await resolveStaticAssetResponse({
+      env,
+      request,
+      deployment,
+      repoPath: candidate.repoPath,
+      mode: "fallback"
+    });
+    if (fallbackStatic) return fallbackStatic;
+
+    return workerTarget ? new Response("Not found.", { status: 404 }) : null;
   }
 
-  const fallbackStatic = await resolveStaticAssetResponse({
-    env,
-    request,
-    deployment,
-    repoPath: repoInfo.repoPath,
-    mode: "fallback"
-  });
-  if (fallbackStatic) return fallbackStatic;
-
-  return workerTarget ? new Response("Not found.", { status: 404 }) : null;
+  return new Response("Deployment not found.", { status: 404 });
 };

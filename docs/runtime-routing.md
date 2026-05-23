@@ -6,9 +6,16 @@
 https://<org>.w7s.cloud/<repo>/<path>
 ```
 
+If a GitHub repo has the same name as the org/user, W7S also mounts that repo at the org root:
+
+```text
+https://<org>.w7s.cloud/<path>
+```
+
 Examples:
 
 ```text
+https://guerrerocarlos.w7s.cloud/
 https://guerrerocarlos.w7s.cloud/w7s-io-demo/
 https://guerrerocarlos.w7s.cloud/w7s-io-demo/api/hello
 ```
@@ -48,6 +55,22 @@ resolves to:
 
 - repo slug: `w7s-io-demo`
 - repo path passed to the native Worker: `/api/hello`
+
+Org-root routing is reserved for the same-name repo. For example, a deployment from:
+
+```text
+github.com/guerrerocarlos/guerrerocarlos
+```
+
+can serve:
+
+```text
+https://guerrerocarlos.w7s.cloud/
+https://guerrerocarlos.w7s.cloud/api/status
+https://guerrerocarlos.w7s.cloud/assets/app.js
+```
+
+Repo-prefixed deployments keep priority. If `guerrerocarlos/w7s-io-demo` exists, then `/w7s-io-demo/*` routes to that repo before W7S tries the org-root app.
 
 Reserved platform paths:
 

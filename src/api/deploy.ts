@@ -23,6 +23,12 @@ const isZipRequest = (request: Request) => {
   return contentType.includes("application/zip") || contentType.includes("application/octet-stream");
 };
 
+const publicDeploymentUrl = (env: Env, orgSlug: string, repoSlug: string) => {
+  const baseDomain = env.W7S_BASE_DOMAIN?.trim() || "w7s.cloud";
+  if (repoSlug === orgSlug) return `https://${orgSlug}.${baseDomain}/`;
+  return `https://${orgSlug}.${baseDomain}/${repoSlug}/`;
+};
+
 export const handleDeploy = async (c: HonoContext) => {
   const token = parseBearerToken(c.req.raw);
   if (!token) return jsonError("Missing bearer token.", 401);
@@ -136,6 +142,6 @@ export const handleDeploy = async (c: HonoContext) => {
 
   return jsonSuccess({
     deployment: record,
-    url: `https://${orgSlug}.w7s.cloud/${repoSlug}/`
+    url: publicDeploymentUrl(c.env, orgSlug, repoSlug)
   });
 };

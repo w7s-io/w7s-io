@@ -132,6 +132,17 @@ Example:
 }
 ```
 
+For same-name repos, the public URL is the org root. A deploy from `guerrerocarlos/guerrerocarlos` returns:
+
+```json
+{
+  "status": "success",
+  "data": {
+    "url": "https://guerrerocarlos.w7s.cloud/"
+  }
+}
+```
+
 ## Common Failures
 
 - `401 Missing bearer token`
@@ -144,4 +155,3 @@ Example:
   - `backend/` or `worker/` exists but no supported `index.*` entrypoint exists.
 - `500 Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID`
   - Core Worker secrets are missing; deploy cannot publish native Workers.
-

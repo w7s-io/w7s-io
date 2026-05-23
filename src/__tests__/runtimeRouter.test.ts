@@ -4,37 +4,55 @@ import { createTestEnv } from "./mocks";
 import { storeDeploymentRecord, storeStaticSiteManifest } from "../storage/deployments";
 import type { DeploymentRecord, StaticSiteManifest } from "../storage/deployments";
 
-const storeStaticDemoDeployment = async (env: ReturnType<typeof createTestEnv>) => {
-  await env.STATIC_ASSETS!.put("static/index.html", "<h1>App</h1>", {
-    httpMetadata: {
+const storeStaticDeployment = async (
+  env: ReturnType<typeof createTestEnv>,
+  params: {
+    orgSlug?: string;
+    repoSlug?: string;
+    files?: Record<string, { body: string; contentType?: string }>;
+  } = {}
+) => {
+  const orgSlug = params.orgSlug ?? "w7s-io";
+  const repoSlug = params.repoSlug ?? "demo";
+  const files = params.files ?? {
+    "index.html": {
+      body: "<h1>App</h1>",
       contentType: "text/html; charset=utf-8"
     }
-  });
+  };
+  const manifestFiles: StaticSiteManifest["files"] = {};
+  for (const [path, file] of Object.entries(files)) {
+    const r2Key = `static/${orgSlug}/${repoSlug}/${path}`;
+    await env.STATIC_ASSETS!.put(r2Key, file.body, {
+      httpMetadata: {
+        contentType: file.contentType ?? "text/plain; charset=utf-8"
+      }
+    });
+    manifestFiles[path] = {
+      path,
+      r2Key,
+      contentType: file.contentType ?? "text/plain; charset=utf-8",
+      size: file.body.length,
+      etag: "etag"
+    };
+  }
   const manifest: StaticSiteManifest = {
     version: 1,
-    orgSlug: "w7s-io",
-    repoSlug: "demo",
+    orgSlug,
+    repoSlug,
     environment: "production",
     assetPrefix: "static",
     deployedAt: new Date().toISOString(),
-    files: {
-      "index.html": {
-        path: "index.html",
-        r2Key: "static/index.html",
-        contentType: "text/html; charset=utf-8",
-        size: 12,
-        etag: "etag"
-      }
-    },
-    hasIndex: true
+    files: manifestFiles,
+    hasIndex: Boolean(manifestFiles["index.html"])
   };
   const manifestKey = await storeStaticSiteManifest(env, manifest);
   const record: DeploymentRecord = {
     version: 1,
-    orgSlug: "w7s-io",
-    repoSlug: "demo",
+    orgSlug,
+    repoSlug,
     environment: "production",
-    repository: "w7s-io/demo",
+    repository: `${orgSlug}/${repoSlug}`,
     branch: "main",
     commitSha: "abc",
     deployedAt: new Date().toISOString(),
@@ -49,6 +67,9 @@ const storeStaticDemoDeployment = async (env: ReturnType<typeof createTestEnv>) 
   };
   await storeDeploymentRecord(env, record);
 };
+
+const storeStaticDemoDeployment = async (env: ReturnType<typeof createTestEnv>) =>
+  storeStaticDeployment(env);
 
 describe("runtime router", () => {
   it("serves static assets from repo routes", async () => {
@@ -84,6 +105,82 @@ describe("runtime router", () => {
 
     expect(response.status).toBe(308);
     expect(response.headers.get("location")).toBe("https://w7s-io.w7s.cloud/demo/?from=test");
+  });
+
+  it("serves same-name repo static deployments from the org root", async () => {
+    const env = createTestEnv();
+    await storeStaticDeployment(env, {
+      orgSlug: "guerrerocarlos",
+      repoSlug: "guerrerocarlos",
+      files: {
+        "index.html": {
+          body: "<h1>Root App</h1>",
+          contentType: "text/html; charset=utf-8"
+        },
+        "assets/app.js": {
+          body: "console.log('root')",
+          contentType: "application/javascript; charset=utf-8"
+        }
+      }
+    });
+
+    const rootResponse = await app.fetch(
+      new Request("https://guerrerocarlos.w7s.cloud/", {
+        headers: {
+          host: "guerrerocarlos.w7s.cloud"
+        }
+      }),
+      env
+    );
+    const assetResponse = await app.fetch(
+      new Request("https://guerrerocarlos.w7s.cloud/assets/app.js", {
+        headers: {
+          host: "guerrerocarlos.w7s.cloud"
+        }
+      }),
+      env
+    );
+
+    expect(rootResponse.status).toBe(200);
+    expect(await rootResponse.text()).toContain("Root App");
+    expect(assetResponse.status).toBe(200);
+    expect(await assetResponse.text()).toContain("root");
+  });
+
+  it("keeps repo-prefixed deployments ahead of the org root app", async () => {
+    const env = createTestEnv();
+    await storeStaticDeployment(env, {
+      orgSlug: "guerrerocarlos",
+      repoSlug: "guerrerocarlos",
+      files: {
+        "index.html": {
+          body: "<h1>Root App</h1>",
+          contentType: "text/html; charset=utf-8"
+        }
+      }
+    });
+    await storeStaticDeployment(env, {
+      orgSlug: "guerrerocarlos",
+      repoSlug: "w7s-io-demo",
+      files: {
+        "index.html": {
+          body: "<h1>Demo App</h1>",
+          contentType: "text/html; charset=utf-8"
+        }
+      }
+    });
+
+    const response = await app.fetch(
+      new Request("https://guerrerocarlos.w7s.cloud/w7s-io-demo/", {
+        headers: {
+          host: "guerrerocarlos.w7s.cloud"
+        }
+      }),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Demo App");
   });
 
   it("dispatches native worker requests with repo path stripped", async () => {
@@ -131,5 +228,55 @@ describe("runtime router", () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("native");
     expect(calls).toEqual(["/users"]);
+  });
+
+  it("dispatches same-name repo native worker requests from the org root", async () => {
+    const calls: string[] = [];
+    const repoHeaders: string[] = [];
+    const env = createTestEnv({
+      DISPATCHER: {
+        get: () => ({
+          fetch: async (input) => {
+            const request = input instanceof Request ? input : new Request(input);
+            calls.push(new URL(request.url).pathname);
+            repoHeaders.push(request.headers.get("x-w7s-repo-slug") ?? "");
+            return new Response("root native");
+          }
+        })
+      }
+    });
+    await storeDeploymentRecord(env, {
+      version: 1,
+      orgSlug: "guerrerocarlos",
+      repoSlug: "guerrerocarlos",
+      environment: "production",
+      repository: "guerrerocarlos/guerrerocarlos",
+      branch: "main",
+      commitSha: "abc",
+      deployedAt: new Date().toISOString(),
+      targets: {
+        worker: {
+          namespace: "w7s-isolate",
+          scriptName: "guerrerocarlos--guerrerocarlos--production",
+          entrypoint: "backend/index.js",
+          compatibilityDate: "2026-05-23",
+          startupTimeMs: null
+        }
+      }
+    });
+
+    const response = await app.fetch(
+      new Request("https://guerrerocarlos.w7s.cloud/api/status", {
+        headers: {
+          host: "guerrerocarlos.w7s.cloud"
+        }
+      }),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("root native");
+    expect(calls).toEqual(["/api/status"]);
+    expect(repoHeaders).toEqual(["guerrerocarlos"]);
   });
 });

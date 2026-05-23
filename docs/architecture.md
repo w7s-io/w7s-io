@@ -68,7 +68,7 @@ POST /api/v1/deploy
 ```text
 GET https://<org>.w7s.cloud/<repo>/<path>
   -> resolve org from host
-  -> resolve repo from first path segment
+  -> resolve repo from first path segment, or same-name org root repo
   -> load deployment record from KV
   -> serve exact static asset if present
   -> dispatch to native Worker if present

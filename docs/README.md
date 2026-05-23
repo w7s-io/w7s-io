@@ -6,7 +6,7 @@ Start here:
 
 1. [Architecture](./architecture.md): what the core does and what it intentionally does not do.
 2. [Deploy API](./deploy-api.md): `POST /api/v1/deploy`, archive expectations, auth, and response shape.
-3. [Runtime Routing](./runtime-routing.md): how `https://<org>.w7s.cloud/<repo>/*` is resolved.
+3. [Runtime Routing](./runtime-routing.md): how `https://<org>.w7s.cloud/<repo>/*` and same-name org root apps are resolved.
 4. [Cloudflare Operations](./cloudflare-ops.md): bindings, GitHub Actions, wildcard cutover, DNS, and required permissions.
 5. [Development And Testing](./development-and-testing.md): local commands, tests, and safe change workflow.
 6. [Agent Handoff](./agent-handoff.md): current state, known limitations, and common next tasks.
@@ -20,7 +20,7 @@ Start here:
 - deploy auth is the caller's GitHub token checked against the source repo;
 - `backend/` or `worker/` is published as a native Workers for Platforms user Worker;
 - `frontend/dist` is published to R2 and served as static assets;
-- public repo apps are routed as `https://<org>.w7s.cloud/<repo>/*`.
+- public repo apps are routed as `https://<org>.w7s.cloud/<repo>/*`;
+- same-name repos such as `github.com/<org>/<org>` can also serve `https://<org>.w7s.cloud/*`.
 
 The old workflow editor, `jsInterpreter`, plugin bridge, DB control, and telemetry stack are not part of this core.
-

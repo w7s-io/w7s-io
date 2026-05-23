@@ -11,6 +11,7 @@ This repo is the greenfield replacement core for W7S. It keeps the platform smal
 - deployments are authorized by the GitHub token's access to the source repo;
 - `worker/` or `backend/` apps publish to Workers for Platforms;
 - `frontend/dist` assets publish to R2 and are served from `https://<org>.w7s.cloud/<repo>/*`.
+- same-name repos such as `github.com/<org>/<org>` can serve directly from `https://<org>.w7s.cloud/*`.
 
 The old workflow interpreter and hard-coded plugin bridge are intentionally not part of this core. They can be rebuilt later as W7S apps/components on top of this deploy surface.
 
