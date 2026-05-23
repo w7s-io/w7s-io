@@ -6,6 +6,7 @@ import {
 import { cleanHost, resolveRuntimeHost } from "./host";
 import { resolveStaticAssetResponse } from "./static";
 import { normalizeSlug } from "../names";
+import { orgDeployHelpHtml } from "../static/deployHelp";
 
 const isReservedPlatformPath = (path: string) =>
   path === "/api/v1" || path.startsWith("/api/v1/");
@@ -60,6 +61,9 @@ const shouldRedirectStaticRepoRoot = (request: Request, repoPath: string) => {
   return repoPath === "/" && !url.pathname.endsWith("/");
 };
 
+const shouldShowOrgDeployHelp = (request: Request, path: string) =>
+  (request.method === "GET" || request.method === "HEAD") && path === "/";
+
 const redirectToDirectoryPath = (request: Request) => {
   const url = new URL(request.url);
   url.pathname = `${url.pathname}/`;
@@ -105,12 +109,13 @@ const dispatchWorker = async (params: {
 
 export const resolveRuntimeRequest = async (request: Request, env: Env) => {
   const url = new URL(request.url);
+  const requestHost = cleanHost(request.headers.get("host") || url.host);
   const host = resolveRuntimeHost(request, env);
   if (host && isReservedPlatformPath(url.pathname)) return null;
 
   const customDomain = host
     ? null
-    : await loadCustomDomainMapping(env, cleanHost(request.headers.get("host") || url.host));
+    : await loadCustomDomainMapping(env, requestHost);
   if (!host && !customDomain) return null;
 
   const orgSlug = host?.orgSlug ?? customDomain!.orgSlug;
@@ -177,6 +182,24 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
     if (fallbackStatic) return fallbackStatic;
 
     return workerTarget ? new Response("Not found.", { status: 404 }) : null;
+  }
+
+  if (host && shouldShowOrgDeployHelp(request, url.pathname)) {
+    return new Response(
+      request.method === "HEAD"
+        ? null
+        : orgDeployHelpHtml({
+            host: requestHost,
+            orgSlug
+          }),
+      {
+        status: 200,
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-cache"
+        }
+      }
+    );
   }
 
   return new Response("Deployment not found.", { status: 404 });

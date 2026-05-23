@@ -112,6 +112,43 @@ describe("runtime router", () => {
     expect(response.headers.get("location")).toBe("https://w7s-io.w7s.cloud/demo/?from=test");
   });
 
+  it("shows deploy help for empty org root hosts", async () => {
+    const env = createTestEnv();
+
+    const response = await app.fetch(
+      new Request("https://sadasant.w7s.cloud/", {
+        headers: {
+          host: "sadasant.w7s.cloud"
+        }
+      }),
+      env
+    );
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    expect(body).toContain("This space is ready for an app.");
+    expect(body).toContain("https://sadasant.w7s.cloud/example-fullstack-ts/");
+    expect(body).toContain("w7s-io/w7s-cloud@v1");
+    expect(body).toContain("frontend/CNAME");
+  });
+
+  it("keeps missing repo-prefixed deployments as 404s", async () => {
+    const env = createTestEnv();
+
+    const response = await app.fetch(
+      new Request("https://sadasant.w7s.cloud/missing-repo/", {
+        headers: {
+          host: "sadasant.w7s.cloud"
+        }
+      }),
+      env
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("Deployment not found.");
+  });
+
   it("serves same-name repo static deployments from the org root", async () => {
     const env = createTestEnv();
     await storeStaticDeployment(env, {

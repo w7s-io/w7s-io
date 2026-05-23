@@ -10,7 +10,9 @@ As of the latest docs update:
 - Wildcard DNS is expected to be managed manually.
 - `backend/`, `worker/`, and `frontend/dist` deploys are supported.
 - `frontend/CNAME` and `frontend/dist/CNAME` can attach app custom-domain routes when the W7S token can manage that Cloudflare zone.
+- Empty org roots such as `https://sadasant.w7s.cloud/` show deploy-help HTML instead of a plain 404.
 - The demo repo `guerrerocarlos/w7s-io-demo` deploys successfully through the reusable deploy action.
+- The example repo `w7s-io/example-fullstack-ts` exists as a reusable fullstack TypeScript starter.
 
 ## Do Not Reintroduce
 
@@ -53,6 +55,7 @@ Good near-term tasks:
 Core:         https://github.com/w7s-io/w7s-io
 Legacy:       https://github.com/w7s-io/w7s-cloud
 Deploy action:https://github.com/w7s-io/w7s-cloud/tree/main/.github/actions/w7s-deploy
+Example:      https://github.com/w7s-io/example-fullstack-ts
 Demo:         https://github.com/guerrerocarlos/w7s-io-demo
 ```
 
