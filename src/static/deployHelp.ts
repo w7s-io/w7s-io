@@ -225,7 +225,7 @@ jobs:
 
           <section>
             <h2>Custom domain</h2>
-            <p>Add a root <code>CNAME</code> file with one hostname, such as <code>app.example.com</code>. After deploy, create a proxied DNS <code>CNAME</code> for that host pointing to <code>w7s.cloud</code>.</p>
+            <p>Add a root <code>CNAME</code> file with one hostname, such as <code>app.example.com</code>. After deploy, create a proxied DNS <code>CNAME</code> for that host pointing to <code>w7s.cloud</code>. To lock the domain, add TXT <code>_w7s.example.com</code> with your GitHub owner or <code>owner/repo</code>.</p>
           </section>
         </div>
 

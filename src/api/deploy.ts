@@ -5,7 +5,11 @@ import { parseGitHubRepository, verifyGitHubRepoAccess } from "../deploy/githubA
 import { archiveHasPrefix, readDeployArchive } from "../deploy/archive";
 import { detectWorkerEntrypoint, publishIsolateWorker } from "../deploy/isolatePublisher";
 import { hasStaticSite, publishStaticSite } from "../deploy/staticPublisher";
-import { attachCustomDomainRoutes, readCustomDomains } from "../deploy/customDomains";
+import {
+  attachCustomDomainRoutes,
+  planCustomDomainClaims,
+  readCustomDomains
+} from "../deploy/customDomains";
 import { buildStableScriptName, requireSlug, resolveEnvironment } from "../names";
 import {
   storeCustomDomainMappings,
@@ -101,6 +105,9 @@ export const handleDeploy = async (c: HonoContext) => {
 
   const deployedAt = new Date().toISOString();
   const targets: DeploymentRecord["targets"] = {};
+  let attachedCustomDomains: string[] = [];
+  let customDomainWarnings: Awaited<ReturnType<typeof planCustomDomainClaims>>["warnings"] = [];
+  let blockedCustomDomains: Awaited<ReturnType<typeof planCustomDomainClaims>>["blocked"] = [];
 
   try {
     if (hasNativeBackend) {
@@ -137,7 +144,18 @@ export const handleDeploy = async (c: HonoContext) => {
     }
 
     if (customDomains.length > 0) {
-      await attachCustomDomainRoutes(c.env, customDomains);
+      const customDomainPlan = await planCustomDomainClaims({
+        env: c.env,
+        hostnames: customDomains,
+        orgSlug,
+        repoSlug
+      });
+      attachedCustomDomains = customDomainPlan.attached;
+      customDomainWarnings = customDomainPlan.warnings;
+      blockedCustomDomains = customDomainPlan.blocked;
+      if (attachedCustomDomains.length > 0) {
+        await attachCustomDomainRoutes(c.env, attachedCustomDomains);
+      }
     }
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : String(error), 500);
@@ -152,17 +170,19 @@ export const handleDeploy = async (c: HonoContext) => {
     branch,
     commitSha,
     deployedAt,
-    ...(customDomains.length > 0 ? { customDomains } : {}),
+    ...(attachedCustomDomains.length > 0 ? { customDomains: attachedCustomDomains } : {}),
     targets
   };
   await storeDeploymentRecord(c.env, record);
-  if (customDomains.length > 0) {
-    await storeCustomDomainMappings(c.env, record, customDomains);
+  if (attachedCustomDomains.length > 0) {
+    await storeCustomDomainMappings(c.env, record, attachedCustomDomains);
   }
 
   return jsonSuccess({
     deployment: record,
-    url: publicDeploymentUrl(c.env, orgSlug, repoSlug, customDomains),
-    ...(customDomains.length > 0 ? { customDomains } : {})
+    url: publicDeploymentUrl(c.env, orgSlug, repoSlug, attachedCustomDomains),
+    ...(attachedCustomDomains.length > 0 ? { customDomains: attachedCustomDomains } : {}),
+    ...(customDomainWarnings.length > 0 ? { customDomainWarnings } : {}),
+    ...(blockedCustomDomains.length > 0 ? { blockedCustomDomains } : {})
   });
 };

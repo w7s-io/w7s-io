@@ -143,8 +143,27 @@ During deploy, W7S:
 
 1. validates the hostname;
 2. finds the matching Cloudflare zone available to the W7S token;
-3. attaches a Worker route for `<hostname>/*` to the `w7s-io` Worker;
-4. stores `custom_domain:v1:<hostname>` in KV.
+3. reads the optional TXT allowlist at `_w7s.<zone>`;
+4. checks whether the hostname is already mapped in KV;
+5. attaches a Worker route for `<hostname>/*` to the `w7s-io` Worker when the claim is allowed;
+6. stores `custom_domain:v1:<hostname>` in KV.
+
+The first repo to claim a hostname is allowed without a TXT record. The deploy response includes a warning recommending a TXT allowlist:
+
+```text
+Name: _w7s.carlosguerrero.com
+Value: guerrerocarlos/whereis
+```
+
+Once the TXT record exists, W7S treats it as authoritative for that zone. The value is comma-separated:
+
+```text
+guerrerocarlos
+guerrerocarlos,omattic
+guerrerocarlos/whereis,omattic
+```
+
+An owner token, such as `guerrerocarlos`, authorizes every repo under that owner. A repo token, such as `guerrerocarlos/whereis`, authorizes only that repo. If two repos claim the same hostname and no TXT record exists, the existing KV mapping keeps ownership until the domain owner adds TXT authorization for the new repo.
 
 W7S does not create DNS records. The domain owner must create DNS, normally:
 

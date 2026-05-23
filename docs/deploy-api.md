@@ -92,6 +92,22 @@ whereis.carlosguerrero.com
 
 W7S reads root `CNAME` first, then static-output and legacy `frontend` CNAME paths. It stores a host mapping in KV and attaches a Cloudflare Worker route for `<hostname>/*` when the domain's Cloudflare zone is available to the W7S API token. The actual DNS record still has to resolve to Cloudflare. For a typical proxied Cloudflare zone, create a `CNAME` record for the host that points at `w7s.cloud`.
 
+Custom-domain ownership is intentionally low-friction:
+
+- the first repo to claim a hostname can attach it without a TXT record;
+- W7S returns `customDomainWarnings` recommending a TXT allowlist for future safety;
+- if `_w7s.<zone>` exists, only GitHub owners or repos listed in that TXT record can use hostnames on that zone;
+- if another repo already claimed the hostname and no TXT allowlist exists, the new deploy succeeds but the hostname is reported in `blockedCustomDomains`.
+
+Example TXT record for `whereis.carlosguerrero.com`:
+
+```text
+Name: _w7s.carlosguerrero.com
+Value: guerrerocarlos
+```
+
+The value is comma-separated. `guerrerocarlos` allows any repo under that owner. `guerrerocarlos/whereis` allows only that repo. This also supports mixed values such as `guerrerocarlos/whereis,omattic`.
+
 ## Native Backend Rules
 
 The native backend is published to Cloudflare Workers for Platforms.
@@ -161,7 +177,37 @@ Example:
       "customDomains": ["whereis.carlosguerrero.com"]
     },
     "url": "https://whereis.carlosguerrero.com/",
-    "customDomains": ["whereis.carlosguerrero.com"]
+    "customDomains": ["whereis.carlosguerrero.com"],
+    "customDomainWarnings": [
+      {
+        "hostname": "whereis.carlosguerrero.com",
+        "domain": "carlosguerrero.com",
+        "txtName": "_w7s.carlosguerrero.com",
+        "txtValue": "guerrerocarlos/w7s-io-demo",
+        "message": "Add TXT _w7s.carlosguerrero.com=guerrerocarlos/w7s-io-demo to restrict future claims for this domain."
+      }
+    ]
+  }
+}
+```
+
+When a custom domain is blocked, the deployment still publishes and returns the normal `w7s.cloud` URL:
+
+```json
+{
+  "status": "success",
+  "data": {
+    "url": "https://guerrerocarlos.w7s.cloud/whereis/",
+    "blockedCustomDomains": [
+      {
+        "hostname": "whereis.carlosguerrero.com",
+        "domain": "carlosguerrero.com",
+        "reason": "txt_allowlist_mismatch",
+        "txtName": "_w7s.carlosguerrero.com",
+        "txtValue": "guerrerocarlos/whereis",
+        "message": "TXT _w7s.carlosguerrero.com does not authorize guerrerocarlos/whereis."
+      }
+    ]
   }
 }
 ```
@@ -189,6 +235,8 @@ For same-name repos, the public URL is the org root. A deploy from `guerrerocarl
   - `backend/` or `worker/` exists but no supported `index.*` entrypoint exists.
 - `400 Invalid custom domain in CNAME file`
   - A `CNAME` file does not contain a valid hostname.
+- `200 success` with `blockedCustomDomains`
+  - The app deployed, but one or more `CNAME` hostnames were not attached because the TXT allowlist did not authorize the repo or the hostname is already claimed by another repo.
 - `500 Unable to find a Cloudflare zone for custom domain`
   - W7S could not attach the Worker route for that hostname.
 - `500 Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID`

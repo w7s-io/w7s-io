@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { zipSync } from "fflate";
 import { app } from "../worker";
 import { createTestEnv } from "./mocks";
-import { loadCustomDomainMapping, loadDeploymentRecord } from "../storage/deployments";
+import {
+  loadCustomDomainMapping,
+  loadDeploymentRecord,
+  storeCustomDomainMappings,
+  type DeploymentRecord
+} from "../storage/deployments";
 
 const zipBytes = (files: Record<string, string>) =>
   zipSync(
@@ -24,6 +29,53 @@ const deployRequest = (files: Record<string, string>, headers: Record<string, st
     },
     body: zipBytes(files)
   });
+
+const stubCustomDomainFetch = (params: {
+  repository: string;
+  txtAnswers?: string[];
+}) =>
+  vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.startsWith("https://api.github.com/repos/")) {
+      return Response.json({ full_name: params.repository });
+    }
+    if (url === "https://api.cloudflare.com/client/v4/zones?per_page=100") {
+      return Response.json({
+        success: true,
+        result: [{ id: "zone-1", name: "carlosguerrero.com" }]
+      });
+    }
+    if (url.startsWith("https://cloudflare-dns.com/dns-query")) {
+      return Response.json({
+        Answer: (params.txtAnswers ?? []).map((data) => ({
+          type: 16,
+          data
+        }))
+      });
+    }
+    if (url.includes("/workers/routes") && init?.method === "GET") {
+      return Response.json({ success: true, result: [] });
+    }
+    if (url.includes("/workers/routes") && init?.method === "POST") {
+      return Response.json({ success: true, result: { id: "route-1" } });
+    }
+    return Response.json({ success: true, result: {} });
+  });
+
+const existingDeploymentRecord = (params: {
+  orgSlug: string;
+  repoSlug: string;
+}): DeploymentRecord => ({
+  version: 1,
+  orgSlug: params.orgSlug,
+  repoSlug: params.repoSlug,
+  environment: "production",
+  repository: `${params.orgSlug}/${params.repoSlug}`,
+  branch: "main",
+  commitSha: "previous",
+  deployedAt: "2026-05-23T00:00:00.000Z",
+  targets: {}
+});
 
 describe("deploy API", () => {
   afterEach(() => {
@@ -114,27 +166,122 @@ describe("deploy API", () => {
     expect(body.data?.url).toBe("https://guerrerocarlos.w7s.cloud/");
   });
 
-  it("reads root CNAME files and stores custom domain mappings", async () => {
+  it("attaches first unverified custom domain claims with setup warnings", async () => {
+    vi.stubGlobal("fetch", stubCustomDomainFetch({ repository: "guerrerocarlos/whereis" }));
+    const env = createTestEnv({
+      CLOUDFLARE_API_TOKEN: "cf-token"
+    });
+    const response = await app.fetch(
+      deployRequest(
+        {
+          "CNAME": "whereis.carlosguerrero.com\n",
+          "dist/client/index.html": "<h1>Hello</h1>"
+        },
+        {
+          "x-github-repository": "guerrerocarlos/whereis"
+        }
+      ),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      data?: {
+        url?: string;
+        customDomains?: string[];
+        customDomainWarnings?: Array<{ txtName?: string; txtValue?: string }>;
+      };
+    };
+    expect(body.data?.url).toBe("https://whereis.carlosguerrero.com/");
+    expect(body.data?.customDomains).toEqual(["whereis.carlosguerrero.com"]);
+    expect(body.data?.customDomainWarnings).toEqual([
+      expect.objectContaining({
+        txtName: "_w7s.carlosguerrero.com",
+        txtValue: "guerrerocarlos/whereis"
+      })
+    ]);
+    const record = await loadDeploymentRecord(env, "production", "guerrerocarlos", "whereis");
+    expect(record?.customDomains).toEqual(["whereis.carlosguerrero.com"]);
+    const mapping = await loadCustomDomainMapping(env, "whereis.carlosguerrero.com");
+    expect(mapping?.repoSlug).toBe("whereis");
+  });
+
+  it("attaches custom domains when TXT authorizes the GitHub owner", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        if (url.startsWith("https://api.github.com/repos/")) {
-          return Response.json({ full_name: "guerrerocarlos/whereis" });
+      stubCustomDomainFetch({
+        repository: "guerrerocarlos/whereis",
+        txtAnswers: ['"guerrerocarlos"']
+      })
+    );
+    const env = createTestEnv({
+      CLOUDFLARE_API_TOKEN: "cf-token"
+    });
+    const response = await app.fetch(
+      deployRequest(
+        {
+          "CNAME": "whereis.carlosguerrero.com\n",
+          "dist/client/index.html": "<h1>Hello</h1>"
+        },
+        {
+          "x-github-repository": "guerrerocarlos/whereis"
         }
-        if (url === "https://api.cloudflare.com/client/v4/zones?per_page=100") {
-          return Response.json({
-            success: true,
-            result: [{ id: "zone-1", name: "carlosguerrero.com" }]
-          });
+      ),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      data?: {
+        customDomains?: string[];
+        customDomainWarnings?: unknown[];
+      };
+    };
+    expect(body.data?.customDomains).toEqual(["whereis.carlosguerrero.com"]);
+    expect(body.data?.customDomainWarnings).toBeUndefined();
+  });
+
+  it("attaches custom domains when comma-separated TXT authorizes the repo", async () => {
+    vi.stubGlobal(
+      "fetch",
+      stubCustomDomainFetch({
+        repository: "guerrerocarlos/whereis",
+        txtAnswers: ['"omattic,guerrerocarlos/whereis"']
+      })
+    );
+    const env = createTestEnv({
+      CLOUDFLARE_API_TOKEN: "cf-token"
+    });
+    const response = await app.fetch(
+      deployRequest(
+        {
+          "CNAME": "whereis.carlosguerrero.com\n",
+          "dist/client/index.html": "<h1>Hello</h1>"
+        },
+        {
+          "x-github-repository": "guerrerocarlos/whereis"
         }
-        if (url.includes("/workers/routes") && init?.method === "GET") {
-          return Response.json({ success: true, result: [] });
-        }
-        if (url.includes("/workers/routes") && init?.method === "POST") {
-          return Response.json({ success: true, result: { id: "route-1" } });
-        }
-        return Response.json({ success: true, result: {} });
+      ),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      data?: {
+        customDomains?: string[];
+        blockedCustomDomains?: unknown[];
+      };
+    };
+    expect(body.data?.customDomains).toEqual(["whereis.carlosguerrero.com"]);
+    expect(body.data?.blockedCustomDomains).toBeUndefined();
+  });
+
+  it("blocks custom domains when TXT exists but does not authorize the repo", async () => {
+    vi.stubGlobal(
+      "fetch",
+      stubCustomDomainFetch({
+        repository: "guerrerocarlos/whereis",
+        txtAnswers: ['"omattic"']
       })
     );
     const env = createTestEnv({
@@ -158,12 +305,91 @@ describe("deploy API", () => {
       data?: {
         url?: string;
         customDomains?: string[];
+        blockedCustomDomains?: Array<{ reason?: string; txtName?: string }>;
       };
     };
-    expect(body.data?.url).toBe("https://whereis.carlosguerrero.com/");
-    expect(body.data?.customDomains).toEqual(["whereis.carlosguerrero.com"]);
-    const record = await loadDeploymentRecord(env, "production", "guerrerocarlos", "whereis");
-    expect(record?.customDomains).toEqual(["whereis.carlosguerrero.com"]);
+    expect(body.data?.url).toBe("https://guerrerocarlos.w7s.cloud/whereis/");
+    expect(body.data?.customDomains).toBeUndefined();
+    expect(body.data?.blockedCustomDomains).toEqual([
+      expect.objectContaining({
+        reason: "txt_allowlist_mismatch",
+        txtName: "_w7s.carlosguerrero.com"
+      })
+    ]);
+    await expect(loadCustomDomainMapping(env, "whereis.carlosguerrero.com")).resolves.toBeNull();
+  });
+
+  it("keeps existing custom domain mappings on unverified conflicts", async () => {
+    vi.stubGlobal("fetch", stubCustomDomainFetch({ repository: "guerrerocarlos/whereis" }));
+    const env = createTestEnv({
+      CLOUDFLARE_API_TOKEN: "cf-token"
+    });
+    await storeCustomDomainMappings(
+      env,
+      existingDeploymentRecord({ orgSlug: "guerrerocarlos", repoSlug: "old-site" }),
+      ["whereis.carlosguerrero.com"]
+    );
+    const response = await app.fetch(
+      deployRequest(
+        {
+          "CNAME": "whereis.carlosguerrero.com\n",
+          "dist/client/index.html": "<h1>Hello</h1>"
+        },
+        {
+          "x-github-repository": "guerrerocarlos/whereis"
+        }
+      ),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      data?: {
+        customDomains?: string[];
+        blockedCustomDomains?: Array<{ reason?: string; currentRepository?: string }>;
+      };
+    };
+    expect(body.data?.customDomains).toBeUndefined();
+    expect(body.data?.blockedCustomDomains).toEqual([
+      expect.objectContaining({
+        reason: "already_claimed",
+        currentRepository: "guerrerocarlos/old-site"
+      })
+    ]);
+    const mapping = await loadCustomDomainMapping(env, "whereis.carlosguerrero.com");
+    expect(mapping?.repoSlug).toBe("old-site");
+  });
+
+  it("replaces existing custom domain mappings when TXT authorizes the new repo", async () => {
+    vi.stubGlobal(
+      "fetch",
+      stubCustomDomainFetch({
+        repository: "guerrerocarlos/whereis",
+        txtAnswers: ['"guerrerocarlos/whereis"']
+      })
+    );
+    const env = createTestEnv({
+      CLOUDFLARE_API_TOKEN: "cf-token"
+    });
+    await storeCustomDomainMappings(
+      env,
+      existingDeploymentRecord({ orgSlug: "guerrerocarlos", repoSlug: "old-site" }),
+      ["whereis.carlosguerrero.com"]
+    );
+    const response = await app.fetch(
+      deployRequest(
+        {
+          "CNAME": "whereis.carlosguerrero.com\n",
+          "dist/client/index.html": "<h1>Hello</h1>"
+        },
+        {
+          "x-github-repository": "guerrerocarlos/whereis"
+        }
+      ),
+      env
+    );
+
+    expect(response.status).toBe(200);
     const mapping = await loadCustomDomainMapping(env, "whereis.carlosguerrero.com");
     expect(mapping?.repoSlug).toBe("whereis");
   });

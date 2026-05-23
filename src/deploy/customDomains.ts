@@ -1,6 +1,8 @@
 import type { DeployArchive } from "./archive";
 import { readTextFile } from "./archive";
 import type { Env } from "../env";
+import { normalizeSlug } from "../names";
+import { loadCustomDomainMapping } from "../storage/deployments";
 
 const CNAME_PATHS = [
   "CNAME",
@@ -14,6 +16,32 @@ const CNAME_PATHS = [
 const DEFAULT_WORKER_NAME = "w7s-io";
 const HOSTNAME_PATTERN =
   /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])$/;
+const TXT_TOKEN_PATTERN =
+  /^[a-z0-9](?:[a-z0-9._-]{0,99})(?:\/[a-z0-9](?:[a-z0-9._-]{0,99}))?$/;
+
+export type CustomDomainWarning = {
+  hostname: string;
+  domain: string;
+  txtName: string;
+  txtValue: string;
+  message: string;
+};
+
+export type BlockedCustomDomain = {
+  hostname: string;
+  domain: string;
+  reason: "already_claimed" | "txt_allowlist_mismatch";
+  txtName: string;
+  txtValue: string;
+  currentRepository?: string;
+  message: string;
+};
+
+export type CustomDomainPlan = {
+  attached: string[];
+  warnings: CustomDomainWarning[];
+  blocked: BlockedCustomDomain[];
+};
 
 const normalizeHostname = (value: string) => {
   let candidate = value.trim().toLowerCase();
@@ -99,6 +127,129 @@ const findZoneForHostname = async (env: Env, hostname: string) => {
 
 const routeScriptName = (route: WorkerRoute) =>
   route.script || route.script_name || route.scriptName || null;
+
+const verificationTxtName = (domain: string) => `_w7s.${domain}`;
+const repoTxtValue = (orgSlug: string, repoSlug: string) => `${orgSlug}/${repoSlug}`;
+
+const decodeDnsTxtData = (data: string) => {
+  const chunks = [...data.matchAll(/"((?:\\.|[^"\\])*)"/g)].map((match) =>
+    (match[1] ?? "").replace(/\\(\d{3}|.)/g, (_all, escaped: string) =>
+      /^\d{3}$/.test(escaped) ? String.fromCharCode(Number(escaped)) : escaped
+    )
+  );
+  return chunks.length > 0 ? chunks.join("") : data.trim();
+};
+
+const parseTxtAllowlist = (values: string[]) =>
+  [
+    ...new Set(
+      values
+        .flatMap((value) => decodeDnsTxtData(value).split(","))
+        .map((token) => token.trim().toLowerCase())
+        .filter((token) => TXT_TOKEN_PATTERN.test(token))
+    )
+  ];
+
+type DnsJsonAnswer = {
+  type?: number;
+  data?: string;
+};
+
+const lookupTxtAllowlist = async (txtName: string) => {
+  try {
+    const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(txtName)}&type=TXT`;
+    const response = await fetch(url, {
+      headers: {
+        accept: "application/dns-json"
+      }
+    });
+    if (!response.ok) return { hasTxt: false, allowlist: [] as string[] };
+    const payload = await response.json() as { Answer?: DnsJsonAnswer[] };
+    const values = (payload.Answer ?? [])
+      .filter((answer) => answer.type === 16 && typeof answer.data === "string")
+      .map((answer) => answer.data as string);
+    return {
+      hasTxt: values.length > 0,
+      allowlist: parseTxtAllowlist(values)
+    };
+  } catch {
+    return { hasTxt: false, allowlist: [] as string[] };
+  }
+};
+
+const isAuthorizedByAllowlist = (params: {
+  allowlist: string[];
+  orgSlug: string;
+  repoSlug: string;
+}) => {
+  const repoEntry = repoTxtValue(params.orgSlug, params.repoSlug);
+  return params.allowlist.includes(params.orgSlug) || params.allowlist.includes(repoEntry);
+};
+
+export const planCustomDomainClaims = async (params: {
+  env: Env;
+  hostnames: string[];
+  orgSlug: string;
+  repoSlug: string;
+}) => {
+  const plan: CustomDomainPlan = {
+    attached: [],
+    warnings: [],
+    blocked: []
+  };
+  const orgSlug = normalizeSlug(params.orgSlug);
+  const repoSlug = normalizeSlug(params.repoSlug);
+
+  for (const hostname of params.hostnames) {
+    const zone = await findZoneForHostname(params.env, hostname);
+    const txtName = verificationTxtName(zone.name);
+    const txtValue = repoTxtValue(orgSlug, repoSlug);
+    const existing = await loadCustomDomainMapping(params.env, hostname);
+    const sameRepo = existing?.orgSlug === orgSlug && existing.repoSlug === repoSlug;
+    const txt = await lookupTxtAllowlist(txtName);
+
+    if (txt.hasTxt) {
+      if (isAuthorizedByAllowlist({ allowlist: txt.allowlist, orgSlug, repoSlug })) {
+        plan.attached.push(hostname);
+        continue;
+      }
+      plan.blocked.push({
+        hostname,
+        domain: zone.name,
+        reason: "txt_allowlist_mismatch",
+        txtName,
+        txtValue,
+        ...(existing?.repository ? { currentRepository: existing.repository } : {}),
+        message: `TXT ${txtName} does not authorize ${txtValue}.`
+      });
+      continue;
+    }
+
+    if (existing && !sameRepo) {
+      plan.blocked.push({
+        hostname,
+        domain: zone.name,
+        reason: "already_claimed",
+        txtName,
+        txtValue,
+        currentRepository: existing.repository,
+        message: `${hostname} is already claimed by ${existing.repository}. Add TXT ${txtName}=${txtValue} to move it.`
+      });
+      continue;
+    }
+
+    plan.attached.push(hostname);
+    plan.warnings.push({
+      hostname,
+      domain: zone.name,
+      txtName,
+      txtValue,
+      message: `Add TXT ${txtName}=${txtValue} to restrict future claims for this domain.`
+    });
+  }
+
+  return plan;
+};
 
 export const attachCustomDomainRoutes = async (env: Env, hostnames: string[]) => {
   const workerName = env.W7S_WORKER_NAME?.trim() || DEFAULT_WORKER_NAME;

@@ -10,6 +10,7 @@ As of the latest docs update:
 - Wildcard DNS is expected to be managed manually.
 - `backend/`, `worker/`, and static frontend deploys are supported.
 - Root `CNAME` files can attach app custom-domain routes when the W7S token can manage that Cloudflare zone.
+- Custom domains use soft TXT verification: the first claim works without TXT, `_w7s.<zone>` becomes an owner/repo allowlist when present, and hostname conflicts require TXT authorization.
 - Empty org roots such as `https://sadasant.w7s.cloud/` show deploy-help HTML instead of a plain 404.
 - The demo repo `guerrerocarlos/w7s-io-demo` deploys successfully through the reusable deploy action.
 - The example repo `w7s-io/example-fullstack-ts` exists as a reusable fullstack TypeScript starter.
@@ -33,6 +34,7 @@ The point of this repo is to keep the core deploy/routing plane small.
 - Native backend deploy supports only relative local imports.
 - Static hosting supports `frontend/dist`, `dist/client`, `dist`, `build`, and `out`.
 - Custom-domain DNS is manual; W7S only stores the host mapping and attaches a Worker route.
+- W7S custom-domain verification is soft. A missing TXT record allows the first claim, so serious custom-domain users should add `_w7s.<zone>` with a GitHub owner or `owner/repo` allowlist.
 - No rollback UI or deployment history API yet.
 - No user-facing logs yet.
 - Wildcard DNS is manual.

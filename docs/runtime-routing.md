@@ -94,6 +94,8 @@ https://whereis.carlosguerrero.com/api/profile
 https://whereis.carlosguerrero.com/assets/app.js
 ```
 
+Deploy-time custom-domain claims are soft-verified. The first repo can claim a hostname without TXT, but W7S warns the caller to add `_w7s.<zone>`. If that TXT exists, it must list the GitHub owner or exact repo, for example `guerrerocarlos` or `guerrerocarlos/whereis`. If two repos point at the same hostname, TXT authorization decides whether ownership can move.
+
 Reserved platform paths:
 
 - `/api/v1/*`

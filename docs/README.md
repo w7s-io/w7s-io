@@ -23,6 +23,6 @@ Start here:
 - public repo apps are routed as `https://<org>.w7s.cloud/<repo>/*`;
 - same-name repos such as `github.com/<org>/<org>` can also serve `https://<org>.w7s.cloud/*`.
 - empty org roots such as `https://sadasant.w7s.cloud/` show deploy-help HTML;
-- custom domains can be declared with `CNAME` when DNS is managed separately.
+- custom domains can be declared with `CNAME` when DNS is managed separately, with optional `_w7s.<zone>` TXT allowlists for ownership control.
 
 The old workflow editor, `jsInterpreter`, plugin bridge, DB control, and telemetry stack are not part of this core.

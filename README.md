@@ -12,7 +12,7 @@ This repo is the greenfield replacement core for W7S. It keeps the platform smal
 - `worker/` or `backend/` apps publish to Workers for Platforms;
 - static frontend assets publish to R2 and are served from `https://<org>.w7s.cloud/<repo>/*`.
 - same-name repos such as `github.com/<org>/<org>` can serve directly from `https://<org>.w7s.cloud/*`.
-- `CNAME` can declare one custom domain for a deployment.
+- `CNAME` can declare one custom domain for a deployment, with optional `_w7s.<zone>` TXT allowlists for ownership control.
 
 The old workflow interpreter and hard-coded plugin bridge are intentionally not part of this core. They can be rebuilt later as W7S apps/components on top of this deploy surface.
 
@@ -107,3 +107,5 @@ Wildcard DNS is intentionally managed manually. Before enabling the wildcard Wor
 - Name: `*`
 - Target: `w7s.cloud`
 - Proxy status: proxied
+
+Custom-domain DNS is also manual. A root `CNAME` file can claim `app.example.com`; create DNS pointing that host to `w7s.cloud`. Add TXT `_w7s.example.com` with values like `owner` or `owner/repo` to restrict which GitHub repos can use hostnames on that zone.
