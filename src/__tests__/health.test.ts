@@ -34,6 +34,7 @@ describe("landing page", () => {
     expect(body).toContain("name: Deploy");
     expect(body).toContain("on: push");
     expect(body).toContain("w7s-io/w7s-cloud@v1");
+    expect(body.indexOf("<pre><code>")).toBeLessThan(body.indexOf("Add this GitHub Actions workflow"));
     expect(body).toContain('<strong class="workflow-action">w7s-io/w7s-cloud@v1</strong>');
     expect(body).toContain("token: ${{ github.token }}");
     expect(body).not.toContain("workflow_dispatch");

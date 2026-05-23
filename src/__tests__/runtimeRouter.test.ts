@@ -127,6 +127,8 @@ describe("runtime router", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
+    expect(body).toContain("<h2>Status:</h2>");
+    expect(body).not.toContain("Deploy target");
     expect(body).toContain("Nothing is deployed at <code>https://sadasant.w7s.cloud/</code> yet.");
     expect(body).toContain("https://github.com/sadasant/sadasant");
     expect(body).toContain("<code>sadasant/sadasant</code>");
@@ -134,6 +136,7 @@ describe("runtime router", () => {
     expect(body).toContain("same-name repo convention");
     expect(body).toContain("on: push");
     expect(body).toContain("w7s-io/w7s-cloud@v1");
+    expect(body.indexOf("<pre><code>")).toBeLessThan(body.indexOf("Add this GitHub Actions workflow"));
     expect(body).toContain('<strong class="workflow-action">w7s-io/w7s-cloud@v1</strong>');
     expect(body).toContain("token: ${{ github.token }}");
     expect(body).not.toContain("workflow_dispatch");
@@ -158,6 +161,8 @@ describe("runtime router", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
+    expect(body).toContain("<h2>Status:</h2>");
+    expect(body).not.toContain("Deploy target");
     expect(body).toContain("Nothing is deployed at <code>https://sadasant.w7s.cloud/missing-repo/</code> yet.");
     expect(body).toContain("https://github.com/sadasant/missing-repo");
     expect(body).toContain("<code>sadasant/missing-repo</code>");

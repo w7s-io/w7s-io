@@ -24,7 +24,7 @@ const deployTargetHtml = (target?: DeployShowcaseTarget) => {
 
   return `
       <section class="target">
-        <h2>Deploy target</h2>
+        <h2>Status:</h2>
         <p>Nothing is deployed at <code>${escapeHtml(target.requestedUrl)}</code> yet.</p>
         <p>To deploy to this domain and path, use <a href="${escapeHtml(target.repositoryUrl)}"><code>${escapeHtml(target.repository)}</code></a>.</p>
         <p>After it deploys, W7S will serve it at <a href="${escapeHtml(target.deployUrl)}">${escapeHtml(target.deployUrl)}</a>.</p>
@@ -118,6 +118,9 @@ export const landingHtml = (target?: DeployShowcaseTarget) => `<!doctype html>
       .target p + p {
         margin-top: 10px;
       }
+      .deploy-copy {
+        margin-top: 18px;
+      }
       @media (prefers-color-scheme: dark) {
         body {
           background: #111;
@@ -147,9 +150,9 @@ export const landingHtml = (target?: DeployShowcaseTarget) => `<!doctype html>
   <body>
     <main>
       <h1>W7S</h1>
-      <p>Add this GitHub Actions workflow to any repo and push to <code>main</code>. W7S verifies the deploy with the repo's GitHub token and serves it at <code>&lt;owner&gt;.w7s.cloud/&lt;repo&gt;/</code>.</p>
       ${deployTargetHtml(target)}
       <pre><code>${deployWorkflowHtml()}</code></pre>
+      <p class="deploy-copy">Add this GitHub Actions workflow to any repo and push to <code>main</code>. W7S verifies the deploy with the repo's GitHub token and serves it at <code>&lt;owner&gt;.w7s.cloud/&lt;repo&gt;/</code>.</p>
     </main>
   </body>
 </html>`;
