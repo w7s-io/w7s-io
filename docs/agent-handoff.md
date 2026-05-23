@@ -71,8 +71,10 @@ When starting work:
 5. Check health:
 
    ```sh
+   curl -fsS https://w7s.cloud/health
    curl -fsS https://w7s.cloud/api/v1/health
    ```
 
-6. If working on public org routes, confirm DNS for the test org host resolves before debugging app code.
+   A current GitHub Actions deploy should report `commitId`, `branch`, and `deployedAt`.
 
+6. If working on public org routes, confirm DNS for the test org host resolves before debugging app code.

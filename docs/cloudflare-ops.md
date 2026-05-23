@@ -17,8 +17,9 @@ The workflow:
 
 1. installs dependencies;
 2. runs `npm run check`;
-3. runs `npm run prepare:cloudflare`;
-4. deploys with `npx wrangler deploy --config wrangler.generated.jsonc --secrets-file .wrangler/secrets.json`.
+3. captures the Git branch and UTC deployment timestamp;
+4. runs `npm run prepare:cloudflare`;
+5. deploys with `npx wrangler deploy --config wrangler.generated.jsonc --secrets-file .wrangler/secrets.json`.
 
 ## Required GitHub Secrets
 
@@ -77,7 +78,7 @@ The generated config includes:
 - `DISPATCHER`;
 - `w7s.cloud` custom domain;
 - optional `*.w7s.cloud/*` route when `W7S_ATTACH_WILDCARD_ROUTE=true`;
-- runtime vars such as `W7S_BASE_DOMAIN` and `APP_COMMIT_ID`;
+- runtime vars such as `W7S_BASE_DOMAIN`, `APP_COMMIT_ID`, `APP_DEPLOY_BRANCH`, and `APP_DEPLOYED_AT`;
 - Worker secrets needed for user deploys.
 
 ## Wildcard Route Cutover
@@ -134,4 +135,3 @@ Example:
 ```text
 guerrerocarlos--w7s-io-demo--production
 ```
-

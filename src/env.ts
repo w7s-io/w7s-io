@@ -14,5 +14,6 @@ export interface Env {
   CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE?: string;
   W7S_BASE_DOMAIN?: string;
   APP_COMMIT_ID?: string;
+  APP_DEPLOY_BRANCH?: string;
+  APP_DEPLOYED_AT?: string;
 }
-

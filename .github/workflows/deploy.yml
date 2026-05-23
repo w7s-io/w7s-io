@@ -44,6 +44,11 @@ jobs:
       - name: Check
         run: npm run check
 
+      - name: Capture deployment metadata
+        run: |
+          echo "W7S_DEPLOY_BRANCH=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          echo "W7S_DEPLOYED_AT=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+
       - name: Prepare Cloudflare config
         run: npm run prepare:cloudflare
 

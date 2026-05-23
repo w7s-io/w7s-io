@@ -22,7 +22,8 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
 
 - `src/worker.ts`
   - Hono entrypoint.
-  - Registers `GET /api/v1/health` and `POST /api/v1/deploy`.
+  - Registers `GET /health`, `GET /api/v1/health`, and `POST /api/v1/deploy`.
+  - Health returns the deployed commit, branch, and deployment timestamp when available.
   - Sends all other requests through runtime routing, then falls back to the placeholder landing page.
 - `src/api/deploy.ts`
   - Implements the deploy API.
@@ -48,6 +49,7 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
 - `scripts/prepare-cloudflare-config.mjs`
   - GitHub Actions helper that generates `wrangler.generated.jsonc`.
   - Creates or finds KV/R2/dispatch namespace resources.
+  - Copies deploy metadata from the GitHub Actions environment into Worker vars.
   - Attaches routes when requested by repo variables.
 
 ## Request Flow
@@ -80,4 +82,3 @@ GET https://<org>.w7s.cloud/<repo>/<path>
 - `frontend/dist` is treated as already-built output.
 - W7S does not install dependencies or run user builds during deploy.
 - Bare package imports inside native backend code are not supported by deploy-time publishing. Repos should upload bundled code or use relative local modules only.
-

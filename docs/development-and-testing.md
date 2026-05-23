@@ -44,7 +44,7 @@ For local packaging validation:
 npx wrangler deploy --dry-run
 ```
 
-The checked-in `wrangler.jsonc` contains placeholder IDs. Production deploys use `wrangler.generated.jsonc`, generated during GitHub Actions.
+The checked-in `wrangler.jsonc` contains current production bindings for local Wrangler commands. GitHub Actions still uses `wrangler.generated.jsonc`, generated from live Cloudflare resource state during deploy.
 
 ## Safe Change Workflow
 
@@ -72,8 +72,11 @@ The checked-in `wrangler.jsonc` contains placeholder IDs. Production deploys use
 6. Verify health:
 
    ```sh
+   curl -fsS https://w7s.cloud/health
    curl -fsS https://w7s.cloud/api/v1/health
    ```
+
+   The response includes `commitId`, `branch`, and `deployedAt` for GitHub Actions deploys.
 
 ## Demo Repo
 
@@ -110,8 +113,8 @@ If a repo deployed successfully but the public URL fails:
 4. Test the core health endpoint:
 
    ```sh
+   curl -fsS https://w7s.cloud/health
    curl -fsS https://w7s.cloud/api/v1/health
    ```
 
 If DNS is missing, routing code will not run.
-

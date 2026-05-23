@@ -16,6 +16,8 @@ The old workflow interpreter and hard-coded plugin bridge are intentionally not 
 
 ## Deploy API
 
+Health is available at both `GET /health` and `GET /api/v1/health`. GitHub Actions deploys expose the deployed commit, branch, and UTC deployment timestamp in the health response.
+
 ```sh
 curl -X POST "https://w7s.cloud/api/v1/deploy" \
   -H "Authorization: Bearer $GITHUB_TOKEN" \

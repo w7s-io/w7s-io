@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import type { Env } from "./env";
 import { handleDeploy } from "./api/deploy";
 import { json } from "./http";
@@ -7,13 +7,17 @@ import { landingHtml } from "./static/landing";
 
 export const app = new Hono<{ Bindings: Env }>();
 
-app.get("/api/v1/health", (c) =>
+const health = (c: Context<{ Bindings: Env }>) =>
   json({
     status: "ok",
     service: "w7s-io",
-    commitId: c.env.APP_COMMIT_ID ?? null
-  })
-);
+    commitId: c.env.APP_COMMIT_ID ?? null,
+    branch: c.env.APP_DEPLOY_BRANCH ?? null,
+    deployedAt: c.env.APP_DEPLOYED_AT ?? null
+  });
+
+app.get("/health", health);
+app.get("/api/v1/health", health);
 
 app.post("/api/v1/deploy", handleDeploy);
 
@@ -38,4 +42,3 @@ app.all("*", async (c) => {
 export default {
   fetch: app.fetch
 };
-

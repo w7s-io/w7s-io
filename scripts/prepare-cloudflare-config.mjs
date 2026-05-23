@@ -14,6 +14,11 @@ const compatibilityDate =
   process.env.CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE?.trim() ||
   "2026-05-23";
 const appCommitId = process.env.GITHUB_SHA?.trim() || null;
+const appDeployBranch =
+  process.env.W7S_DEPLOY_BRANCH?.trim() ||
+  process.env.GITHUB_REF_NAME?.trim() ||
+  null;
+const appDeployedAt = process.env.W7S_DEPLOYED_AT?.trim() || null;
 const workerName = "w7s-io";
 
 if (!apiToken) {
@@ -173,7 +178,9 @@ const config = {
     W7S_BASE_DOMAIN: zoneName,
     CLOUDFLARE_DISPATCH_NAMESPACE: dispatchNamespace,
     CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE: compatibilityDate,
-    ...(appCommitId ? { APP_COMMIT_ID: appCommitId } : {})
+    ...(appCommitId ? { APP_COMMIT_ID: appCommitId } : {}),
+    ...(appDeployBranch ? { APP_DEPLOY_BRANCH: appDeployBranch } : {}),
+    ...(appDeployedAt ? { APP_DEPLOYED_AT: appDeployedAt } : {})
   },
   dispatch_namespaces: [
     {
