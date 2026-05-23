@@ -112,7 +112,7 @@ describe("runtime router", () => {
     expect(response.headers.get("location")).toBe("https://w7s-io.w7s.cloud/demo/?from=test");
   });
 
-  it("shows deploy help for empty org root hosts", async () => {
+  it("shows contextual deploy help for empty org root hosts", async () => {
     const env = createTestEnv();
 
     const response = await app.fetch(
@@ -127,17 +127,20 @@ describe("runtime router", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
-    expect(body).toContain("This space is ready for an app.");
-    expect(body).toContain("https://sadasant.w7s.cloud/example-fullstack-ts/");
+    expect(body).toContain("Nothing is deployed at <code>https://sadasant.w7s.cloud/</code> yet.");
+    expect(body).toContain("https://github.com/sadasant/sadasant");
+    expect(body).toContain("<code>sadasant/sadasant</code>");
+    expect(body).toContain("https://sadasant.w7s.cloud/");
+    expect(body).toContain("same-name repo convention");
     expect(body).toContain("w7s-io/w7s-cloud@v1");
     expect(body).toContain('<strong class="workflow-action">w7s-io/w7s-cloud@v1</strong>');
     expect(body).toContain("token: ${{ github.token }}");
     expect(body).not.toContain("install-command");
     expect(body).not.toContain("build-command");
-    expect(body).toContain("CNAME");
+    expect(body).not.toContain("example-fullstack-ts");
   });
 
-  it("keeps missing repo-prefixed deployments as 404s", async () => {
+  it("shows contextual deploy help for missing repo-prefixed deployments", async () => {
     const env = createTestEnv();
 
     const response = await app.fetch(
@@ -148,9 +151,16 @@ describe("runtime router", () => {
       }),
       env
     );
+    const body = await response.text();
 
-    expect(response.status).toBe(404);
-    expect(await response.text()).toBe("Deployment not found.");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    expect(body).toContain("Nothing is deployed at <code>https://sadasant.w7s.cloud/missing-repo/</code> yet.");
+    expect(body).toContain("https://github.com/sadasant/missing-repo");
+    expect(body).toContain("<code>sadasant/missing-repo</code>");
+    expect(body).toContain("https://sadasant.w7s.cloud/missing-repo/");
+    expect(body).toContain("w7s-io/w7s-cloud@v1");
+    expect(body).not.toContain("same-name repo convention");
   });
 
   it("serves same-name repo static deployments from the org root", async () => {

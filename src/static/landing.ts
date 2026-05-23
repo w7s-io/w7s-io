@@ -1,6 +1,38 @@
 import { deployWorkflowHtml } from "./deployWorkflow";
 
-export const landingHtml = () => `<!doctype html>
+export type DeployShowcaseTarget = {
+  requestedUrl: string;
+  deployUrl: string;
+  repository: string;
+  repositoryUrl: string;
+  isOwnerRoot: boolean;
+};
+
+const escapeHtml = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+
+const deployTargetHtml = (target?: DeployShowcaseTarget) => {
+  if (!target) return "";
+
+  const rootHint = target.isOwnerRoot
+    ? `<p>Owner roots use the same-name repo convention, so this root domain maps to <code>${escapeHtml(target.repository)}</code>.</p>`
+    : "";
+
+  return `
+      <section class="target">
+        <h2>Deploy target</h2>
+        <p>Nothing is deployed at <code>${escapeHtml(target.requestedUrl)}</code> yet.</p>
+        <p>To deploy to this domain and path, use <a href="${escapeHtml(target.repositoryUrl)}"><code>${escapeHtml(target.repository)}</code></a>.</p>
+        <p>After it deploys, W7S will serve it at <a href="${escapeHtml(target.deployUrl)}">${escapeHtml(target.deployUrl)}</a>.</p>
+        ${rootHint}
+      </section>`;
+};
+
+export const landingHtml = (target?: DeployShowcaseTarget) => `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -34,6 +66,12 @@ export const landingHtml = () => `<!doctype html>
         font-size: 18px;
         line-height: 1.6;
       }
+      a {
+        color: #0f6f55;
+        font-weight: 650;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 3px;
+      }
       code {
         border: 1px solid #d4d4d4;
         border-radius: 6px;
@@ -61,10 +99,32 @@ export const landingHtml = () => `<!doctype html>
         color: #76f0b8;
         font-weight: 800;
       }
+      .target {
+        margin-top: 24px;
+        border: 1px solid #d4d4d4;
+        border-radius: 8px;
+        padding: 18px;
+        background: rgba(255, 255, 255, 0.72);
+      }
+      .target h2 {
+        margin: 0 0 12px;
+        font-size: 20px;
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+      .target p {
+        font-size: 16px;
+      }
+      .target p + p {
+        margin-top: 10px;
+      }
       @media (prefers-color-scheme: dark) {
         body {
           background: #111;
           color: #fafafa;
+        }
+        a {
+          color: #73d7aa;
         }
         p {
           color: #c7c7c7;
@@ -72,6 +132,10 @@ export const landingHtml = () => `<!doctype html>
         code {
           background: #1b1b1b;
           border-color: #333;
+        }
+        .target {
+          border-color: #333;
+          background: rgba(27, 27, 27, 0.72);
         }
         pre {
           border-color: #344038;
@@ -84,6 +148,7 @@ export const landingHtml = () => `<!doctype html>
     <main>
       <h1>W7S</h1>
       <p>Add this GitHub Actions workflow to any repo and push to <code>main</code>. W7S verifies the deploy with the repo's GitHub token and serves it at <code>&lt;owner&gt;.w7s.cloud/&lt;repo&gt;/</code>.</p>
+      ${deployTargetHtml(target)}
       <pre><code>${deployWorkflowHtml()}</code></pre>
     </main>
   </body>

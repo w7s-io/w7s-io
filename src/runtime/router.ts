@@ -6,7 +6,7 @@ import {
 import { cleanHost, resolveRuntimeHost } from "./host";
 import { resolveStaticAssetResponse } from "./static";
 import { normalizeSlug } from "../names";
-import { orgDeployHelpHtml } from "../static/deployHelp";
+import { landingHtml, type DeployShowcaseTarget } from "../static/landing";
 
 const isReservedPlatformPath = (path: string) =>
   path === "/api/v1" || path.startsWith("/api/v1/");
@@ -61,8 +61,45 @@ const shouldRedirectStaticRepoRoot = (request: Request, repoPath: string) => {
   return repoPath === "/" && !url.pathname.endsWith("/");
 };
 
-const shouldShowOrgDeployHelp = (request: Request, path: string) =>
-  (request.method === "GET" || request.method === "HEAD") && path === "/";
+const shouldShowDeployShowcase = (request: Request) =>
+  request.method === "GET" || request.method === "HEAD";
+
+const displayRequestUrl = (request: Request, host: string) => {
+  const url = new URL(request.url);
+  url.protocol = "https:";
+  url.host = host;
+  return url.toString();
+};
+
+const deployShowcaseTarget = (request: Request, host: string, orgSlug: string): DeployShowcaseTarget => {
+  const path = new URL(request.url).pathname;
+  const repoInfo = splitRepoPath(path);
+  const repoSlug = repoInfo?.repoSlug ?? orgSlug;
+  const deployUrl = `https://${host}${repoInfo ? `/${repoSlug}/` : "/"}`;
+  const repository = `${orgSlug}/${repoSlug}`;
+
+  return {
+    requestedUrl: displayRequestUrl(request, host),
+    deployUrl,
+    repository,
+    repositoryUrl: `https://github.com/${repository}`,
+    isOwnerRoot: !repoInfo
+  };
+};
+
+const deployShowcaseResponse = (request: Request, host: string, orgSlug: string) =>
+  new Response(
+    request.method === "HEAD"
+      ? null
+      : landingHtml(deployShowcaseTarget(request, host, orgSlug)),
+    {
+      status: 200,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-cache"
+      }
+    }
+  );
 
 const redirectToDirectoryPath = (request: Request) => {
   const url = new URL(request.url);
@@ -184,22 +221,8 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
     return workerTarget ? new Response("Not found.", { status: 404 }) : null;
   }
 
-  if (host && shouldShowOrgDeployHelp(request, url.pathname)) {
-    return new Response(
-      request.method === "HEAD"
-        ? null
-        : orgDeployHelpHtml({
-            host: requestHost,
-            orgSlug
-          }),
-      {
-        status: 200,
-        headers: {
-          "content-type": "text/html; charset=utf-8",
-          "cache-control": "no-cache"
-        }
-      }
-    );
+  if (host && shouldShowDeployShowcase(request)) {
+    return deployShowcaseResponse(request, requestHost, orgSlug);
   }
 
   return new Response("Deployment not found.", { status: 404 });

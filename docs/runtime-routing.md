@@ -72,19 +72,29 @@ https://guerrerocarlos.w7s.cloud/assets/app.js
 
 Repo-prefixed deployments keep priority. If `guerrerocarlos/w7s-io-demo` exists, then `/w7s-io-demo/*` routes to that repo before W7S tries the org-root app.
 
-If an org host has no same-name root deployment and the request is for `/`, W7S returns a short HTML deploy-help page instead of a plain 404. For example:
+If an org host has no deployment for the requested root or repo-prefixed path, W7S returns the deploy showcase page instead of a plain 404. The page includes the exact GitHub repo that should be used for the URL. For example:
 
 ```text
 https://sadasant.w7s.cloud/
 ```
 
-shows instructions for deploying:
+points at:
 
 ```text
-https://sadasant.w7s.cloud/example-fullstack-ts/
+https://github.com/sadasant/sadasant
 ```
 
-Missing repo-prefixed paths still return `404 Deployment not found.`.
+and:
+
+```text
+https://sadasant.w7s.cloud/example/
+```
+
+points at:
+
+```text
+https://github.com/sadasant/example
+```
 
 Custom domains are resolved from KV mappings created during deploy from `CNAME` or supported legacy/static-output CNAME paths. A custom hostname routes directly to its mapped deployment without a repo prefix:
 
