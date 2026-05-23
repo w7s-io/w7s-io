@@ -1,11 +1,4 @@
-import { minimalDeployWorkflowYaml } from "./deployWorkflow";
-
-const escapeHtml = (value: string) =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+import { deployWorkflowHtml } from "./deployWorkflow";
 
 export const landingHtml = () => `<!doctype html>
 <html lang="en">
@@ -64,6 +57,10 @@ export const landingHtml = () => `<!doctype html>
         font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
         font-size: 14px;
       }
+      .workflow-action {
+        color: #76f0b8;
+        font-weight: 800;
+      }
       @media (prefers-color-scheme: dark) {
         body {
           background: #111;
@@ -87,7 +84,7 @@ export const landingHtml = () => `<!doctype html>
     <main>
       <h1>W7S</h1>
       <p>Add this GitHub Actions workflow to any repo and push to <code>main</code>. W7S verifies the deploy with the repo's GitHub token and serves it at <code>&lt;owner&gt;.w7s.cloud/&lt;repo&gt;/</code>.</p>
-      <pre><code>${escapeHtml(minimalDeployWorkflowYaml)}</code></pre>
+      <pre><code>${deployWorkflowHtml()}</code></pre>
     </main>
   </body>
 </html>`;

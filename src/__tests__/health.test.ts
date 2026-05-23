@@ -33,6 +33,7 @@ describe("landing page", () => {
     expect(response.headers.get("content-type")).toContain("text/html");
     expect(body).toContain("name: Deploy");
     expect(body).toContain("w7s-io/w7s-cloud@v1");
+    expect(body).toContain('<strong class="workflow-action">w7s-io/w7s-cloud@v1</strong>');
     expect(body).toContain("token: ${{ github.token }}");
     expect(body).not.toContain("install-command");
     expect(body).not.toContain("build-command");

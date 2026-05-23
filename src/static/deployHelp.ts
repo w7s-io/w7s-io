@@ -1,4 +1,4 @@
-import { minimalDeployWorkflowYaml } from "./deployWorkflow";
+import { deployWorkflowHtml } from "./deployWorkflow";
 
 const EXAMPLE_REPO_SLUG = "example-fullstack-ts";
 const EXAMPLE_TEMPLATE_URL = "https://github.com/w7s-io/example-fullstack-ts/";
@@ -107,6 +107,10 @@ export const orgDeployHelpHtml = (params: { host: string; orgSlug: string }) => 
         color: inherit;
         font-size: 14px;
       }
+      .workflow-action {
+        color: #76f0b8;
+        font-weight: 800;
+      }
       .intro {
         max-width: 740px;
         margin-top: 18px;
@@ -212,7 +216,7 @@ export const orgDeployHelpHtml = (params: { host: string; orgSlug: string }) => 
         <section>
           <h2>GitHub Action</h2>
           <p>Add this workflow as <code>.github/workflows/deploy.yml</code>. That is all W7S needs to verify deploy access with the repo's GitHub token.</p>
-          <pre><code>${escapeHtml(minimalDeployWorkflowYaml)}</code></pre>
+          <pre><code>${deployWorkflowHtml()}</code></pre>
         </section>
       </div>
     </main>
