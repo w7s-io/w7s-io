@@ -22,6 +22,18 @@ const shouldFallbackFromWorkerToStatic = (request: Request, response: Response) 
   return response.status === 404 || response.status === 405;
 };
 
+const shouldRedirectStaticRepoRoot = (request: Request, repoPath: string) => {
+  if (request.method !== "GET" && request.method !== "HEAD") return false;
+  const url = new URL(request.url);
+  return repoPath === "/" && !url.pathname.endsWith("/");
+};
+
+const redirectToDirectoryPath = (request: Request) => {
+  const url = new URL(request.url);
+  url.pathname = `${url.pathname}/`;
+  return Response.redirect(url.toString(), 308);
+};
+
 const dispatchWorker = async (params: {
   env: Env;
   request: Request;
@@ -77,6 +89,10 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
   );
   if (!deployment) {
     return new Response("Deployment not found.", { status: 404 });
+  }
+
+  if (deployment.targets.static && shouldRedirectStaticRepoRoot(request, repoInfo.repoPath)) {
+    return redirectToDirectoryPath(request);
   }
 
   const exactStatic = await resolveStaticAssetResponse({

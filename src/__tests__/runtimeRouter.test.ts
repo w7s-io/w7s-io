@@ -4,52 +4,56 @@ import { createTestEnv } from "./mocks";
 import { storeDeploymentRecord, storeStaticSiteManifest } from "../storage/deployments";
 import type { DeploymentRecord, StaticSiteManifest } from "../storage/deployments";
 
+const storeStaticDemoDeployment = async (env: ReturnType<typeof createTestEnv>) => {
+  await env.STATIC_ASSETS!.put("static/index.html", "<h1>App</h1>", {
+    httpMetadata: {
+      contentType: "text/html; charset=utf-8"
+    }
+  });
+  const manifest: StaticSiteManifest = {
+    version: 1,
+    orgSlug: "w7s-io",
+    repoSlug: "demo",
+    environment: "production",
+    assetPrefix: "static",
+    deployedAt: new Date().toISOString(),
+    files: {
+      "index.html": {
+        path: "index.html",
+        r2Key: "static/index.html",
+        contentType: "text/html; charset=utf-8",
+        size: 12,
+        etag: "etag"
+      }
+    },
+    hasIndex: true
+  };
+  const manifestKey = await storeStaticSiteManifest(env, manifest);
+  const record: DeploymentRecord = {
+    version: 1,
+    orgSlug: "w7s-io",
+    repoSlug: "demo",
+    environment: "production",
+    repository: "w7s-io/demo",
+    branch: "main",
+    commitSha: "abc",
+    deployedAt: new Date().toISOString(),
+    targets: {
+      static: {
+        manifestKey,
+        assetPrefix: "static",
+        fileCount: 1,
+        hasIndex: true
+      }
+    }
+  };
+  await storeDeploymentRecord(env, record);
+};
+
 describe("runtime router", () => {
   it("serves static assets from repo routes", async () => {
     const env = createTestEnv();
-    await env.STATIC_ASSETS!.put("static/index.html", "<h1>App</h1>", {
-      httpMetadata: {
-        contentType: "text/html; charset=utf-8"
-      }
-    });
-    const manifest: StaticSiteManifest = {
-      version: 1,
-      orgSlug: "w7s-io",
-      repoSlug: "demo",
-      environment: "production",
-      assetPrefix: "static",
-      deployedAt: new Date().toISOString(),
-      files: {
-        "index.html": {
-          path: "index.html",
-          r2Key: "static/index.html",
-          contentType: "text/html; charset=utf-8",
-          size: 12,
-          etag: "etag"
-        }
-      },
-      hasIndex: true
-    };
-    const manifestKey = await storeStaticSiteManifest(env, manifest);
-    const record: DeploymentRecord = {
-      version: 1,
-      orgSlug: "w7s-io",
-      repoSlug: "demo",
-      environment: "production",
-      repository: "w7s-io/demo",
-      branch: "main",
-      commitSha: "abc",
-      deployedAt: new Date().toISOString(),
-      targets: {
-        static: {
-          manifestKey,
-          assetPrefix: "static",
-          fileCount: 1,
-          hasIndex: true
-        }
-      }
-    };
-    await storeDeploymentRecord(env, record);
+    await storeStaticDemoDeployment(env);
 
     const response = await app.fetch(
       new Request("https://w7s-io.w7s.cloud/demo/", {
@@ -62,6 +66,24 @@ describe("runtime router", () => {
 
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("App");
+  });
+
+  it("redirects static repo root routes to a directory path", async () => {
+    const env = createTestEnv();
+    await storeStaticDemoDeployment(env);
+
+    const response = await app.fetch(
+      new Request("https://w7s-io.w7s.cloud/demo?from=test", {
+        headers: {
+          host: "w7s-io.w7s.cloud"
+        },
+        redirect: "manual"
+      }),
+      env
+    );
+
+    expect(response.status).toBe(308);
+    expect(response.headers.get("location")).toBe("https://w7s-io.w7s.cloud/demo/?from=test");
   });
 
   it("dispatches native worker requests with repo path stripped", async () => {

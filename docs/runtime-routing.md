@@ -99,6 +99,14 @@ Dispatched to user Worker as:
 
 Static assets are loaded from an R2 manifest stored in KV.
 
+For static deployments, the repo root without a trailing slash redirects to the directory URL:
+
+```text
+/<repo> -> /<repo>/
+```
+
+This keeps relative frontend asset URLs such as `./app.js` scoped under the repo prefix.
+
 Exact match candidates:
 
 - `<path>`
@@ -110,4 +118,3 @@ SPA fallback:
 - only applies to `GET` and `HEAD`;
 - only applies when `index.html` exists;
 - only used after native Worker misses with `404` or `405`.
-
