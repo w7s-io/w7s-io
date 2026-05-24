@@ -15,6 +15,12 @@ import {
   W7S_RPC_BINDING
 } from "../deploy/rpcBindings";
 import {
+  buildQueueUploadBindings,
+  W7S_QUEUE_BINDING
+} from "../deploy/queueBindings";
+import { generateBindingToken, hashBindingToken } from "../deploy/tokens";
+import { provisionAppQueues } from "../deploy/queueProvisioner";
+import {
   attachCustomDomainRoutes,
   planCustomDomainClaims,
   readCustomDomains
@@ -22,6 +28,7 @@ import {
 import { buildDeploymentScriptName, requireSlug, resolveEnvironment, sanitizeScriptPart } from "../names";
 import {
   replaceCustomDomainMappings,
+  replaceQueueMappings,
   storeDeploymentRecord,
   type DeploymentRecord
 } from "../storage/deployments";
@@ -125,6 +132,9 @@ export const handleDeploy = async (c: HonoContext) => {
   if (!hasNativeBackend && !hasStatic) {
     return jsonError("Archive must contain worker/, backend/, dist/server/, or static frontend output.", 400);
   }
+  if (!hasNativeBackend && appManifest.queues.length > 0) {
+    return jsonError("Queues require a native backend deployment.", 400);
+  }
 
   const deployedAt = new Date().toISOString();
   const targets: DeploymentRecord["targets"] = {};
@@ -133,6 +143,7 @@ export const handleDeploy = async (c: HonoContext) => {
   let blockedCustomDomains: Awaited<ReturnType<typeof planCustomDomainClaims>>["blocked"] = [];
   let deploymentBindings: DeploymentRecord["bindings"];
   let deploymentRpc: DeploymentRecord["rpc"];
+  let deploymentQueue: DeploymentRecord["queue"];
 
   try {
     if (hasNativeBackend) {
@@ -151,6 +162,13 @@ export const handleDeploy = async (c: HonoContext) => {
         environment
       });
       deploymentBindings = provisionedBindings.deploymentBindings;
+      const queues = await provisionAppQueues({
+        env: c.env,
+        manifest: appManifest,
+        orgSlug,
+        repoSlug,
+        environment
+      });
       const rpcToken = generateRpcToken();
       const rpcBindings = buildRpcUploadBindings({
         env: c.env,
@@ -164,12 +182,23 @@ export const handleDeploy = async (c: HonoContext) => {
         tokenHash: await hashRpcToken(rpcToken),
         allow: appManifest.rpc.allow
       };
+      const queueToken = generateBindingToken();
+      const queueBindings = buildQueueUploadBindings({
+        env: c.env,
+        token: queueToken
+      });
+      deploymentQueue = {
+        binding: W7S_QUEUE_BINDING,
+        tokenHash: await hashBindingToken(queueToken),
+        allow: appManifest.queue.allow,
+        queues
+      };
       const published = await publishIsolateWorker({
         env: c.env,
         archive,
         scriptName,
         entrypoint,
-        bindings: [...provisionedBindings.uploadBindings, ...rpcBindings]
+        bindings: [...provisionedBindings.uploadBindings, ...rpcBindings, ...queueBindings]
       });
       targets.worker = published;
     }
@@ -220,10 +249,12 @@ export const handleDeploy = async (c: HonoContext) => {
     ...(attachedCustomDomains.length > 0 ? { customDomains: attachedCustomDomains } : {}),
     ...(deploymentBindings ? { bindings: deploymentBindings } : {}),
     ...(deploymentRpc ? { rpc: deploymentRpc } : {}),
+    ...(deploymentQueue ? { queue: deploymentQueue } : {}),
     targets
   };
   await storeDeploymentRecord(c.env, record);
   await replaceCustomDomainMappings(c.env, record, attachedCustomDomains);
+  await replaceQueueMappings(c.env, record, record.queue?.queues ?? []);
   if (attachedCustomDomains.length > 0) {
     try {
       await attachCustomDomainRoutes(c.env, attachedCustomDomains);
@@ -235,7 +266,16 @@ export const handleDeploy = async (c: HonoContext) => {
   return jsonSuccess({
     deployment: {
       ...record,
-      ...(record.rpc ? { rpc: { binding: record.rpc.binding, allow: record.rpc.allow } } : {})
+      ...(record.rpc ? { rpc: { binding: record.rpc.binding, allow: record.rpc.allow } } : {}),
+      ...(record.queue
+        ? {
+            queue: {
+              binding: record.queue.binding,
+              allow: record.queue.allow,
+              queues: record.queue.queues
+            }
+          }
+        : {})
     },
     url: publicDeploymentUrl(c.env, orgSlug, repoSlug, environment, attachedCustomDomains),
     ...(attachedCustomDomains.length > 0 ? { customDomains: attachedCustomDomains } : {}),

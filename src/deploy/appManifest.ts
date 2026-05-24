@@ -2,6 +2,7 @@ import { normalizeArchivePath, readTextFile, type DeployArchive } from "./archiv
 
 const BINDING_NAME_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const QUEUE_NAME_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{0,99})$/i;
 
 export type KvBindingDeclaration = {
   binding: string;
@@ -21,14 +22,23 @@ export type D1BindingDeclaration = {
   primaryLocationHint?: string;
 };
 
+export type QueueDeclaration = {
+  name: string;
+  consumer: string;
+};
+
 export type AppManifest = {
   bindings: {
     kv: KvBindingDeclaration[];
     r2: R2BindingDeclaration[];
     d1: D1BindingDeclaration[];
   };
+  queues: QueueDeclaration[];
   vars: string[];
   secrets: string[];
+  queue: {
+    allow: string[];
+  };
   rpc: {
     allow: string[];
   };
@@ -40,8 +50,12 @@ const emptyManifest = (): AppManifest => ({
     r2: [],
     d1: []
   },
+  queues: [],
   vars: [],
   secrets: [],
+  queue: {
+    allow: []
+  },
   rpc: {
     allow: []
   }
@@ -66,6 +80,25 @@ const optionalString = (value: unknown, field: string) => {
   if (typeof value !== "string") throw new Error(`${field} must be a string.`);
   const trimmed = value.trim();
   return trimmed || undefined;
+};
+
+const ensureQueueName = (value: unknown, field: string) => {
+  if (typeof value !== "string") throw new Error(`${field} must be a string.`);
+  const normalized = value.trim().toLowerCase();
+  if (!QUEUE_NAME_PATTERN.test(normalized)) {
+    throw new Error(`${field} must be a valid queue name.`);
+  }
+  return normalized;
+};
+
+const ensureConsumerPath = (value: unknown, field: string, queueName: string) => {
+  if (value === undefined) return `/_w7s/queues/${queueName}`;
+  if (typeof value !== "string") throw new Error(`${field} must be a string.`);
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) {
+    throw new Error(`${field} must be an absolute path.`);
+  }
+  return trimmed;
 };
 
 const parseKvBindings = (value: unknown): KvBindingDeclaration[] => {
@@ -125,24 +158,58 @@ const parseEnvNames = (value: unknown, field: string) => {
   });
 };
 
-const parseRpcAllow = (value: unknown) => {
+const parseGitHubAllowList = (value: unknown, field: string) => {
   if (value === undefined) return [];
-  if (!Array.isArray(value)) throw new Error("rpc.allow must be an array.");
+  if (!Array.isArray(value)) throw new Error(`${field} must be an array.`);
   return value.map((entry, index) => {
-    if (typeof entry !== "string") throw new Error(`rpc.allow[${index}] must be a string.`);
+    if (typeof entry !== "string") throw new Error(`${field}[${index}] must be a string.`);
     const normalized = entry.trim().toLowerCase();
     if (!/^[a-z0-9](?:[a-z0-9._-]{0,99})(?:\/[a-z0-9](?:[a-z0-9._-]{0,99}))?$/i.test(normalized)) {
-      throw new Error(`rpc.allow[${index}] must be a GitHub owner or owner/repo.`);
+      throw new Error(`${field}[${index}] must be a GitHub owner or owner/repo.`);
     }
     return normalized;
   });
+};
+
+const parseQueues = (value: unknown): QueueDeclaration[] => {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("queues must be an array.");
+  const seen = new Set<string>();
+  return value.map((entry, index) => {
+    let declaration: QueueDeclaration;
+    if (typeof entry === "string") {
+      const name = ensureQueueName(entry, `queues[${index}]`);
+      declaration = {
+        name,
+        consumer: `/_w7s/queues/${name}`
+      };
+    } else {
+      const record = asRecord(entry, `queues[${index}]`);
+      const name = ensureQueueName(record.name, `queues[${index}].name`);
+      declaration = {
+        name,
+        consumer: ensureConsumerPath(record.consumer, `queues[${index}].consumer`, name)
+      };
+    }
+    if (seen.has(declaration.name)) throw new Error(`queues[${index}] duplicates ${declaration.name}.`);
+    seen.add(declaration.name);
+    return declaration;
+  });
+};
+
+const parseQueue = (value: unknown) => {
+  if (value === undefined) return { allow: [] };
+  const record = asRecord(value, "queue");
+  return {
+    allow: parseGitHubAllowList(record.allow, "queue.allow")
+  };
 };
 
 const parseRpc = (value: unknown) => {
   if (value === undefined) return { allow: [] };
   const record = asRecord(value, "rpc");
   return {
-    allow: parseRpcAllow(record.allow)
+    allow: parseGitHubAllowList(record.allow, "rpc.allow")
   };
 };
 
@@ -164,8 +231,10 @@ export const readAppManifest = (archive: DeployArchive) => {
       r2: parseR2Bindings(bindings.r2),
       d1: parseD1Bindings(bindings.d1)
     },
+    queues: parseQueues(record.queues),
     vars: parseEnvNames(record.vars, "vars"),
     secrets: parseEnvNames(record.secrets, "secrets"),
+    queue: parseQueue(record.queue),
     rpc: parseRpc(record.rpc)
   } satisfies AppManifest;
 };

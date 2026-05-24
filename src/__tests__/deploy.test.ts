@@ -5,6 +5,7 @@ import { createTestEnv } from "./mocks";
 import {
   loadCustomDomainMapping,
   loadDeploymentRecord,
+  loadQueueMapping,
   storeCustomDomainMappings,
   type DeploymentRecord
 } from "../storage/deployments";
@@ -561,7 +562,7 @@ describe("deploy API", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json() as {
-      data?: { deployment?: { rpc?: Record<string, unknown> } };
+      data?: { deployment?: { rpc?: Record<string, unknown>; queue?: Record<string, unknown> } };
     };
     const record = await loadDeploymentRecord(env, "production", "w7s-io", "demo");
     expect(record?.targets.worker?.entrypoint).toBe("backend/index.js");
@@ -571,6 +572,111 @@ describe("deploy API", () => {
       binding: "W7S_RPC",
       allow: ["guerrerocarlos/notepad"]
     });
+    expect(body.data?.deployment?.queue).toEqual({
+      binding: "W7S_QUEUE",
+      allow: [],
+      queues: []
+    });
+  });
+
+  it("provisions declared queues and uploads queue runtime bindings", async () => {
+    const uploadedMetadata: Array<{
+      bindings?: Array<Record<string, string>>;
+    }> = [];
+    const createdConsumers: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "w7s-io/demo" });
+        }
+        if (url.includes("/queues?")) {
+          return Response.json({ success: true, result: [] });
+        }
+        if (url.endsWith("/queues") && init?.method === "POST") {
+          return Response.json({
+            success: true,
+            result: {
+              queue_id: "queue-1",
+              queue_name: "w7s-production-w7s-io-demo-queue-jobs"
+            }
+          });
+        }
+        if (url.endsWith("/queues/queue-1/consumers") && init?.method !== "POST") {
+          return Response.json({ success: true, result: [] });
+        }
+        if (url.endsWith("/queues/queue-1/consumers") && init?.method === "POST") {
+          createdConsumers.push(JSON.parse(String(init.body)));
+          return Response.json({
+            success: true,
+            result: {
+              consumer_id: "consumer-1",
+              type: "worker",
+              script_name: "w7s-io"
+            }
+          });
+        }
+        if (
+          url.includes("/workers/dispatch/namespaces/w7s-isolate/scripts/") &&
+          init?.method === "PUT"
+        ) {
+          const form = init.body as FormData;
+          const metadata = form.get("metadata") as Blob;
+          uploadedMetadata.push(JSON.parse(await metadata.text()));
+          return Response.json({ success: true, result: { startup_time_ms: 5 } });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv({
+      CLOUDFLARE_API_TOKEN: "cf-token",
+      CLOUDFLARE_ACCOUNT_ID: "acct-123"
+    });
+    const response = await app.fetch(
+      deployRequest({
+        "backend/index.js": "export default { fetch(){ return new Response('backend') } }",
+        "w7s.json": JSON.stringify({
+          queues: ["jobs"],
+          queue: {
+            allow: ["guerrerocarlos/notepad"]
+          }
+        })
+      }),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const record = await loadDeploymentRecord(env, "production", "w7s-io", "demo");
+    expect(record?.queue?.allow).toEqual(["guerrerocarlos/notepad"]);
+    expect(record?.queue?.queues).toEqual([
+      {
+        name: "jobs",
+        queueName: "w7s-production-w7s-io-demo-queue-jobs",
+        queueId: "queue-1",
+        consumer: "/_w7s/queues/jobs"
+      }
+    ]);
+    expect(await loadQueueMapping(env, "w7s-production-w7s-io-demo-queue-jobs")).toEqual(
+      expect.objectContaining({
+        queue: "jobs",
+        queueId: "queue-1",
+        orgSlug: "w7s-io",
+        repoSlug: "demo"
+      })
+    );
+    expect(createdConsumers).toEqual([
+      {
+        type: "worker",
+        script_name: "w7s-io"
+      }
+    ]);
+    expect(uploadedMetadata[0]?.bindings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "service", name: "W7S_QUEUE", service: "w7s-io" }),
+        expect.objectContaining({ type: "secret_text", name: "W7S_QUEUE_TOKEN" })
+      ])
+    );
   });
 
   it("accepts Cloudflare dist/server deployments with dist/client assets", async () => {

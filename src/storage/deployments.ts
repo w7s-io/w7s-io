@@ -32,6 +32,7 @@ export type DeploymentRecord = {
   customDomains?: string[];
   bindings?: DeploymentBindings;
   rpc?: DeploymentRpc;
+  queue?: DeploymentQueueConfig;
   targets: {
     worker?: {
       namespace: string;
@@ -55,6 +56,20 @@ export type DeploymentRpc = {
   allow: string[];
 };
 
+export type DeploymentQueueConfig = {
+  binding: string;
+  tokenHash: string;
+  allow: string[];
+  queues: DeploymentQueue[];
+};
+
+export type DeploymentQueue = {
+  name: string;
+  queueName: string;
+  queueId: string;
+  consumer: string;
+};
+
 export type DeploymentBindings = {
   kv?: Array<{
     binding: string;
@@ -75,7 +90,7 @@ export type DeploymentBindings = {
   secrets?: string[];
 };
 
-export type ManagedResourceKind = "kv" | "r2" | "d1";
+export type ManagedResourceKind = "kv" | "r2" | "d1" | "queue";
 
 export type ManagedResourceRecord = {
   version: 1;
@@ -100,6 +115,19 @@ export type CustomDomainMapping = {
   deployedAt: string;
 };
 
+export type QueueMapping = {
+  version: 1;
+  queueName: string;
+  queueId: string;
+  queue: string;
+  consumer: string;
+  orgSlug: string;
+  repoSlug: string;
+  environment: string;
+  repository: string;
+  deployedAt: string;
+};
+
 export const deploymentKey = (environment: string, orgSlug: string, repoSlug: string) =>
   `deployment:v1:${sanitizeScriptPart(environment)}:${sanitizeScriptPart(orgSlug)}:${sanitizeScriptPart(repoSlug)}`;
 
@@ -113,6 +141,9 @@ export const staticManifestKey = (
 
 export const customDomainKey = (hostname: string) =>
   `custom_domain:v1:${hostname.trim().toLowerCase()}`;
+
+export const queueMappingKey = (queueName: string) =>
+  `queue_mapping:v1:${queueName.trim().toLowerCase()}`;
 
 export const managedResourceKey = (
   environment: string,
@@ -224,6 +255,76 @@ export const loadCustomDomainMapping = async (env: Env, hostname: string) => {
   const mapping = raw as Partial<CustomDomainMapping>;
   if (mapping.version !== 1 || typeof mapping.hostname !== "string") return null;
   return mapping as CustomDomainMapping;
+};
+
+export const storeQueueMappings = async (
+  env: Env,
+  record: DeploymentRecord,
+  queues: DeploymentQueue[]
+) => {
+  await Promise.all(
+    queues.map((queue) =>
+      env.DEPLOYMENTS_KV.put(
+        queueMappingKey(queue.queueName),
+        JSON.stringify({
+          version: 1,
+          queueName: queue.queueName,
+          queueId: queue.queueId,
+          queue: queue.name,
+          consumer: queue.consumer,
+          orgSlug: record.orgSlug,
+          repoSlug: record.repoSlug,
+          environment: record.environment,
+          repository: record.repository,
+          deployedAt: record.deployedAt
+        } satisfies QueueMapping)
+      )
+    )
+  );
+};
+
+export const replaceQueueMappings = async (
+  env: Env,
+  record: DeploymentRecord,
+  queues: DeploymentQueue[]
+) => {
+  const wanted = new Set(queues.map((queue) => queue.queueName.trim().toLowerCase()));
+  let cursor: string | undefined;
+  do {
+    const listed = await env.DEPLOYMENTS_KV.list({
+      prefix: "queue_mapping:v1:",
+      cursor
+    });
+    await Promise.all(
+      listed.keys.map(async (entry) => {
+        const raw = await env.DEPLOYMENTS_KV.get(entry.name, "json");
+        if (!raw || typeof raw !== "object") return;
+        const mapping = raw as Partial<QueueMapping>;
+        if (
+          mapping.version !== 1 ||
+          mapping.orgSlug !== record.orgSlug ||
+          mapping.repoSlug !== record.repoSlug ||
+          mapping.environment !== record.environment ||
+          !mapping.queueName ||
+          wanted.has(mapping.queueName)
+        ) {
+          return;
+        }
+        await env.DEPLOYMENTS_KV.delete(entry.name);
+      })
+    );
+    cursor = listed.list_complete ? undefined : listed.cursor;
+  } while (cursor);
+
+  await storeQueueMappings(env, record, queues);
+};
+
+export const loadQueueMapping = async (env: Env, queueName: string) => {
+  const raw = await env.DEPLOYMENTS_KV.get(queueMappingKey(queueName), "json");
+  if (!raw || typeof raw !== "object") return null;
+  const mapping = raw as Partial<QueueMapping>;
+  if (mapping.version !== 1 || typeof mapping.queueName !== "string") return null;
+  return mapping as QueueMapping;
 };
 
 export const storeManagedResourceRecord = async (

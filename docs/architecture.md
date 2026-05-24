@@ -34,6 +34,10 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
   - Implements internal backend-to-backend RPC.
   - Verifies caller tokens issued during deploy.
   - Dispatches authorized calls to target Workers through the dispatch namespace.
+- `src/api/queues.ts`
+  - Implements internal queue sends through RPC-style `w7s.internal` URLs.
+  - Verifies caller tokens issued during deploy.
+  - Sends messages to Cloudflare Queues owned by target deployments.
 - `src/deploy/archive.ts`
   - Reads zip archives into normalized file maps.
   - Strips common GitHub archive roots while preserving W7S app roots.
@@ -47,9 +51,17 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
   - Creates or reuses per-app KV namespaces, R2 buckets, and D1 databases.
   - Applies D1 migrations declared by the app manifest.
   - Builds Worker upload metadata bindings for storage, vars, and secrets.
+- `src/deploy/queueProvisioner.ts`
+  - Creates or reuses per-app Cloudflare Queues.
+  - Configures the W7S core Worker as the Cloudflare Queue consumer.
 - `src/deploy/rpcBindings.ts`
   - Creates the per-deployment RPC bearer token.
   - Adds `W7S_RPC`, `W7S_RPC_TOKEN`, and caller metadata bindings to native Workers.
+- `src/deploy/queueBindings.ts`
+  - Adds `W7S_QUEUE` and `W7S_QUEUE_TOKEN` bindings to native Workers.
+- `src/runtime/queueDelivery.ts`
+  - Receives Cloudflare Queue batches in the W7S core Worker.
+  - Dispatches queue batches to target app consumer routes.
 - `src/deploy/staticPublisher.ts`
   - Publishes detected static frontend output files to R2.
   - Stores a static manifest in KV.
@@ -102,6 +114,19 @@ GET/POST env.W7S_RPC.fetch("/api/v1/rpc/<owner>/<repo>/<path>")
   -> dispatch to the target Worker with caller identity headers
 ```
 
+```text
+POST env.W7S_QUEUE.fetch("/api/v1/queues/<owner>/<repo>/<queue>")
+  -> require caller bearer token from W7S_QUEUE_TOKEN
+  -> load caller deployment in x-w7s-queue-environment
+  -> verify token hash from the caller deployment record
+  -> load target deployment in the same environment
+  -> require target w7s.json queues declaration
+  -> allow same-owner sends by default
+  -> require target w7s.json queue.allow for cross-owner sends
+  -> send a Cloudflare Queue message
+  -> receive the batch in W7S core and dispatch to the target consumer route
+```
+
 ## Compatibility Choices
 
 - `worker/` and `backend/` are both accepted as native backend roots.
@@ -113,3 +138,4 @@ GET/POST env.W7S_RPC.fetch("/api/v1/rpc/<owner>/<repo>/<path>")
 - Bare package imports inside native backend code are not supported by deploy-time publishing. Repos should upload bundled code or use relative local modules only.
 - Per-app storage is stable across redeploys for the same repository and environment. New commits reuse the same managed KV/R2/D1 resources.
 - Backend-to-backend RPC is routed through the core Worker service binding. It does not expose target Workers directly, and cross-owner calls are opt-in through the target app's `w7s.json`.
+- Queues are app-owned, environment-scoped Cloudflare Queues. Apps send through `W7S_QUEUE`; W7S core owns queue provisioning and delivery dispatch.

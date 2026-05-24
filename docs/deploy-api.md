@@ -142,8 +142,12 @@ Example:
       }
     ]
   },
+  "queues": ["jobs"],
   "vars": ["PUBLIC_API_KEY"],
   "secrets": ["PRIVATE_API_KEY"],
+  "queue": {
+    "allow": ["guerrerocarlos/notepad", "w7s-io"]
+  },
   "rpc": {
     "allow": ["guerrerocarlos/notepad", "w7s-io"]
   }
@@ -167,6 +171,22 @@ Managed storage is scoped to `<environment>/<owner>/<repo>/<binding>`, so redepl
 D1 migrations are read from the configured migrations directory, sorted by filename, and applied once. W7S tracks applied migration filenames in `_w7s_migrations` inside the app database.
 
 `rpc.allow` is optional. Same-owner backend-to-backend calls are allowed by default. Cross-owner calls are accepted only when the target app lists the caller GitHub owner or exact `owner/repo`.
+
+`queues` declares app-owned Cloudflare Queues. String entries use the default consumer route `/_w7s/queues/<queue>`. Object entries can override the consumer route:
+
+```json
+{
+  "queues": [
+    "jobs",
+    {
+      "name": "emails",
+      "consumer": "/internal/queues/emails"
+    }
+  ]
+}
+```
+
+`queue.allow` is optional. Same-owner queue sends are allowed by default. Cross-owner sends are accepted only when the target app lists the caller GitHub owner or exact `owner/repo`.
 
 The `CNAME` file should contain one hostname, for example:
 
@@ -246,6 +266,57 @@ x-w7s-rpc-caller-owner: <owner>
 x-w7s-rpc-caller-repo: <repo>
 x-w7s-rpc-caller-repository: <owner>/<repo>
 x-w7s-rpc-caller-environment: <environment>
+```
+
+## Backend Queues
+
+Native backends receive these queue bindings automatically:
+
+- `W7S_QUEUE`: service binding to the W7S core Worker;
+- `W7S_QUEUE_TOKEN`: secret bearer token for the current deployment.
+
+Send a JSON message to a declared target queue:
+
+```ts
+await env.W7S_QUEUE.fetch(
+  "https://w7s.internal/api/v1/queues/w7s-io/example-worker/jobs",
+  {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${env.W7S_QUEUE_TOKEN}`,
+      "content-type": "application/json",
+      "x-w7s-queue-caller": env.W7S_REPOSITORY,
+      "x-w7s-queue-environment": env.W7S_ENVIRONMENT
+    },
+    body: JSON.stringify({ type: "work", id: "123" })
+  }
+);
+```
+
+The target path is `/api/v1/queues/<owner>/<repo>/<queue>`. W7S verifies the caller token, loads the target deployment from the same environment, verifies that the target declares the queue, and sends the message to Cloudflare Queues.
+
+W7S core receives Cloudflare Queue batches and dispatches them to the target app's consumer route:
+
+```json
+{
+  "queue": "jobs",
+  "queueName": "w7s-production-w7s-io-example-worker-queue-jobs",
+  "messages": [
+    {
+      "id": "message-id",
+      "attempts": 1,
+      "timestamp": "2026-05-24T22:00:00.000Z",
+      "enqueuedAt": "2026-05-24T21:59:59.000Z",
+      "caller": {
+        "repository": "w7s-io/example-client"
+      },
+      "body": {
+        "type": "work",
+        "id": "123"
+      }
+    }
+  ]
+}
 ```
 
 ## Static Frontend Rules

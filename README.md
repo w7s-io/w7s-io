@@ -11,8 +11,8 @@ This repo contains the public W7S worker, deploy API, runtime router, and storag
 - deployments are authorized by the GitHub token's access to the source repo;
 - `worker/` or `backend/` apps publish to Workers for Platforms;
 - Cloudflare-style SSR output in `dist/server` plus assets in `dist/client` is supported;
-- `w7s.json` can declare per-app KV, R2, D1, vars, and secrets for native backends;
-- native backends receive an internal `W7S_RPC` service binding for backend-to-backend calls;
+- `w7s.json` can declare per-app KV, R2, D1, queues, vars, and secrets for native backends;
+- native backends receive internal `W7S_RPC` and `W7S_QUEUE` service bindings for backend-to-backend calls and queue sends;
 - static frontend assets publish to R2 and are served from `https://<org>.w7s.cloud/<repo>/*`.
 - same-name repos such as `github.com/<org>/<org>` can serve directly from `https://<org>.w7s.cloud/*`.
 - non-production branches serve from `https://<branch>--<org>.w7s.cloud/<repo>/*`.
@@ -104,17 +104,39 @@ Optional app manifest:
     "r2": ["FILES"],
     "d1": [{ "binding": "DB", "migrations": "migrations" }]
   },
+  "queues": ["jobs"],
   "vars": ["GOOGLE_CLIENT_ID"],
   "secrets": ["GOOGLE_CLIENT_SECRET"],
+  "queue": {
+    "allow": ["w7s-io", "guerrerocarlos/notepad"]
+  },
   "rpc": {
     "allow": ["w7s-io", "guerrerocarlos/notepad"]
   }
 }
 ```
 
-Managed storage is scoped by repository and environment, so a production deploy and a feature-branch deploy receive separate durable resources. D1 migration files are applied once in sorted order and tracked in the app database.
+Managed storage and queues are scoped by repository and environment, so a production deploy and a feature-branch deploy receive separate durable resources. D1 migration files are applied once in sorted order and tracked in the app database.
 
 Native backends automatically receive `W7S_RPC`, `W7S_RPC_TOKEN`, `W7S_OWNER`, `W7S_REPO`, `W7S_REPOSITORY`, and `W7S_ENVIRONMENT`. Same-owner apps can call each other by default. Cross-owner calls are accepted only when the target deployment's `w7s.json` lists the caller owner or exact `owner/repo` in `rpc.allow`.
+
+Native backends also receive `W7S_QUEUE` and `W7S_QUEUE_TOKEN`. Queue messages are sent with RPC-style internal URLs:
+
+```ts
+await env.W7S_QUEUE.fetch(
+  "https://w7s.internal/api/v1/queues/w7s-io/example-worker/jobs",
+  {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${env.W7S_QUEUE_TOKEN}`,
+      "content-type": "application/json",
+      "x-w7s-queue-caller": env.W7S_REPOSITORY,
+      "x-w7s-queue-environment": env.W7S_ENVIRONMENT
+    },
+    body: JSON.stringify({ type: "work" })
+  }
+);
+```
 
 ## Required Cloudflare Bindings
 

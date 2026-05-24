@@ -128,6 +128,14 @@ The internal RPC endpoint also lives under the reserved API namespace:
 
 Apps should not call that URL over the public internet. Native backends call it through their `W7S_RPC` service binding with the deployment's `W7S_RPC_TOKEN`.
 
+Internal queue sends use the same reserved namespace:
+
+```text
+/api/v1/queues/<owner>/<repo>/<queue>
+```
+
+Native backends call it through their `W7S_QUEUE` service binding with the deployment's `W7S_QUEUE_TOKEN`.
+
 ## Deployment Lookup
 
 `src/runtime/router.ts` loads a deployment record from KV using:
