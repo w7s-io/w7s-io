@@ -5,6 +5,9 @@ import { parseGitHubRepository, verifyGitHubRepoAccess } from "../deploy/githubA
 import { archiveHasPrefix, readDeployArchive } from "../deploy/archive";
 import { detectWorkerEntrypoint, publishIsolateWorker } from "../deploy/isolatePublisher";
 import { hasStaticSite, publishStaticSite } from "../deploy/staticPublisher";
+import { readAppManifest } from "../deploy/appManifest";
+import { readDeployValues } from "../deploy/deployValues";
+import { provisionAppBindings } from "../deploy/storageProvisioner";
 import {
   attachCustomDomainRoutes,
   planCustomDomainClaims,
@@ -93,8 +96,12 @@ export const handleDeploy = async (c: HonoContext) => {
   }
 
   let archive;
+  let appManifest;
+  let deployValues;
   try {
     archive = await readDeployArchive(c.req.raw);
+    appManifest = readAppManifest(archive);
+    deployValues = readDeployValues(c);
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : String(error), 400);
   }
@@ -118,6 +125,7 @@ export const handleDeploy = async (c: HonoContext) => {
   let attachedCustomDomains: string[] = [];
   let customDomainWarnings: Awaited<ReturnType<typeof planCustomDomainClaims>>["warnings"] = [];
   let blockedCustomDomains: Awaited<ReturnType<typeof planCustomDomainClaims>>["blocked"] = [];
+  let deploymentBindings: DeploymentRecord["bindings"];
 
   try {
     if (hasNativeBackend) {
@@ -126,11 +134,22 @@ export const handleDeploy = async (c: HonoContext) => {
         return jsonError("Native backend deploy requires worker/index.js, worker/index.mjs, worker/index.ts, worker/index.mts, backend/index.js, backend/index.mjs, backend/index.ts, or backend/index.mts.", 400);
       }
       const scriptName = buildDeploymentScriptName(orgSlug, repoSlug, environment, commitSha);
+      const provisionedBindings = await provisionAppBindings({
+        env: c.env,
+        archive,
+        manifest: appManifest,
+        deployValues,
+        orgSlug,
+        repoSlug,
+        environment
+      });
+      deploymentBindings = provisionedBindings.deploymentBindings;
       const published = await publishIsolateWorker({
         env: c.env,
         archive,
         scriptName,
-        entrypoint
+        entrypoint,
+        bindings: provisionedBindings.uploadBindings
       });
       targets.worker = published;
     }
@@ -178,6 +197,7 @@ export const handleDeploy = async (c: HonoContext) => {
     commitSha,
     deployedAt,
     ...(attachedCustomDomains.length > 0 ? { customDomains: attachedCustomDomains } : {}),
+    ...(deploymentBindings ? { bindings: deploymentBindings } : {}),
     targets
   };
   await storeDeploymentRecord(c.env, record);

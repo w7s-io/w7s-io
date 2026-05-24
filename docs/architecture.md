@@ -36,6 +36,13 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
 - `src/deploy/isolatePublisher.ts`
   - Publishes `backend/` or `worker/` apps into a Workers for Platforms dispatch namespace.
   - Supports local relative JS/TS module graphs only.
+- `src/deploy/appManifest.ts`
+  - Reads optional `w7s.json` manifests from deploy archives.
+  - Validates storage binding declarations and runtime value names.
+- `src/deploy/storageProvisioner.ts`
+  - Creates or reuses per-app KV namespaces, R2 buckets, and D1 databases.
+  - Applies D1 migrations declared by the app manifest.
+  - Builds Worker upload metadata bindings for storage, vars, and secrets.
 - `src/deploy/staticPublisher.ts`
   - Publishes detected static frontend output files to R2.
   - Stores a static manifest in KV.
@@ -58,7 +65,9 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
 POST /api/v1/deploy
   -> verify GitHub token can access x-github-repository
   -> unzip archive
+  -> read optional w7s.json and encoded runtime values
   -> detect backend/ or worker/
+  -> provision declared app storage for native Workers
   -> publish native Worker to dispatch namespace
   -> detect static frontend output
   -> upload static files to R2
@@ -82,3 +91,4 @@ GET https://<org>.w7s.cloud/<repo>/<path>
 - `frontend/dist`, `dist/client`, `dist`, `build`, and `out` are treated as already-built frontend output.
 - W7S does not install dependencies or run user builds during deploy.
 - Bare package imports inside native backend code are not supported by deploy-time publishing. Repos should upload bundled code or use relative local modules only.
+- Per-app storage is stable across redeploys for the same repository and environment. New commits reuse the same managed KV/R2/D1 resources.

@@ -30,6 +30,9 @@ const deployRequest = (files: Record<string, string>, headers: Record<string, st
     body: zipBytes(files)
   });
 
+const deployValueHeader = (values: Record<string, string>) =>
+  btoa(JSON.stringify(values)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+
 const stubCustomDomainFetch = (params: {
   repository: string;
   txtAnswers?: string[];
@@ -555,5 +558,136 @@ describe("deploy API", () => {
     const record = await loadDeploymentRecord(env, "production", "w7s-io", "demo");
     expect(record?.targets.worker?.entrypoint).toBe("backend/index.js");
     expect(record?.targets.worker?.scriptName).toBe("w7s-io--demo--production--abc123");
+  });
+
+  it("provisions declared app storage and uploads runtime bindings", async () => {
+    const uploadedMetadata: {
+      bindings?: Array<Record<string, string>>;
+    }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "w7s-io/demo" });
+        }
+        if (url.includes("/storage/kv/namespaces") && init?.method !== "POST") {
+          return Response.json({ success: true, result: [] });
+        }
+        if (url.includes("/storage/kv/namespaces") && init?.method === "POST") {
+          return Response.json({ success: true, result: { id: "kv-1", title: "cache" } });
+        }
+        if (url.includes("/r2/buckets/") && init?.method !== "POST") {
+          return new Response("missing", { status: 404 });
+        }
+        if (url.endsWith("/r2/buckets") && init?.method === "POST") {
+          return Response.json({ success: true, result: { name: "files" } });
+        }
+        if (url.includes("/d1/database?")) {
+          return Response.json({ success: true, result: [] });
+        }
+        if (url.endsWith("/d1/database") && init?.method === "POST") {
+          return Response.json({ success: true, result: { uuid: "d1-1", name: "db" } });
+        }
+        if (url.includes("/d1/database/d1-1/query") && init?.method === "POST") {
+          return Response.json({ success: true, result: [{ success: true, results: [] }] });
+        }
+        if (
+          url.includes("/workers/dispatch/namespaces/w7s-isolate/scripts/") &&
+          init?.method === "PUT"
+        ) {
+          const form = init.body as FormData;
+          const metadata = form.get("metadata") as Blob;
+          uploadedMetadata.push(JSON.parse(await metadata.text()));
+          return Response.json({ success: true, result: { startup_time_ms: 5 } });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv({
+      CLOUDFLARE_API_TOKEN: "cf-token",
+      CLOUDFLARE_ACCOUNT_ID: "acct-123"
+    });
+    const response = await app.fetch(
+      deployRequest(
+        {
+          "w7s.json": JSON.stringify({
+            bindings: {
+              kv: ["CACHE"],
+              r2: ["FILES"],
+              d1: [{ binding: "DB", migrations: "migrations" }]
+            },
+            vars: ["GOOGLE_CLIENT_ID"],
+            secrets: ["GOOGLE_CLIENT_SECRET"]
+          }),
+          "backend/index.js": "export default { fetch(_request, env){ return new Response(env.GOOGLE_CLIENT_ID) } }",
+          "migrations/0001_init.sql": "CREATE TABLE notes (id TEXT PRIMARY KEY);"
+        },
+        {
+          "x-w7s-vars": deployValueHeader({
+            GOOGLE_CLIENT_ID: "client-id"
+          }),
+          "x-w7s-secrets": deployValueHeader({
+            GOOGLE_CLIENT_SECRET: "client-secret"
+          })
+        }
+      ),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const record = await loadDeploymentRecord(env, "production", "w7s-io", "demo");
+    expect(record?.bindings?.kv).toEqual([
+      expect.objectContaining({
+        binding: "CACHE",
+        namespaceId: "kv-1"
+      })
+    ]);
+    expect(record?.bindings?.r2).toEqual([
+      expect.objectContaining({
+        binding: "FILES"
+      })
+    ]);
+    expect(record?.bindings?.d1).toEqual([
+      expect.objectContaining({
+        binding: "DB",
+        databaseId: "d1-1",
+        migrationsApplied: 1
+      })
+    ]);
+    expect(record?.bindings?.vars).toEqual(["GOOGLE_CLIENT_ID"]);
+    expect(record?.bindings?.secrets).toEqual(["GOOGLE_CLIENT_SECRET"]);
+    expect(uploadedMetadata[0]?.bindings).toEqual(
+      expect.arrayContaining([
+        { type: "kv_namespace", name: "CACHE", namespace_id: "kv-1" },
+        expect.objectContaining({ type: "r2_bucket", name: "FILES" }),
+        { type: "d1", name: "DB", id: "d1-1" },
+        { type: "plain_text", name: "GOOGLE_CLIENT_ID", text: "client-id" },
+        { type: "secret_text", name: "GOOGLE_CLIENT_SECRET", text: "client-secret" }
+      ])
+    );
+  });
+
+  it("rejects invalid app manifests", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "w7s-io/demo" });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv();
+    const response = await app.fetch(
+      deployRequest({
+        "w7s.json": "{",
+        "frontend/dist/index.html": "<h1>Hello</h1>"
+      }),
+      env
+    );
+
+    expect(response.status).toBe(400);
   });
 });

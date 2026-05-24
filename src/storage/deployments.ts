@@ -30,6 +30,7 @@ export type DeploymentRecord = {
   commitSha: string;
   deployedAt: string;
   customDomains?: string[];
+  bindings?: DeploymentBindings;
   targets: {
     worker?: {
       namespace: string;
@@ -45,6 +46,41 @@ export type DeploymentRecord = {
       hasIndex: boolean;
     };
   };
+};
+
+export type DeploymentBindings = {
+  kv?: Array<{
+    binding: string;
+    name: string;
+    namespaceId: string;
+  }>;
+  r2?: Array<{
+    binding: string;
+    bucketName: string;
+  }>;
+  d1?: Array<{
+    binding: string;
+    name: string;
+    databaseId: string;
+    migrationsApplied?: number;
+  }>;
+  vars?: string[];
+  secrets?: string[];
+};
+
+export type ManagedResourceKind = "kv" | "r2" | "d1";
+
+export type ManagedResourceRecord = {
+  version: 1;
+  kind: ManagedResourceKind;
+  orgSlug: string;
+  repoSlug: string;
+  environment: string;
+  binding: string;
+  name: string;
+  id: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type CustomDomainMapping = {
@@ -70,6 +106,15 @@ export const staticManifestKey = (
 
 export const customDomainKey = (hostname: string) =>
   `custom_domain:v1:${hostname.trim().toLowerCase()}`;
+
+export const managedResourceKey = (
+  environment: string,
+  orgSlug: string,
+  repoSlug: string,
+  kind: ManagedResourceKind,
+  binding: string
+) =>
+  `resource:v1:${sanitizeScriptPart(environment)}:${sanitizeScriptPart(orgSlug)}:${sanitizeScriptPart(repoSlug)}:${kind}:${sanitizeScriptPart(binding)}`;
 
 export const storeDeploymentRecord = async (env: Env, record: DeploymentRecord) => {
   await env.DEPLOYMENTS_KV.put(
@@ -172,6 +217,42 @@ export const loadCustomDomainMapping = async (env: Env, hostname: string) => {
   const mapping = raw as Partial<CustomDomainMapping>;
   if (mapping.version !== 1 || typeof mapping.hostname !== "string") return null;
   return mapping as CustomDomainMapping;
+};
+
+export const storeManagedResourceRecord = async (
+  env: Env,
+  record: ManagedResourceRecord
+) => {
+  await env.DEPLOYMENTS_KV.put(
+    managedResourceKey(
+      record.environment,
+      record.orgSlug,
+      record.repoSlug,
+      record.kind,
+      record.binding
+    ),
+    JSON.stringify(record)
+  );
+};
+
+export const loadManagedResourceRecord = async (
+  env: Env,
+  environment: string,
+  orgSlug: string,
+  repoSlug: string,
+  kind: ManagedResourceKind,
+  binding: string
+) => {
+  const raw = await env.DEPLOYMENTS_KV.get(
+    managedResourceKey(environment, orgSlug, repoSlug, kind, binding),
+    "json"
+  );
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as Partial<ManagedResourceRecord>;
+  if (record.version !== 1 || record.kind !== kind || typeof record.id !== "string") {
+    return null;
+  }
+  return record as ManagedResourceRecord;
 };
 
 export const storeStaticSiteManifest = async (

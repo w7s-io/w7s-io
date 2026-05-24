@@ -9,6 +9,7 @@ As of the latest docs update:
 - The Worker route `*.w7s.cloud/*` is attached by the deploy workflow.
 - Wildcard DNS is expected to be managed manually.
 - `backend/`, `worker/`, and static frontend deploys are supported.
+- Native backends can declare per-app KV, R2, D1, vars, and secrets in `w7s.json`.
 - Root `CNAME` files can attach app custom-domain routes when the W7S token can manage that Cloudflare zone.
 - Custom domains use soft TXT verification: the first claim works without TXT, `_w7s.<zone>` becomes an owner/repo allowlist when present, and hostname conflicts require TXT authorization.
 - Empty org roots such as `https://sadasant.w7s.cloud/` show deploy-help HTML instead of a plain 404.
@@ -32,6 +33,7 @@ The point of this repo is to keep the core deploy/routing plane small.
 
 - W7S does not build user repos. CI must upload ready-to-run files.
 - Native backend deploy supports only relative local imports.
+- Managed storage is provisioned per repository/environment and reused across redeploys.
 - Static hosting supports `frontend/dist`, `dist/client`, `dist`, `build`, and `out`.
 - Custom-domain DNS is manual; W7S only stores the host mapping and attaches a Worker route.
 - W7S custom-domain verification is soft. A missing TXT record allows the first claim, so serious custom-domain users should add `_w7s.<zone>` with a GitHub owner or `owner/repo` allowlist.

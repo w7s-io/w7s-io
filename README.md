@@ -10,6 +10,7 @@ This repo contains the public W7S worker, deploy API, runtime router, and storag
 - `POST /api/v1/deploy` accepts GitHub Actions repo zips;
 - deployments are authorized by the GitHub token's access to the source repo;
 - `worker/` or `backend/` apps publish to Workers for Platforms;
+- `w7s.json` can declare per-app KV, R2, D1, vars, and secrets for native backends;
 - static frontend assets publish to R2 and are served from `https://<org>.w7s.cloud/<repo>/*`.
 - same-name repos such as `github.com/<org>/<org>` can serve directly from `https://<org>.w7s.cloud/*`.
 - non-production branches serve from `https://<branch>--<org>.w7s.cloud/<repo>/*`.
@@ -84,6 +85,22 @@ frontend/dist/assets/app.js
 ```
 
 Both may be present in the same deploy archive.
+
+Optional app manifest:
+
+```json
+{
+  "bindings": {
+    "kv": ["CACHE"],
+    "r2": ["FILES"],
+    "d1": [{ "binding": "DB", "migrations": "migrations" }]
+  },
+  "vars": ["GOOGLE_CLIENT_ID"],
+  "secrets": ["GOOGLE_CLIENT_SECRET"]
+}
+```
+
+Managed storage is scoped by repository and environment, so a production deploy and a feature-branch deploy receive separate durable resources. D1 migration files are applied once in sorted order and tracked in the app database.
 
 ## Required Cloudflare Bindings
 

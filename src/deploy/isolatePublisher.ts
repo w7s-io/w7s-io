@@ -2,6 +2,13 @@ import * as BabelStandalone from "@babel/standalone";
 import type { DeployArchive } from "./archive";
 import { normalizeArchivePath, readTextFile } from "./archive";
 import type { Env } from "../env";
+import {
+  buildCloudflareHeaders,
+  optionalCloudflareString,
+  parseCloudflareEnvelope,
+  requireCloudflareCredentials
+} from "./cloudflareApi";
+import type { WorkerUploadBinding } from "./workerBindings";
 
 type BabelStandaloneApi = {
   transform: (
@@ -26,12 +33,6 @@ export type IsolatePublishResult = {
   startupTimeMs: number | null;
 };
 
-type CloudflareEnvelope<T> = {
-  success?: boolean;
-  errors?: Array<{ message?: string }>;
-  result?: T;
-};
-
 const DEFAULT_DISPATCH_NAMESPACE = "w7s-isolate";
 const DEFAULT_COMPATIBILITY_DATE = "2026-05-23";
 const NATIVE_APP_ROOTS = ["worker", "backend"] as const;
@@ -49,12 +50,6 @@ const ENTRYPOINT_CANDIDATES = [
 const babelStandalone =
   (BabelStandalone as unknown as { default?: BabelStandaloneApi }).default ??
   (BabelStandalone as unknown as BabelStandaloneApi);
-
-const asNonEmptyString = (value: unknown) => {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-};
 
 const dirname = (value: string) => {
   const normalized = normalizeArchivePath(value);
@@ -208,25 +203,6 @@ export const buildIsolateUploadModules = (entrypoint: string, archive: DeployArc
   return [...modules.values()];
 };
 
-const buildCloudflareHeaders = (apiToken: string) => ({
-  authorization: `Bearer ${apiToken}`
-});
-
-const parseEnvelope = async <T>(response: Response) => {
-  const text = await response.text();
-  let parsed: CloudflareEnvelope<T> | null = null;
-  try {
-    parsed = text ? (JSON.parse(text) as CloudflareEnvelope<T>) : null;
-  } catch {
-    parsed = null;
-  }
-  if (response.ok && parsed?.success !== false) {
-    return parsed?.result ?? null;
-  }
-  const message = parsed?.errors?.map((entry) => entry.message?.trim()).filter(Boolean).join("; ");
-  throw new Error(message || text || `Cloudflare API request failed (${response.status}).`);
-};
-
 const ensureDispatchNamespace = async (params: {
   apiToken: string;
   accountId: string;
@@ -237,11 +213,11 @@ const ensureDispatchNamespace = async (params: {
     headers: buildCloudflareHeaders(params.apiToken)
   });
   if (getResponse.ok) {
-    await parseEnvelope(getResponse);
+    await parseCloudflareEnvelope(getResponse);
     return;
   }
   if (getResponse.status !== 404) {
-    await parseEnvelope(getResponse);
+    await parseCloudflareEnvelope(getResponse);
     return;
   }
 
@@ -256,7 +232,7 @@ const ensureDispatchNamespace = async (params: {
       body: JSON.stringify({ name: params.namespace })
     }
   );
-  await parseEnvelope(createResponse);
+  await parseCloudflareEnvelope(createResponse);
 };
 
 export const publishIsolateWorker = async (params: {
@@ -264,16 +240,13 @@ export const publishIsolateWorker = async (params: {
   archive: DeployArchive;
   scriptName: string;
   entrypoint: string;
+  bindings?: WorkerUploadBinding[];
 }): Promise<IsolatePublishResult> => {
-  const apiToken = asNonEmptyString(params.env.CLOUDFLARE_API_TOKEN);
-  const accountId = asNonEmptyString(params.env.CLOUDFLARE_ACCOUNT_ID);
-  if (!apiToken || !accountId) {
-    throw new Error("Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID to publish Workers.");
-  }
+  const { apiToken, accountId } = requireCloudflareCredentials(params.env);
   const namespace =
-    asNonEmptyString(params.env.CLOUDFLARE_DISPATCH_NAMESPACE) ?? DEFAULT_DISPATCH_NAMESPACE;
+    optionalCloudflareString(params.env.CLOUDFLARE_DISPATCH_NAMESPACE) ?? DEFAULT_DISPATCH_NAMESPACE;
   const compatibilityDate =
-    asNonEmptyString(params.env.CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE) ??
+    optionalCloudflareString(params.env.CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE) ??
     DEFAULT_COMPATIBILITY_DATE;
   const entrypoint = normalizeArchivePath(params.entrypoint);
   if (!ENTRYPOINT_CANDIDATES.includes(entrypoint)) {
@@ -289,7 +262,8 @@ export const publishIsolateWorker = async (params: {
 
   const metadata = {
     main_module: toCloudflareModuleName(entrypoint),
-    compatibility_date: compatibilityDate
+    compatibility_date: compatibilityDate,
+    ...(params.bindings && params.bindings.length > 0 ? { bindings: params.bindings } : {})
   };
   const formData = new FormData();
   formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }), "metadata.json");
@@ -309,7 +283,7 @@ export const publishIsolateWorker = async (params: {
       body: formData
     }
   );
-  const result = await parseEnvelope<{ startup_time_ms?: number }>(response);
+  const result = await parseCloudflareEnvelope<{ startup_time_ms?: number }>(response);
 
   return {
     namespace,

@@ -20,6 +20,15 @@ content-type: application/zip
 
 `application/octet-stream` is also accepted for zip uploads.
 
+Optional runtime value headers:
+
+```text
+x-w7s-vars: <base64url-json-object>
+x-w7s-secrets: <base64url-json-object>
+```
+
+The official `w7s-io/w7s-cloud@v1` action writes these headers from the workflow environment. Names listed in `w7s.json` are collected automatically, and extra names can be passed with the action's `vars` and `secrets` inputs.
+
 ## Authentication
 
 The deploy token is checked against GitHub:
@@ -101,6 +110,47 @@ dist/CNAME
 build/CNAME
 out/CNAME
 ```
+
+Optional app manifest:
+
+```text
+w7s.json
+```
+
+Example:
+
+```json
+{
+  "bindings": {
+    "kv": ["CACHE"],
+    "r2": ["FILES"],
+    "d1": [
+      {
+        "binding": "DB",
+        "migrations": "migrations"
+      }
+    ]
+  },
+  "vars": ["PUBLIC_API_KEY"],
+  "secrets": ["PRIVATE_API_KEY"]
+}
+```
+
+`bindings.kv` entries create Workers KV namespaces. `bindings.r2` entries create R2 buckets. `bindings.d1` entries create D1 databases. String entries use generated resource names; object entries can provide explicit names:
+
+```json
+{
+  "bindings": {
+    "kv": [{ "binding": "CACHE", "name": "my-cache-namespace" }],
+    "r2": [{ "binding": "FILES", "bucket": "my-files-bucket" }],
+    "d1": [{ "binding": "DB", "name": "my-app-db", "migrations": "migrations" }]
+  }
+}
+```
+
+Managed storage is scoped to `<environment>/<owner>/<repo>/<binding>`, so redeploys reuse durable resources while non-production branches get separate resources.
+
+D1 migrations are read from the configured migrations directory, sorted by filename, and applied once. W7S tracks applied migration filenames in `_w7s_migrations` inside the app database.
 
 The `CNAME` file should contain one hostname, for example:
 
@@ -191,6 +241,25 @@ Example:
           "fileCount": 3,
           "hasIndex": true
         }
+      },
+      "bindings": {
+        "kv": [
+          {
+            "binding": "CACHE",
+            "name": "w7s-production-guerrerocarlos-w7s-io-demo-kv-cache",
+            "namespaceId": "0f2ac74b498b48028cb68387c421e279"
+          }
+        ],
+        "d1": [
+          {
+            "binding": "DB",
+            "name": "w7s-production-guerrerocarlos-w7s-io-demo-d1-db",
+            "databaseId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+            "migrationsApplied": 1
+          }
+        ],
+        "vars": ["PUBLIC_API_KEY"],
+        "secrets": ["PRIVATE_API_KEY"]
       },
       "customDomains": ["whereis.carlosguerrero.com"]
     },

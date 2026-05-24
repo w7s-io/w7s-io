@@ -40,6 +40,7 @@ The token must be able to:
 - read zones and manage Workers routes for any custom-domain zones W7S should attach;
 - create/read KV namespaces;
 - create/read R2 buckets;
+- create/read/query D1 databases;
 - create/read Workers for Platforms dispatch namespaces;
 - publish scripts into the dispatch namespace.
 
@@ -198,3 +199,11 @@ Example:
 ```text
 guerrerocarlos--w7s-io-demo--production--abc123
 ```
+
+Managed app storage names are generated from:
+
+```text
+w7s-<environment>-<org>-<repo>-<kind>-<binding>
+```
+
+These resources are stored in `DEPLOYMENTS_KV` and reused across redeploys for the same repository/environment.
