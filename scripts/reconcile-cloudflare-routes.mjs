@@ -120,12 +120,17 @@ const listCustomDomainHostnames = async (namespaceId) => {
       "GET",
       `/accounts/${encodeURIComponent(accountId)}/storage/kv/namespaces/${encodeURIComponent(namespaceId)}/keys?${query.toString()}`
     );
-    for (const key of result?.keys ?? []) {
+    const keys = Array.isArray(result)
+      ? result
+      : Array.isArray(result?.keys)
+        ? result.keys
+        : [];
+    for (const key of keys) {
       if (typeof key?.name !== "string" || !key.name.startsWith(customDomainPrefix)) continue;
       const hostname = key.name.slice(customDomainPrefix.length).trim().toLowerCase();
       if (hostname) hostnames.add(hostname);
     }
-    cursor = result?.list_complete === false ? result?.cursor || null : null;
+    cursor = !Array.isArray(result) && result?.list_complete === false ? result?.cursor || null : null;
   } while (cursor);
 
   return [...hostnames];
