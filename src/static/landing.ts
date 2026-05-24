@@ -100,6 +100,12 @@ export const landingHtml = (target?: DeployShowcaseTarget) => `<!doctype html>
         padding: 18px;
         background: rgba(255, 255, 255, 0.72);
       }
+      .platform {
+        margin-bottom: 24px;
+      }
+      .platform p + p {
+        margin-top: 10px;
+      }
       .target h2 {
         margin: 0 0 12px;
         font-size: 20px;
@@ -143,6 +149,10 @@ export const landingHtml = (target?: DeployShowcaseTarget) => `<!doctype html>
   </head>
   <body>
     <main>
+      <section class="platform">
+        <p><code>w7s.cloud</code> is powered by <a href="https://w7s.io">w7s.io</a>, the open-source platform for deploying GitHub-native backends, frontends, and custom domains.</p>
+        <p>Read the <a href="https://community.w7s.io/docs/">W7S Community documentation</a> to learn how deployments, routing, and custom domains work.</p>
+      </section>
       ${deployTargetHtml(target)}
       <pre><code>${deployWorkflowHtml()}</code></pre>
       <p class="deploy-copy">Add this GitHub Actions workflow to any repo and push to <code>main</code>. W7S verifies the deploy with the repo's GitHub token and serves it at <code>&lt;owner&gt;.w7s.cloud/&lt;repo&gt;/</code>.</p>
