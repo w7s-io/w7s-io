@@ -7,6 +7,7 @@ import { cleanHost, resolveRuntimeHost } from "./host";
 import { resolveStaticAssetResponse } from "./static";
 import { normalizeSlug } from "../names";
 import { landingHtml, type DeployShowcaseTarget } from "../static/landing";
+import { dispatchWorker } from "./dispatch";
 
 const isReservedPlatformPath = (path: string) =>
   path === "/api/v1" || path.startsWith("/api/v1/");
@@ -109,44 +110,6 @@ const redirectToDirectoryPath = (request: Request) => {
   const url = new URL(request.url);
   url.pathname = `${url.pathname}/`;
   return Response.redirect(url.toString(), 308);
-};
-
-const dispatchWorker = async (params: {
-  env: Env;
-  request: Request;
-  repoPath: string;
-  repoSlug: string;
-  orgSlug: string;
-  scriptName: string;
-}) => {
-  if (!params.env.DISPATCHER) {
-    return new Response("DISPATCHER binding is not configured.", { status: 503 });
-  }
-  const worker = params.env.DISPATCHER.get(params.scriptName);
-  const originalUrl = new URL(params.request.url);
-  const rewrittenUrl = new URL(params.request.url);
-  rewrittenUrl.pathname = params.repoPath || "/";
-  const headers = new Headers(params.request.headers);
-  headers.set("x-w7s-org-slug", params.orgSlug);
-  headers.set("x-w7s-repo-slug", params.repoSlug);
-  headers.set("x-w7s-original-path", originalUrl.pathname);
-  const body =
-    params.request.method === "GET" || params.request.method === "HEAD"
-      ? undefined
-      : params.request.body;
-  try {
-    return await worker.fetch(
-      new Request(rewrittenUrl.toString(), {
-        method: params.request.method,
-        headers,
-        body,
-        redirect: "manual"
-      })
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Worker dispatch failed.";
-    return new Response(message, { status: 502 });
-  }
 };
 
 export const resolveRuntimeRequest = async (request: Request, env: Env) => {

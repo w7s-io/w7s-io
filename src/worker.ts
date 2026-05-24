@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import type { Env } from "./env";
 import { handleDeploy } from "./api/deploy";
+import { handleRpc } from "./api/rpc";
 import { json } from "./http";
 import { resolveRuntimeRequest } from "./runtime/router";
 import { landingHtml } from "./static/landing";
@@ -20,6 +21,7 @@ app.get("/health", health);
 app.get("/api/v1/health", health);
 
 app.post("/api/v1/deploy", handleDeploy);
+app.all("/api/v1/rpc/*", handleRpc);
 
 app.all("*", async (c) => {
   const runtimeResponse = await resolveRuntimeRequest(c.req.raw, c.env);

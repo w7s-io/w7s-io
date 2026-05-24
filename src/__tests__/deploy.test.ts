@@ -549,19 +549,33 @@ describe("deploy API", () => {
     });
     const response = await app.fetch(
       deployRequest({
-        "backend/index.js": "export default { fetch(){ return new Response('backend') } }"
+        "backend/index.js": "export default { fetch(){ return new Response('backend') } }",
+        "w7s.json": JSON.stringify({
+          rpc: {
+            allow: ["guerrerocarlos/notepad"]
+          }
+        })
       }),
       env
     );
 
     expect(response.status).toBe(200);
+    const body = await response.json() as {
+      data?: { deployment?: { rpc?: Record<string, unknown> } };
+    };
     const record = await loadDeploymentRecord(env, "production", "w7s-io", "demo");
     expect(record?.targets.worker?.entrypoint).toBe("backend/index.js");
     expect(record?.targets.worker?.scriptName).toBe("w7s-io--demo--production--abc123");
+    expect(record?.rpc?.allow).toEqual(["guerrerocarlos/notepad"]);
+    expect(body.data?.deployment?.rpc).toEqual({
+      binding: "W7S_RPC",
+      allow: ["guerrerocarlos/notepad"]
+    });
   });
 
   it("accepts Cloudflare dist/server deployments with dist/client assets", async () => {
     const uploadedMetadata: Array<{
+      bindings?: Array<Record<string, string>>;
       compatibility_flags?: string[];
     }> = [];
     vi.stubGlobal(
@@ -605,7 +619,16 @@ describe("deploy API", () => {
     expect(record?.targets.worker?.entrypoint).toBe("dist/server/index.js");
     expect(record?.targets.static?.fileCount).toBe(1);
     expect(record?.targets.static?.hasIndex).toBe(false);
+    expect(record?.rpc?.binding).toBe("W7S_RPC");
+    expect(record?.rpc?.tokenHash).toEqual(expect.any(String));
     expect(uploadedMetadata[0]?.compatibility_flags).toEqual(["nodejs_compat"]);
+    expect(uploadedMetadata[0]?.bindings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "service", name: "W7S_RPC", service: "w7s-io" }),
+        expect.objectContaining({ type: "secret_text", name: "W7S_RPC_TOKEN" }),
+        { type: "plain_text", name: "W7S_REPOSITORY", text: "w7s-io/demo" }
+      ])
+    );
   });
 
   it("provisions declared app storage and uploads runtime bindings", async () => {

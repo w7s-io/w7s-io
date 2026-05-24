@@ -31,6 +31,7 @@ export type DeploymentRecord = {
   deployedAt: string;
   customDomains?: string[];
   bindings?: DeploymentBindings;
+  rpc?: DeploymentRpc;
   targets: {
     worker?: {
       namespace: string;
@@ -46,6 +47,12 @@ export type DeploymentRecord = {
       hasIndex: boolean;
     };
   };
+};
+
+export type DeploymentRpc = {
+  binding: string;
+  tokenHash: string;
+  allow: string[];
 };
 
 export type DeploymentBindings = {

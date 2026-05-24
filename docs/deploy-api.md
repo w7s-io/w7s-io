@@ -143,7 +143,10 @@ Example:
     ]
   },
   "vars": ["PUBLIC_API_KEY"],
-  "secrets": ["PRIVATE_API_KEY"]
+  "secrets": ["PRIVATE_API_KEY"],
+  "rpc": {
+    "allow": ["guerrerocarlos/notepad", "w7s-io"]
+  }
 }
 ```
 
@@ -162,6 +165,8 @@ Example:
 Managed storage is scoped to `<environment>/<owner>/<repo>/<binding>`, so redeploys reuse durable resources while non-production branches get separate resources.
 
 D1 migrations are read from the configured migrations directory, sorted by filename, and applied once. W7S tracks applied migration filenames in `_w7s_migrations` inside the app database.
+
+`rpc.allow` is optional. Same-owner backend-to-backend calls are allowed by default. Cross-owner calls are accepted only when the target app lists the caller GitHub owner or exact `owner/repo`.
 
 The `CNAME` file should contain one hostname, for example:
 
@@ -204,6 +209,44 @@ Unsupported imports:
 `node:` runtime imports are allowed for built Cloudflare Workers when the required compatibility flag is present in `dist/server/wrangler.json`.
 
 If a repo needs dependencies, it should bundle in CI and upload the bundled backend files.
+
+## Backend RPC
+
+Native backends receive these bindings automatically:
+
+- `W7S_RPC`: service binding to the W7S core Worker;
+- `W7S_RPC_TOKEN`: secret bearer token for the current deployment;
+- `W7S_OWNER`;
+- `W7S_REPO`;
+- `W7S_REPOSITORY`;
+- `W7S_ENVIRONMENT`.
+
+Call another backend in the same environment through:
+
+```ts
+const response = await env.W7S_RPC.fetch(
+  "https://w7s.internal/api/v1/rpc/guerrerocarlos/auth/session",
+  {
+    headers: {
+      authorization: `Bearer ${env.W7S_RPC_TOKEN}`,
+      "x-w7s-rpc-caller": env.W7S_REPOSITORY,
+      "x-w7s-rpc-environment": env.W7S_ENVIRONMENT
+    }
+  }
+);
+```
+
+The target path is `/api/v1/rpc/<owner>/<repo>/<path>`. W7S verifies the caller token, loads the target deployment from the same environment, and dispatches directly through the Workers for Platforms namespace. Public request auth headers are stripped before dispatch.
+
+The target Worker receives caller identity headers:
+
+```text
+x-w7s-rpc: 1
+x-w7s-rpc-caller-owner: <owner>
+x-w7s-rpc-caller-repo: <repo>
+x-w7s-rpc-caller-repository: <owner>/<repo>
+x-w7s-rpc-caller-environment: <environment>
+```
 
 ## Static Frontend Rules
 

@@ -29,6 +29,9 @@ export type AppManifest = {
   };
   vars: string[];
   secrets: string[];
+  rpc: {
+    allow: string[];
+  };
 };
 
 const emptyManifest = (): AppManifest => ({
@@ -38,7 +41,10 @@ const emptyManifest = (): AppManifest => ({
     d1: []
   },
   vars: [],
-  secrets: []
+  secrets: [],
+  rpc: {
+    allow: []
+  }
 });
 
 const asRecord = (value: unknown, field: string) => {
@@ -119,6 +125,27 @@ const parseEnvNames = (value: unknown, field: string) => {
   });
 };
 
+const parseRpcAllow = (value: unknown) => {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("rpc.allow must be an array.");
+  return value.map((entry, index) => {
+    if (typeof entry !== "string") throw new Error(`rpc.allow[${index}] must be a string.`);
+    const normalized = entry.trim().toLowerCase();
+    if (!/^[a-z0-9](?:[a-z0-9._-]{0,99})(?:\/[a-z0-9](?:[a-z0-9._-]{0,99}))?$/i.test(normalized)) {
+      throw new Error(`rpc.allow[${index}] must be a GitHub owner or owner/repo.`);
+    }
+    return normalized;
+  });
+};
+
+const parseRpc = (value: unknown) => {
+  if (value === undefined) return { allow: [] };
+  const record = asRecord(value, "rpc");
+  return {
+    allow: parseRpcAllow(record.allow)
+  };
+};
+
 export const readAppManifest = (archive: DeployArchive) => {
   const raw = readTextFile(archive, "w7s.json");
   if (!raw) return emptyManifest();
@@ -138,7 +165,8 @@ export const readAppManifest = (archive: DeployArchive) => {
       d1: parseD1Bindings(bindings.d1)
     },
     vars: parseEnvNames(record.vars, "vars"),
-    secrets: parseEnvNames(record.secrets, "secrets")
+    secrets: parseEnvNames(record.secrets, "secrets"),
+    rpc: parseRpc(record.rpc)
   } satisfies AppManifest;
 };
 

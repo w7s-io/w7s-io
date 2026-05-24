@@ -20,6 +20,7 @@ Start here:
 - deploy auth is the caller's GitHub token checked against the source repo;
 - `backend/` or `worker/` is published as a native Workers for Platforms user Worker;
 - optional `w7s.json` manifests declare per-app KV, R2, D1, vars, and secrets;
+- native backends receive `W7S_RPC` for backend-to-backend calls through the core;
 - static frontend output is published to R2 and served as static assets;
 - public repo apps are routed as `https://<org>.w7s.cloud/<repo>/*`;
 - same-name repos such as `github.com/<org>/<org>` can also serve `https://<org>.w7s.cloud/*`.

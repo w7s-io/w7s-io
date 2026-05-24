@@ -23,4 +23,10 @@ export type WorkerUploadBinding =
       type: "secret_text";
       name: string;
       text: string;
+    }
+  | {
+      type: "service";
+      name: string;
+      service: string;
+      environment?: string;
     };

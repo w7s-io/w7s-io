@@ -9,6 +9,12 @@ import { readAppManifest } from "../deploy/appManifest";
 import { readDeployValues } from "../deploy/deployValues";
 import { provisionAppBindings } from "../deploy/storageProvisioner";
 import {
+  buildRpcUploadBindings,
+  generateRpcToken,
+  hashRpcToken,
+  W7S_RPC_BINDING
+} from "../deploy/rpcBindings";
+import {
   attachCustomDomainRoutes,
   planCustomDomainClaims,
   readCustomDomains
@@ -126,6 +132,7 @@ export const handleDeploy = async (c: HonoContext) => {
   let customDomainWarnings: Awaited<ReturnType<typeof planCustomDomainClaims>>["warnings"] = [];
   let blockedCustomDomains: Awaited<ReturnType<typeof planCustomDomainClaims>>["blocked"] = [];
   let deploymentBindings: DeploymentRecord["bindings"];
+  let deploymentRpc: DeploymentRecord["rpc"];
 
   try {
     if (hasNativeBackend) {
@@ -144,12 +151,25 @@ export const handleDeploy = async (c: HonoContext) => {
         environment
       });
       deploymentBindings = provisionedBindings.deploymentBindings;
+      const rpcToken = generateRpcToken();
+      const rpcBindings = buildRpcUploadBindings({
+        env: c.env,
+        orgSlug,
+        repoSlug,
+        environment,
+        token: rpcToken
+      });
+      deploymentRpc = {
+        binding: W7S_RPC_BINDING,
+        tokenHash: await hashRpcToken(rpcToken),
+        allow: appManifest.rpc.allow
+      };
       const published = await publishIsolateWorker({
         env: c.env,
         archive,
         scriptName,
         entrypoint,
-        bindings: provisionedBindings.uploadBindings
+        bindings: [...provisionedBindings.uploadBindings, ...rpcBindings]
       });
       targets.worker = published;
     }
@@ -199,6 +219,7 @@ export const handleDeploy = async (c: HonoContext) => {
     deployedAt,
     ...(attachedCustomDomains.length > 0 ? { customDomains: attachedCustomDomains } : {}),
     ...(deploymentBindings ? { bindings: deploymentBindings } : {}),
+    ...(deploymentRpc ? { rpc: deploymentRpc } : {}),
     targets
   };
   await storeDeploymentRecord(c.env, record);
@@ -212,7 +233,10 @@ export const handleDeploy = async (c: HonoContext) => {
   }
 
   return jsonSuccess({
-    deployment: record,
+    deployment: {
+      ...record,
+      ...(record.rpc ? { rpc: { binding: record.rpc.binding, allow: record.rpc.allow } } : {})
+    },
     url: publicDeploymentUrl(c.env, orgSlug, repoSlug, environment, attachedCustomDomains),
     ...(attachedCustomDomains.length > 0 ? { customDomains: attachedCustomDomains } : {}),
     ...(customDomainWarnings.length > 0 ? { customDomainWarnings } : {}),

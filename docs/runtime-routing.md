@@ -120,6 +120,14 @@ Reserved platform paths:
 
 Reserved paths are handled by the core Worker and are not routed to deployed apps.
 
+The internal RPC endpoint also lives under the reserved API namespace:
+
+```text
+/api/v1/rpc/<owner>/<repo>/<path>
+```
+
+Apps should not call that URL over the public internet. Native backends call it through their `W7S_RPC` service binding with the deployment's `W7S_RPC_TOKEN`.
+
 ## Deployment Lookup
 
 `src/runtime/router.ts` loads a deployment record from KV using:
@@ -157,6 +165,14 @@ When dispatching to the native Worker:
 - original path is preserved in `x-w7s-original-path`;
 - org slug is sent as `x-w7s-org-slug`;
 - repo slug is sent as `x-w7s-repo-slug`.
+
+When dispatching through RPC, the target Worker also receives:
+
+- `x-w7s-rpc: 1`;
+- `x-w7s-rpc-caller-owner`;
+- `x-w7s-rpc-caller-repo`;
+- `x-w7s-rpc-caller-repository`;
+- `x-w7s-rpc-caller-environment`.
 
 Example:
 

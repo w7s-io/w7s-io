@@ -10,6 +10,8 @@ As of the latest docs update:
 - Wildcard DNS is expected to be managed manually.
 - `backend/`, `worker/`, and static frontend deploys are supported.
 - Native backends can declare per-app KV, R2, D1, vars, and secrets in `w7s.json`.
+- Native backends receive `W7S_RPC`, `W7S_RPC_TOKEN`, and W7S metadata vars for backend-to-backend RPC.
+- Same-owner RPC is allowed by default; cross-owner RPC requires the target app to list allowed owners or repos in `w7s.json` under `rpc.allow`.
 - Root `CNAME` files can attach app custom-domain routes when the W7S token can manage that Cloudflare zone.
 - Custom domains use soft TXT verification: the first claim works without TXT, `_w7s.<zone>` becomes an owner/repo allowlist when present, and hostname conflicts require TXT authorization.
 - Empty org roots such as `https://sadasant.w7s.cloud/` show deploy-help HTML instead of a plain 404.
@@ -37,6 +39,7 @@ The point of this repo is to keep the core deploy/routing plane small.
 - Static hosting supports `frontend/dist`, `dist/client`, `dist`, `build`, and `out`.
 - Custom-domain DNS is manual; W7S only stores the host mapping and attaches a Worker route.
 - W7S custom-domain verification is soft. A missing TXT record allows the first claim, so serious custom-domain users should add `_w7s.<zone>` with a GitHub owner or `owner/repo` allowlist.
+- RPC currently uses a low-level `env.W7S_RPC.fetch(...)` convention. There is no typed client package yet.
 - No rollback UI or deployment history API yet.
 - No user-facing logs yet.
 - Wildcard DNS is manual.
@@ -49,7 +52,7 @@ Good near-term tasks:
 - expose deploy history per org/repo/environment;
 - improve native backend bundling support;
 - add delete/rollback for deployed user Workers;
-- add a first-party plugin manifest/RPC convention;
+- add a typed RPC client and first-party plugin conventions on top of `W7S_RPC`;
 - add structured deploy logs;
 - add end-to-end tests that deploy a demo archive against a staging Worker.
 
