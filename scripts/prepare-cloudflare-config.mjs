@@ -118,55 +118,12 @@ const resolveZoneId = async (name) => {
   return exact.id;
 };
 
-const removeConflictingRoute = async ({ zoneId, pattern, scriptName }) => {
-  const result = await cfRequest(
-    "GET",
-    `/zones/${encodeURIComponent(zoneId)}/workers/routes?per_page=100`
-  );
-  const routes = Array.isArray(result) ? result : [];
-  const conflicts = routes.filter((entry) => {
-    if (entry?.pattern !== pattern) return false;
-    const currentScript = entry?.script || entry?.script_name || entry?.scriptName || null;
-    return currentScript && currentScript !== scriptName;
-  });
-
-  for (const route of conflicts) {
-    if (!route?.id) continue;
-    const currentScript = route.script || route.script_name || route.scriptName || "unknown";
-    console.log(`Removing stale route ${pattern} from ${currentScript}.`);
-    await cfRequest(
-      "DELETE",
-      `/zones/${encodeURIComponent(zoneId)}/workers/routes/${encodeURIComponent(route.id)}`
-    );
-  }
-};
-
 const [kvNamespaceId, zoneId] = await Promise.all([
   ensureKvNamespace(deploymentsKvName),
   resolveZoneId(zoneName),
   ensureR2Bucket(staticBucketName),
   ensureDispatchNamespace(dispatchNamespace)
 ]);
-
-const routes = [
-  {
-    pattern: zoneName,
-    custom_domain: true
-  }
-];
-
-if (attachWildcardRoute) {
-  await removeConflictingRoute({
-    zoneId,
-    pattern: `*.${zoneName}/*`,
-    scriptName: workerName
-  });
-  routes.push({
-    pattern: `*.${zoneName}/*`,
-    custom_domain: false,
-    zone_id: zoneId
-  });
-}
 
 const config = {
   $schema: "node_modules/wrangler/config-schema.json",
@@ -203,8 +160,7 @@ const config = {
       bucket_name: staticBucketName,
       preview_bucket_name: staticBucketName
     }
-  ],
-  routes
+  ]
 };
 
 await mkdir(".wrangler", { recursive: true });
@@ -232,7 +188,8 @@ console.log(
       deploymentsKvId: kvNamespaceId,
       staticBucketName,
       dispatchNamespace,
-      attachWildcardRoute
+      attachWildcardRoute,
+      routeManagement: "post-deploy"
     },
     null,
     2

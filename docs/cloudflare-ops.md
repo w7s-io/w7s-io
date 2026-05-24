@@ -19,7 +19,8 @@ The workflow:
 2. runs `npm run check`;
 3. captures the Git branch and UTC deployment timestamp;
 4. runs `npm run prepare:cloudflare`;
-5. deploys with `npx wrangler deploy --config wrangler.generated.jsonc --secrets-file .wrangler/secrets.json`.
+5. deploys with `npx wrangler deploy --config wrangler.generated.jsonc --secrets-file .wrangler/secrets.json`;
+6. runs `npm run reconcile:cloudflare-routes`.
 
 ## Required GitHub Secrets
 
@@ -77,10 +78,10 @@ The generated config includes:
 - `DEPLOYMENTS_KV`;
 - `STATIC_ASSETS`;
 - `DISPATCHER`;
-- `w7s.cloud` custom domain;
-- optional `*.w7s.cloud/*` route when `W7S_ATTACH_WILDCARD_ROUTE=true`;
 - runtime vars such as `W7S_BASE_DOMAIN`, `W7S_WORKER_NAME`, `APP_COMMIT_ID`, `APP_DEPLOY_BRANCH`, and `APP_DEPLOYED_AT`;
 - Worker secrets needed for user deploys.
+
+Routes are reconciled after `wrangler deploy` instead of being managed by the generated Wrangler config. This prevents core deploys from deleting W7S app custom-domain routes such as `community.w7s.io/*`.
 
 ## Wildcard Route Cutover
 
@@ -90,7 +91,7 @@ The public app URL model requires:
 *.w7s.cloud/* -> w7s-io Worker route
 ```
 
-Before enabling it, the old runtime route must be gone. The prepare script proactively deletes a conflicting exact wildcard route if it is still assigned to another Worker and the token has route permissions.
+Before enabling it, any conflicting route owned by another Worker must be gone. The post-deploy route reconciler replaces conflicting exact routes when the token has route permissions.
 
 ## Wildcard DNS
 

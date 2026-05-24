@@ -54,3 +54,6 @@ jobs:
 
       - name: Deploy
         run: npx wrangler deploy --config wrangler.generated.jsonc --secrets-file .wrangler/secrets.json
+
+      - name: Reconcile routes
+        run: npm run reconcile:cloudflare-routes

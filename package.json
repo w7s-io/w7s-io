@@ -7,6 +7,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "prepare:cloudflare": "node scripts/prepare-cloudflare-config.mjs",
+    "reconcile:cloudflare-routes": "node scripts/reconcile-cloudflare-routes.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run typecheck && npm run test"
