@@ -56,6 +56,9 @@ const shouldFallbackFromWorkerToStatic = (request: Request, response: Response) 
   return response.status === 404 || response.status === 405;
 };
 
+const isRedirectResponse = (response: Response) =>
+  response.status >= 300 && response.status < 400 && response.headers.has("location");
+
 const shouldRedirectStaticRepoRoot = (request: Request, repoPath: string) => {
   if (request.method !== "GET" && request.method !== "HEAD") return false;
   const url = new URL(request.url);
@@ -186,6 +189,22 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
       return redirectToDirectoryPath(request);
     }
 
+    const workerTarget = deployment.targets.worker;
+    let workerResponse: Response | null = null;
+    if (customDomain && workerTarget) {
+      workerResponse = await dispatchWorker({
+        env,
+        request,
+        repoPath: candidate.repoPath,
+        repoSlug: candidate.repoSlug,
+        orgSlug,
+        scriptName: workerTarget.scriptName
+      });
+      if (isRedirectResponse(workerResponse)) {
+        return workerResponse;
+      }
+    }
+
     const exactStatic = await resolveStaticAssetResponse({
       env,
       request,
@@ -195,9 +214,8 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
     });
     if (exactStatic) return exactStatic;
 
-    const workerTarget = deployment.targets.worker;
     if (workerTarget) {
-      const workerResponse = await dispatchWorker({
+      workerResponse ??= await dispatchWorker({
         env,
         request,
         repoPath: candidate.repoPath,

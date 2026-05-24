@@ -325,6 +325,60 @@ describe("runtime router", () => {
     expect(await assetResponse.text()).toContain("whereis");
   });
 
+  it("lets custom-domain worker redirects run before exact static assets", async () => {
+    const calls: string[] = [];
+    const env = createTestEnv({
+      DISPATCHER: {
+        get: () => ({
+          fetch: async (input) => {
+            const request = input instanceof Request ? input : new Request(input);
+            calls.push(new URL(request.url).pathname);
+            return Response.redirect("https://community.w7s.io/docs/", 308);
+          }
+        })
+      }
+    });
+    const record = await storeStaticDeployment(env, {
+      orgSlug: "w7s-io",
+      repoSlug: "docs",
+      files: {
+        "index.html": {
+          body: "<h1>Docs</h1>",
+          contentType: "text/html; charset=utf-8"
+        }
+      }
+    });
+    const fullstackRecord: DeploymentRecord = {
+      ...record,
+      targets: {
+        ...record.targets,
+        worker: {
+          namespace: "w7s-isolate",
+          scriptName: "w7s-io--docs--production",
+          entrypoint: "backend/index.ts",
+          compatibilityDate: "2026-05-23",
+          startupTimeMs: null
+        }
+      }
+    };
+    await storeDeploymentRecord(env, fullstackRecord);
+    await storeCustomDomainMappings(env, fullstackRecord, ["w7s.io"]);
+
+    const response = await app.fetch(
+      new Request("https://w7s.io/", {
+        headers: {
+          host: "w7s.io"
+        },
+        redirect: "manual"
+      }),
+      env
+    );
+
+    expect(response.status).toBe(308);
+    expect(response.headers.get("location")).toBe("https://community.w7s.io/docs/");
+    expect(calls).toEqual(["/"]);
+  });
+
   it("dispatches native worker requests with repo path stripped", async () => {
     const calls: string[] = [];
     const env = createTestEnv({
