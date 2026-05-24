@@ -206,6 +206,49 @@ describe("deploy API", () => {
     expect(mapping?.repoSlug).toBe("whereis");
   });
 
+  it("attaches every hostname listed in a CNAME file", async () => {
+    vi.stubGlobal("fetch", stubCustomDomainFetch({ repository: "guerrerocarlos/whereis" }));
+    const env = createTestEnv({
+      CLOUDFLARE_API_TOKEN: "cf-token"
+    });
+    const response = await app.fetch(
+      deployRequest(
+        {
+          "CNAME": "whereis.carlosguerrero.com\nwww.carlosguerrero.com\n# ignored\n",
+          "dist/client/index.html": "<h1>Hello</h1>"
+        },
+        {
+          "x-github-repository": "guerrerocarlos/whereis"
+        }
+      ),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      data?: {
+        url?: string;
+        customDomains?: string[];
+        customDomainWarnings?: Array<{ hostname?: string }>;
+      };
+    };
+    expect(body.data?.url).toBe("https://whereis.carlosguerrero.com/");
+    expect(body.data?.customDomains).toEqual([
+      "whereis.carlosguerrero.com",
+      "www.carlosguerrero.com"
+    ]);
+    expect(body.data?.customDomainWarnings?.map((warning) => warning.hostname)).toEqual([
+      "whereis.carlosguerrero.com",
+      "www.carlosguerrero.com"
+    ]);
+    await expect(loadCustomDomainMapping(env, "whereis.carlosguerrero.com")).resolves.toEqual(
+      expect.objectContaining({ repoSlug: "whereis" })
+    );
+    await expect(loadCustomDomainMapping(env, "www.carlosguerrero.com")).resolves.toEqual(
+      expect.objectContaining({ repoSlug: "whereis" })
+    );
+  });
+
   it("attaches custom domains when TXT authorizes the GitHub owner", async () => {
     vi.stubGlobal(
       "fetch",

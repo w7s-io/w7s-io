@@ -61,13 +61,14 @@ export const readCustomDomains = (archive: DeployArchive) => {
   for (const path of CNAME_PATHS) {
     const text = readTextFile(archive, path);
     if (!text) continue;
-    const first = text
+    const lines = text
       .split(/\r?\n/)
       .map((line) => line.trim())
-      .find((line) => line && !line.startsWith("#"));
-    if (!first) continue;
-    const hostname = normalizeHostname(first);
-    if (hostname) hostnames.add(hostname);
+      .filter((line) => line && !line.startsWith("#"));
+    for (const line of lines) {
+      const hostname = normalizeHostname(line);
+      if (hostname) hostnames.add(hostname);
+    }
   }
   return [...hostnames];
 };
