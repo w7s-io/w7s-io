@@ -166,6 +166,37 @@ describe("deploy API", () => {
     expect(body.data?.url).toBe("https://guerrerocarlos.w7s.cloud/");
   });
 
+  it("returns branch-prefixed URLs for non-production branch deployments", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "w7s-io/demo" });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv();
+    const response = await app.fetch(
+      deployRequest(
+        {
+          "frontend/dist/index.html": "<h1>Hello</h1>"
+        },
+        {
+          "x-github-branch": "feature/login"
+        }
+      ),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data?: { url?: string } };
+    expect(body.data?.url).toBe("https://feature-login--w7s-io.w7s.cloud/demo/");
+    const record = await loadDeploymentRecord(env, "feature-login", "w7s-io", "demo");
+    expect(record?.branch).toBe("feature/login");
+  });
+
   it("attaches first unverified custom domain claims with setup warnings", async () => {
     vi.stubGlobal("fetch", stubCustomDomainFetch({ repository: "guerrerocarlos/whereis" }));
     const env = createTestEnv({

@@ -1,10 +1,10 @@
 # w7s-io
 
-Minimal W7S core runtime.
+W7S core runtime.
 
-Full takeover docs live in [`docs/`](./docs/README.md).
+Codebase docs live in [`docs/`](./docs/README.md).
 
-This repo is the greenfield replacement core for W7S. It keeps the platform small:
+This repo contains the public W7S worker, deploy API, runtime router, and storage integrations:
 
 - one Cloudflare Worker serves the public frontend and API;
 - `POST /api/v1/deploy` accepts GitHub Actions repo zips;
@@ -12,9 +12,8 @@ This repo is the greenfield replacement core for W7S. It keeps the platform smal
 - `worker/` or `backend/` apps publish to Workers for Platforms;
 - static frontend assets publish to R2 and are served from `https://<org>.w7s.cloud/<repo>/*`.
 - same-name repos such as `github.com/<org>/<org>` can serve directly from `https://<org>.w7s.cloud/*`.
-- `CNAME` can declare one custom domain for a deployment, with optional `_w7s.<zone>` TXT allowlists for ownership control.
-
-The old workflow interpreter and hard-coded plugin bridge are intentionally not part of this core. They can be rebuilt later as W7S apps/components on top of this deploy surface.
+- non-production branches serve from `https://<branch>--<org>.w7s.cloud/<repo>/*`.
+- `CNAME` can declare custom domains for a deployment, with optional `_w7s.<zone>` TXT allowlists for ownership control.
 
 ## Deploy API
 
@@ -36,6 +35,18 @@ Optional environment override:
 - header: `x-w7s-environment: staging`
 
 Without an override, `main` and `master` deploy to `production`; other branches deploy to a sanitized branch environment.
+
+Production deployments are served from:
+
+```text
+https://<org>.w7s.cloud/<repo>/
+```
+
+Non-production branch deployments are served from:
+
+```text
+https://<branch-name>--<org>.w7s.cloud/<repo>/
+```
 
 ## Repository Layout
 
@@ -99,7 +110,7 @@ Optional repo variables:
 - `W7S_DISPATCH_NAMESPACE`, default `w7s-isolate`
 - `W7S_ATTACH_WILDCARD_ROUTE`, default `false`
 
-Set `W7S_ATTACH_WILDCARD_ROUTE=true` only when `*.w7s.cloud/*` has been removed from the old runtime Worker, otherwise Cloudflare rejects the deploy with a duplicate route error.
+Set `W7S_ATTACH_WILDCARD_ROUTE=true` only when this worker should attach the `*.w7s.cloud/*` route. Cloudflare rejects the deploy if another worker already owns that route.
 
 Wildcard DNS is intentionally managed manually. Before enabling the wildcard Worker route, create a proxied Cloudflare DNS record:
 

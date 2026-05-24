@@ -24,6 +24,17 @@ export const resolveRuntimeHost = (
   const label = host.slice(0, -1 * (`.${baseDomain}`).length);
   if (!label || RESERVED_ORG_LABELS.has(label)) return null;
 
+  const branchSeparator = label.lastIndexOf("--");
+  if (branchSeparator > 0) {
+    const environment = normalizeSlug(label.slice(0, branchSeparator));
+    const orgSlug = normalizeSlug(label.slice(branchSeparator + 2));
+    if (!environment || !orgSlug || RESERVED_ORG_LABELS.has(orgSlug)) return null;
+    return {
+      orgSlug,
+      environments: [environment, "production"]
+    };
+  }
+
   const environmentPrefixes = ["dev", "staging", "preview"];
   for (const prefix of environmentPrefixes) {
     const marker = `${prefix}-`;

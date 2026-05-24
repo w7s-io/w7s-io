@@ -45,6 +45,24 @@ Default behavior:
 - `main` and `master` deploy to `production`;
 - all other branches deploy to a sanitized branch name.
 
+Production deployments are served from:
+
+```text
+https://<org>.w7s.cloud/<repo>/
+```
+
+Non-production branch deployments are served from:
+
+```text
+https://<branch-name>--<org>.w7s.cloud/<repo>/
+```
+
+For example, branch `feature/login` is served from:
+
+```text
+https://feature-login--<org>.w7s.cloud/<repo>/
+```
+
 ## Archive Layout
 
 Native backend roots:

@@ -13,11 +13,13 @@ const storeStaticDeployment = async (
   params: {
     orgSlug?: string;
     repoSlug?: string;
+    environment?: string;
     files?: Record<string, { body: string; contentType?: string }>;
   } = {}
 ) => {
   const orgSlug = params.orgSlug ?? "w7s-io";
   const repoSlug = params.repoSlug ?? "demo";
+  const environment = params.environment ?? "production";
   const files = params.files ?? {
     "index.html": {
       body: "<h1>App</h1>",
@@ -44,7 +46,7 @@ const storeStaticDeployment = async (
     version: 1,
     orgSlug,
     repoSlug,
-    environment: "production",
+    environment,
     assetPrefix: "static",
     deployedAt: new Date().toISOString(),
     files: manifestFiles,
@@ -55,7 +57,7 @@ const storeStaticDeployment = async (
     version: 1,
     orgSlug,
     repoSlug,
-    environment: "production",
+    environment,
     repository: `${orgSlug}/${repoSlug}`,
     branch: "main",
     commitSha: "abc",
@@ -111,6 +113,31 @@ describe("runtime router", () => {
 
     expect(response.status).toBe(308);
     expect(response.headers.get("location")).toBe("https://w7s-io.w7s.cloud/demo/?from=test");
+  });
+
+  it("serves branch environments from branch-prefixed hosts", async () => {
+    const env = createTestEnv();
+    await storeStaticDeployment(env, {
+      environment: "feature-login",
+      files: {
+        "index.html": {
+          body: "<h1>Feature App</h1>",
+          contentType: "text/html; charset=utf-8"
+        }
+      }
+    });
+
+    const response = await app.fetch(
+      new Request("https://feature-login--w7s-io.w7s.cloud/demo/", {
+        headers: {
+          host: "feature-login--w7s-io.w7s.cloud"
+        }
+      }),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Feature App");
   });
 
   it("serves nested static directory indexes from repo routes", async () => {

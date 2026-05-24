@@ -10,7 +10,7 @@ import {
   planCustomDomainClaims,
   readCustomDomains
 } from "../deploy/customDomains";
-import { buildStableScriptName, requireSlug, resolveEnvironment } from "../names";
+import { buildStableScriptName, requireSlug, resolveEnvironment, sanitizeScriptPart } from "../names";
 import {
   storeCustomDomainMappings,
   storeDeploymentRecord,
@@ -32,11 +32,21 @@ const isZipRequest = (request: Request) => {
   return contentType.includes("application/zip") || contentType.includes("application/octet-stream");
 };
 
-const publicDeploymentUrl = (env: Env, orgSlug: string, repoSlug: string, customDomains: string[]) => {
+const publicDeploymentUrl = (
+  env: Env,
+  orgSlug: string,
+  repoSlug: string,
+  environment: string,
+  customDomains: string[]
+) => {
   if (customDomains[0]) return `https://${customDomains[0]}/`;
   const baseDomain = env.W7S_BASE_DOMAIN?.trim() || "w7s.cloud";
-  if (repoSlug === orgSlug) return `https://${orgSlug}.${baseDomain}/`;
-  return `https://${orgSlug}.${baseDomain}/${repoSlug}/`;
+  const host =
+    environment === "production"
+      ? `${orgSlug}.${baseDomain}`
+      : `${sanitizeScriptPart(environment)}--${orgSlug}.${baseDomain}`;
+  if (repoSlug === orgSlug) return `https://${host}/`;
+  return `https://${host}/${repoSlug}/`;
 };
 
 export const handleDeploy = async (c: HonoContext) => {
@@ -180,7 +190,7 @@ export const handleDeploy = async (c: HonoContext) => {
 
   return jsonSuccess({
     deployment: record,
-    url: publicDeploymentUrl(c.env, orgSlug, repoSlug, attachedCustomDomains),
+    url: publicDeploymentUrl(c.env, orgSlug, repoSlug, environment, attachedCustomDomains),
     ...(attachedCustomDomains.length > 0 ? { customDomains: attachedCustomDomains } : {}),
     ...(customDomainWarnings.length > 0 ? { customDomainWarnings } : {}),
     ...(blockedCustomDomains.length > 0 ? { blockedCustomDomains } : {})
