@@ -35,7 +35,7 @@ export type IsolatePublishResult = {
 
 const DEFAULT_DISPATCH_NAMESPACE = "w7s-isolate";
 const DEFAULT_COMPATIBILITY_DATE = "2026-05-23";
-const NATIVE_APP_ROOTS = ["worker", "backend"] as const;
+const NATIVE_APP_ROOTS = ["worker", "backend", "dist/server"] as const;
 const ENTRYPOINT_CANDIDATES = [
   "worker/index.ts",
   "worker/index.mts",
@@ -44,7 +44,9 @@ const ENTRYPOINT_CANDIDATES = [
   "backend/index.ts",
   "backend/index.mts",
   "backend/index.js",
-  "backend/index.mjs"
+  "backend/index.mjs",
+  "dist/server/index.js",
+  "dist/server/index.mjs"
 ];
 
 const babelStandalone =
@@ -75,15 +77,21 @@ const joinPath = (baseDir: string, target: string) => {
 
 const isJavaScriptModulePath = (path: string) => /\.(js|mjs|ts|mts)$/i.test(path);
 const isTypeScriptModulePath = (path: string) => /\.(ts|mts)$/i.test(path);
+const isRuntimeExternalImport = (request: string) => request.startsWith("node:");
 
 export const detectWorkerEntrypoint = (archive: DeployArchive) =>
   ENTRYPOINT_CANDIDATES.find((path) => archive.files.has(path)) ?? null;
+
+export const hasNativeWorkerRoot = (archive: DeployArchive) =>
+  NATIVE_APP_ROOTS.some((root) =>
+    archive.entries.some((entry) => entry.path.startsWith(`${root}/`))
+  );
 
 const resolveNativeAppRoot = (path: string) => {
   const normalized = normalizeArchivePath(path);
   const root = NATIVE_APP_ROOTS.find((candidate) => normalized.startsWith(`${candidate}/`));
   if (!root) {
-    throw new Error(`Native module ${path} must be inside worker/ or backend/.`);
+    throw new Error(`Native module ${path} must be inside worker/, backend/, or dist/server/.`);
   }
   return root;
 };
@@ -189,6 +197,7 @@ export const buildIsolateUploadModules = (entrypoint: string, archive: DeployArc
       ...extractStaticModuleRequests(output)
     ]);
     for (const request of requests) {
+      if (isRuntimeExternalImport(request)) continue;
       const resolved = resolveRelativeModulePath(currentPath, request, archive);
       if (!visited.has(resolved)) queue.push(resolved);
     }
@@ -201,6 +210,35 @@ export const buildIsolateUploadModules = (entrypoint: string, archive: DeployArc
   }
 
   return [...modules.values()];
+};
+
+const readWorkerConfig = (archive: DeployArchive, entrypoint: string) => {
+  const configPath = entrypoint.startsWith("dist/server/")
+    ? "dist/server/wrangler.json"
+    : null;
+  if (!configPath) return {};
+  const raw = readTextFile(archive, configPath);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as {
+      compatibility_date?: unknown;
+      compatibility_flags?: unknown;
+    };
+    return {
+      compatibilityDate:
+        typeof parsed.compatibility_date === "string" && parsed.compatibility_date.trim()
+          ? parsed.compatibility_date.trim()
+          : undefined,
+      compatibilityFlags:
+        Array.isArray(parsed.compatibility_flags)
+          ? parsed.compatibility_flags.filter((flag): flag is string =>
+              typeof flag === "string" && Boolean(flag.trim())
+            )
+          : undefined
+    };
+  } catch {
+    return {};
+  }
 };
 
 const ensureDispatchNamespace = async (params: {
@@ -245,13 +283,15 @@ export const publishIsolateWorker = async (params: {
   const { apiToken, accountId } = requireCloudflareCredentials(params.env);
   const namespace =
     optionalCloudflareString(params.env.CLOUDFLARE_DISPATCH_NAMESPACE) ?? DEFAULT_DISPATCH_NAMESPACE;
-  const compatibilityDate =
-    optionalCloudflareString(params.env.CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE) ??
-    DEFAULT_COMPATIBILITY_DATE;
   const entrypoint = normalizeArchivePath(params.entrypoint);
   if (!ENTRYPOINT_CANDIDATES.includes(entrypoint)) {
-    throw new Error("Native deploy requires worker/index.js, worker/index.mjs, worker/index.ts, worker/index.mts, backend/index.js, backend/index.mjs, backend/index.ts, or backend/index.mts.");
+    throw new Error("Native deploy requires worker/index.js, worker/index.mjs, worker/index.ts, worker/index.mts, backend/index.js, backend/index.mjs, backend/index.ts, backend/index.mts, dist/server/index.js, or dist/server/index.mjs.");
   }
+  const workerConfig = readWorkerConfig(params.archive, entrypoint);
+  const compatibilityDate =
+    optionalCloudflareString(params.env.CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE) ??
+    workerConfig.compatibilityDate ??
+    DEFAULT_COMPATIBILITY_DATE;
   const modules = buildIsolateUploadModules(entrypoint, params.archive);
 
   await ensureDispatchNamespace({
@@ -263,6 +303,9 @@ export const publishIsolateWorker = async (params: {
   const metadata = {
     main_module: toCloudflareModuleName(entrypoint),
     compatibility_date: compatibilityDate,
+    ...(workerConfig.compatibilityFlags && workerConfig.compatibilityFlags.length > 0
+      ? { compatibility_flags: workerConfig.compatibilityFlags }
+      : {}),
     ...(params.bindings && params.bindings.length > 0 ? { bindings: params.bindings } : {})
   };
   const formData = new FormData();

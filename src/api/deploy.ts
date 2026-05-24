@@ -2,8 +2,8 @@ import type { Context } from "hono";
 import type { Env } from "../env";
 import { jsonError, jsonSuccess, parseBearerToken } from "../http";
 import { parseGitHubRepository, verifyGitHubRepoAccess } from "../deploy/githubAuth";
-import { archiveHasPrefix, readDeployArchive } from "../deploy/archive";
-import { detectWorkerEntrypoint, publishIsolateWorker } from "../deploy/isolatePublisher";
+import { readDeployArchive } from "../deploy/archive";
+import { detectWorkerEntrypoint, hasNativeWorkerRoot, publishIsolateWorker } from "../deploy/isolatePublisher";
 import { hasStaticSite, publishStaticSite } from "../deploy/staticPublisher";
 import { readAppManifest } from "../deploy/appManifest";
 import { readDeployValues } from "../deploy/deployValues";
@@ -106,10 +106,10 @@ export const handleDeploy = async (c: HonoContext) => {
     return jsonError(error instanceof Error ? error.message : String(error), 400);
   }
 
-  const hasWorker = archiveHasPrefix(archive, "worker/");
-  const hasBackend = archiveHasPrefix(archive, "backend/");
-  const hasNativeBackend = hasWorker || hasBackend;
-  const hasStatic = hasStaticSite(archive);
+  const hasNativeBackend = hasNativeWorkerRoot(archive);
+  const hasStatic = hasStaticSite(archive, {
+    allowAssetOnly: hasNativeBackend
+  });
   let customDomains: string[];
   try {
     customDomains = readCustomDomains(archive);
@@ -117,7 +117,7 @@ export const handleDeploy = async (c: HonoContext) => {
     return jsonError(error instanceof Error ? error.message : String(error), 400);
   }
   if (!hasNativeBackend && !hasStatic) {
-    return jsonError("Archive must contain worker/, backend/, or static frontend output.", 400);
+    return jsonError("Archive must contain worker/, backend/, dist/server/, or static frontend output.", 400);
   }
 
   const deployedAt = new Date().toISOString();
@@ -131,7 +131,7 @@ export const handleDeploy = async (c: HonoContext) => {
     if (hasNativeBackend) {
       const entrypoint = detectWorkerEntrypoint(archive);
       if (!entrypoint) {
-        return jsonError("Native backend deploy requires worker/index.js, worker/index.mjs, worker/index.ts, worker/index.mts, backend/index.js, backend/index.mjs, backend/index.ts, or backend/index.mts.", 400);
+        return jsonError("Native backend deploy requires worker/index.js, worker/index.mjs, worker/index.ts, worker/index.mts, backend/index.js, backend/index.mjs, backend/index.ts, backend/index.mts, dist/server/index.js, or dist/server/index.mjs.", 400);
       }
       const scriptName = buildDeploymentScriptName(orgSlug, repoSlug, environment, commitSha);
       const provisionedBindings = await provisionAppBindings({
@@ -162,7 +162,8 @@ export const handleDeploy = async (c: HonoContext) => {
         repoSlug,
         environment,
         commitSha,
-        deployedAt
+        deployedAt,
+        allowAssetOnly: hasNativeBackend
       });
       targets.static = {
         manifestKey: publishedStatic.manifestKey,

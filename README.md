@@ -10,6 +10,7 @@ This repo contains the public W7S worker, deploy API, runtime router, and storag
 - `POST /api/v1/deploy` accepts GitHub Actions repo zips;
 - deployments are authorized by the GitHub token's access to the source repo;
 - `worker/` or `backend/` apps publish to Workers for Platforms;
+- Cloudflare-style SSR output in `dist/server` plus assets in `dist/client` is supported;
 - `w7s.json` can declare per-app KV, R2, D1, vars, and secrets for native backends;
 - static frontend assets publish to R2 and are served from `https://<org>.w7s.cloud/<repo>/*`.
 - same-name repos such as `github.com/<org>/<org>` can serve directly from `https://<org>.w7s.cloud/*`.
@@ -61,6 +62,13 @@ or:
 
 ```text
 backend/index.ts
+```
+
+or Cloudflare/Vite SSR output:
+
+```text
+dist/server/index.js
+dist/client/assets/app.js
 ```
 
 Frontend:

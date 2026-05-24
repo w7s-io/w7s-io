@@ -560,6 +560,54 @@ describe("deploy API", () => {
     expect(record?.targets.worker?.scriptName).toBe("w7s-io--demo--production--abc123");
   });
 
+  it("accepts Cloudflare dist/server deployments with dist/client assets", async () => {
+    const uploadedMetadata: Array<{
+      compatibility_flags?: string[];
+    }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "w7s-io/demo" });
+        }
+        if (
+          url.includes("/workers/dispatch/namespaces/w7s-isolate/scripts/") &&
+          init?.method === "PUT"
+        ) {
+          const form = init.body as FormData;
+          const metadata = form.get("metadata") as Blob;
+          uploadedMetadata.push(JSON.parse(await metadata.text()));
+          return Response.json({ success: true, result: { startup_time_ms: 5 } });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv({
+      CLOUDFLARE_API_TOKEN: "cf-token",
+      CLOUDFLARE_ACCOUNT_ID: "acct-123"
+    });
+    const response = await app.fetch(
+      deployRequest({
+        "dist/server/index.js": "import { worker } from './assets/worker-entry.js'; import 'node:events'; export default worker;",
+        "dist/server/assets/worker-entry.js": "export const worker = { fetch(){ return new Response('ssr') } };",
+        "dist/server/wrangler.json": JSON.stringify({
+          compatibility_date: "2025-09-24",
+          compatibility_flags: ["nodejs_compat"]
+        }),
+        "dist/client/assets/app.js": "console.log('client')"
+      }),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const record = await loadDeploymentRecord(env, "production", "w7s-io", "demo");
+    expect(record?.targets.worker?.entrypoint).toBe("dist/server/index.js");
+    expect(record?.targets.static?.fileCount).toBe(1);
+    expect(record?.targets.static?.hasIndex).toBe(false);
+    expect(uploadedMetadata[0]?.compatibility_flags).toEqual(["nodejs_compat"]);
+  });
+
   it("provisions declared app storage and uploads runtime bindings", async () => {
     const uploadedMetadata: {
       bindings?: Array<Record<string, string>>;

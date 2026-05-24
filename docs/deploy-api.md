@@ -85,6 +85,8 @@ worker/index.js
 worker/index.mjs
 worker/index.ts
 worker/index.mts
+dist/server/index.js
+dist/server/index.mjs
 ```
 
 Static frontend root:
@@ -98,6 +100,15 @@ out/
 ```
 
 Both native backend and static frontend can be present in the same archive.
+
+Cloudflare/Vite SSR builds are supported with:
+
+```text
+dist/server/index.js
+dist/client/assets/...
+```
+
+When `dist/server/wrangler.json` contains `compatibility_flags`, W7S includes those flags in the uploaded Worker metadata. This supports framework builds that require flags such as `nodejs_compat`.
 
 Optional custom domain declaration:
 
@@ -190,6 +201,8 @@ Unsupported imports:
 - bare package imports such as `import x from "pkg"`;
 - imports crossing outside `backend/` or `worker/`.
 
+`node:` runtime imports are allowed for built Cloudflare Workers when the required compatibility flag is present in `dist/server/wrangler.json`.
+
 If a repo needs dependencies, it should bundle in CI and upload the bundled backend files.
 
 ## Static Frontend Rules
@@ -202,7 +215,7 @@ Every file under the first detected static root is uploaded to R2. Detection ord
 4. `build`
 5. `out`
 
-Legacy `frontend/dist` is accepted as an explicit W7S root. The other roots are accepted when they contain `index.html`, which prevents W7S from publishing unrelated build folders by accident.
+Legacy `frontend/dist` is accepted as an explicit W7S root. The other roots are accepted when they contain `index.html`, which prevents W7S from publishing unrelated build folders by accident. `dist/client` may omit `index.html` when it is paired with a native `dist/server` Worker.
 
 Static routes:
 
@@ -316,7 +329,7 @@ For same-name repos, the public URL is the org root. A deploy from `guerrerocarl
   - `Authorization: Bearer ...` is absent.
 - `401 Bearer token is not authorized`
   - GitHub token cannot read the repo in `x-github-repository`.
-- `400 Archive must contain worker/, backend/, or static frontend output`
+- `400 Archive must contain worker/, backend/, dist/server/, or static frontend output`
   - Archive does not contain a deployable root.
 - `400 Native backend deploy requires ...`
   - `backend/` or `worker/` exists but no supported `index.*` entrypoint exists.

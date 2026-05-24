@@ -87,8 +87,10 @@ GET https://<org>.w7s.cloud/<repo>/<path>
 ## Compatibility Choices
 
 - `worker/` and `backend/` are both accepted as native backend roots.
+- `dist/server` is accepted for Cloudflare/Vite SSR build output.
 - If both roots are present, `worker/` entrypoints are preferred because their candidates are listed first.
 - `frontend/dist`, `dist/client`, `dist`, `build`, and `out` are treated as already-built frontend output.
+- `dist/client` can be asset-only when paired with a native `dist/server` Worker, which covers TanStack Start and similar SSR builds.
 - W7S does not install dependencies or run user builds during deploy.
 - Bare package imports inside native backend code are not supported by deploy-time publishing. Repos should upload bundled code or use relative local modules only.
 - Per-app storage is stable across redeploys for the same repository and environment. New commits reuse the same managed KV/R2/D1 resources.

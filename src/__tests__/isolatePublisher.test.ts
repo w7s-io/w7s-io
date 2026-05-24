@@ -44,6 +44,21 @@ describe("isolate publishing helpers", () => {
     expect(modules.map((module) => module.name).sort()).toEqual(["index.ts", "message.ts"]);
   });
 
+  it("supports Cloudflare build output under dist/server", async () => {
+    const archive = await archiveFromFiles({
+      "dist/server/index.js": "import { worker } from './assets/worker-entry.js'; import 'node:events'; export default worker;",
+      "dist/server/assets/worker-entry.js": "export const worker = { fetch(){ return new Response('ssr') } };"
+    });
+
+    const entrypoint = detectWorkerEntrypoint(archive);
+    expect(entrypoint).toBe("dist/server/index.js");
+    const modules = buildIsolateUploadModules(entrypoint!, archive);
+    expect(modules.map((module) => module.name).sort()).toEqual([
+      "assets/worker-entry.js",
+      "index.js"
+    ]);
+  });
+
   it("builds stable script names", () => {
     expect(buildStableScriptName("W7S-IO", "Demo_App", "production")).toBe("w7s-io--demo-app--production");
   });

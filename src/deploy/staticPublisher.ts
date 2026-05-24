@@ -11,11 +11,12 @@ type StaticSiteRoot = {
   label: string;
   prefix: string;
   explicit: boolean;
+  assetOnly?: boolean;
 };
 
 const STATIC_SITE_ROOTS: StaticSiteRoot[] = [
   { label: "frontend/dist", prefix: "frontend/dist/", explicit: true },
-  { label: "dist/client", prefix: "dist/client/", explicit: false },
+  { label: "dist/client", prefix: "dist/client/", explicit: false, assetOnly: true },
   { label: "dist", prefix: "dist/", explicit: false },
   { label: "build", prefix: "build/", explicit: false },
   { label: "out", prefix: "out/", explicit: false }
@@ -55,14 +56,21 @@ const toArrayBuffer = (bytes: Uint8Array) =>
 const sha256 = async (bytes: Uint8Array) =>
   hex(await crypto.subtle.digest("SHA-256", toArrayBuffer(bytes)));
 
-export const detectStaticSiteRoot = (archive: DeployArchive) =>
+export const detectStaticSiteRoot = (
+  archive: DeployArchive,
+  options: { allowAssetOnly?: boolean } = {}
+) =>
   STATIC_SITE_ROOTS.find((root) => {
     const hasEntries = archive.entries.some((entry) => entry.path.startsWith(root.prefix));
     if (!hasEntries) return false;
-    return root.explicit || archive.files.has(`${root.prefix}index.html`);
+    if (root.explicit || archive.files.has(`${root.prefix}index.html`)) return true;
+    return Boolean(options.allowAssetOnly && root.assetOnly);
   }) ?? null;
 
-export const hasStaticSite = (archive: DeployArchive) => Boolean(detectStaticSiteRoot(archive));
+export const hasStaticSite = (
+  archive: DeployArchive,
+  options: { allowAssetOnly?: boolean } = {}
+) => Boolean(detectStaticSiteRoot(archive, options));
 
 export const publishStaticSite = async (params: {
   env: Env;
@@ -72,11 +80,14 @@ export const publishStaticSite = async (params: {
   environment: string;
   commitSha: string;
   deployedAt: string;
+  allowAssetOnly?: boolean;
 }) => {
   if (!params.env.STATIC_ASSETS) {
     throw new Error("STATIC_ASSETS R2 binding is required to publish frontend assets.");
   }
-  const staticRoot = detectStaticSiteRoot(params.archive);
+  const staticRoot = detectStaticSiteRoot(params.archive, {
+    allowAssetOnly: params.allowAssetOnly
+  });
   if (!staticRoot) {
     throw new Error("No static frontend output was found.");
   }
