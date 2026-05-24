@@ -180,13 +180,13 @@ Example:
       "targets": {
         "worker": {
           "namespace": "w7s-isolate",
-          "scriptName": "guerrerocarlos--w7s-io-demo--production",
+          "scriptName": "guerrerocarlos--w7s-io-demo--production--abc123",
           "entrypoint": "backend/index.js",
           "compatibilityDate": "2026-05-23",
           "startupTimeMs": 0
         },
         "static": {
-          "manifestKey": "static_manifest:v1:production:guerrerocarlos:w7s-io-demo",
+          "manifestKey": "static_manifest:v1:production:guerrerocarlos:w7s-io-demo:static-v1-production-guerrerocarlos-w7s-io-demo-abc123",
           "assetPrefix": "static/v1/production/guerrerocarlos/w7s-io-demo/abc123",
           "fileCount": 3,
           "hasIndex": true

@@ -107,6 +107,7 @@ describe("deploy API", () => {
     expect(body.status).toBe("success");
 
     const record = await loadDeploymentRecord(env, "production", "w7s-io", "demo");
+    expect(record?.targets.static?.manifestKey).toContain("abc123");
     expect(record?.targets.static?.fileCount).toBe(2);
     expect(record?.targets.worker).toBeUndefined();
   });
@@ -515,5 +516,6 @@ describe("deploy API", () => {
     expect(response.status).toBe(200);
     const record = await loadDeploymentRecord(env, "production", "w7s-io", "demo");
     expect(record?.targets.worker?.entrypoint).toBe("backend/index.js");
+    expect(record?.targets.worker?.scriptName).toBe("w7s-io--demo--production--abc123");
   });
 });

@@ -40,3 +40,10 @@ export const sanitizeScriptPart = (value: string) =>
 export const buildStableScriptName = (orgSlug: string, repoSlug: string, environment: string) =>
   `${sanitizeScriptPart(orgSlug)}--${sanitizeScriptPart(repoSlug)}--${sanitizeScriptPart(environment)}`;
 
+export const buildDeploymentScriptName = (
+  orgSlug: string,
+  repoSlug: string,
+  environment: string,
+  commitSha: string
+) =>
+  `${buildStableScriptName(orgSlug, repoSlug, environment)}--${sanitizeScriptPart(commitSha.slice(0, 40))}`;

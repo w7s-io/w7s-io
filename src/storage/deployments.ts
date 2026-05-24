@@ -60,8 +60,13 @@ export type CustomDomainMapping = {
 export const deploymentKey = (environment: string, orgSlug: string, repoSlug: string) =>
   `deployment:v1:${sanitizeScriptPart(environment)}:${sanitizeScriptPart(orgSlug)}:${sanitizeScriptPart(repoSlug)}`;
 
-export const staticManifestKey = (environment: string, orgSlug: string, repoSlug: string) =>
-  `static_manifest:v1:${sanitizeScriptPart(environment)}:${sanitizeScriptPart(orgSlug)}:${sanitizeScriptPart(repoSlug)}`;
+export const staticManifestKey = (
+  environment: string,
+  orgSlug: string,
+  repoSlug: string,
+  version: string
+) =>
+  `static_manifest:v1:${sanitizeScriptPart(environment)}:${sanitizeScriptPart(orgSlug)}:${sanitizeScriptPart(repoSlug)}:${sanitizeScriptPart(version)}`;
 
 export const customDomainKey = (hostname: string) =>
   `custom_domain:v1:${hostname.trim().toLowerCase()}`;
@@ -137,7 +142,12 @@ export const storeStaticSiteManifest = async (
   env: Env,
   manifest: StaticSiteManifest
 ) => {
-  const key = staticManifestKey(manifest.environment, manifest.orgSlug, manifest.repoSlug);
+  const key = staticManifestKey(
+    manifest.environment,
+    manifest.orgSlug,
+    manifest.repoSlug,
+    manifest.assetPrefix
+  );
   await env.DEPLOYMENTS_KV.put(key, JSON.stringify(manifest));
   return key;
 };

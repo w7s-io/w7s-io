@@ -10,7 +10,7 @@ import {
   planCustomDomainClaims,
   readCustomDomains
 } from "../deploy/customDomains";
-import { buildStableScriptName, requireSlug, resolveEnvironment, sanitizeScriptPart } from "../names";
+import { buildDeploymentScriptName, requireSlug, resolveEnvironment, sanitizeScriptPart } from "../names";
 import {
   storeCustomDomainMappings,
   storeDeploymentRecord,
@@ -125,7 +125,7 @@ export const handleDeploy = async (c: HonoContext) => {
       if (!entrypoint) {
         return jsonError("Native backend deploy requires worker/index.js, worker/index.mjs, worker/index.ts, worker/index.mts, backend/index.js, backend/index.mjs, backend/index.ts, or backend/index.mts.", 400);
       }
-      const scriptName = buildStableScriptName(orgSlug, repoSlug, environment);
+      const scriptName = buildDeploymentScriptName(orgSlug, repoSlug, environment, commitSha);
       const published = await publishIsolateWorker({
         env: c.env,
         archive,
@@ -163,9 +163,6 @@ export const handleDeploy = async (c: HonoContext) => {
       attachedCustomDomains = customDomainPlan.attached;
       customDomainWarnings = customDomainPlan.warnings;
       blockedCustomDomains = customDomainPlan.blocked;
-      if (attachedCustomDomains.length > 0) {
-        await attachCustomDomainRoutes(c.env, attachedCustomDomains);
-      }
     }
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : String(error), 500);
@@ -186,6 +183,11 @@ export const handleDeploy = async (c: HonoContext) => {
   await storeDeploymentRecord(c.env, record);
   if (attachedCustomDomains.length > 0) {
     await storeCustomDomainMappings(c.env, record, attachedCustomDomains);
+    try {
+      await attachCustomDomainRoutes(c.env, attachedCustomDomains);
+    } catch (error) {
+      return jsonError(error instanceof Error ? error.message : String(error), 500);
+    }
   }
 
   return jsonSuccess({

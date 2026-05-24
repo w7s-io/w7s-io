@@ -189,11 +189,11 @@ R2 bucket: w7s-io-static-assets
 Native user Worker script names:
 
 ```text
-<org>--<repo>--<environment>
+<org>--<repo>--<environment>--<commit>
 ```
 
 Example:
 
 ```text
-guerrerocarlos--w7s-io-demo--production
+guerrerocarlos--w7s-io-demo--production--abc123
 ```
