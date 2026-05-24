@@ -37,7 +37,14 @@ const responseFromAsset = async (env: Env, asset: StaticAssetEntry, request: Req
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set("content-type", headers.get("content-type") || asset.contentType);
-  headers.set("cache-control", asset.path.includes(".") ? "public, max-age=31536000, immutable" : "no-cache");
+  headers.set(
+    "cache-control",
+    asset.contentType.startsWith("text/html") || asset.path.endsWith(".html")
+      ? "no-cache"
+      : asset.path.includes(".")
+        ? "public, max-age=31536000, immutable"
+        : "no-cache"
+  );
   if (asset.etag) headers.set("etag", `"${asset.etag}"`);
   if (request.method === "HEAD") {
     return new Response(null, { status: 200, headers });
@@ -64,4 +71,3 @@ export const resolveStaticAssetResponse = async (params: {
   if (!asset) return null;
   return responseFromAsset(params.env, asset, params.request);
 };
-

@@ -91,6 +91,7 @@ describe("runtime router", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-cache");
     expect(await response.text()).toContain("App");
   });
 
@@ -144,6 +145,7 @@ describe("runtime router", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
+    expect(response.headers.get("cache-control")).toBe("no-cache");
     expect(await response.text()).toContain("Deploy From GitHub");
   });
 
@@ -320,8 +322,10 @@ describe("runtime router", () => {
     );
 
     expect(rootResponse.status).toBe(200);
+    expect(rootResponse.headers.get("cache-control")).toBe("no-cache");
     expect(await rootResponse.text()).toContain("Where is Carlos?");
     expect(assetResponse.status).toBe(200);
+    expect(assetResponse.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
     expect(await assetResponse.text()).toContain("whereis");
   });
 
