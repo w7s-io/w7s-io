@@ -281,6 +281,44 @@ describe("deploy API", () => {
     );
   });
 
+  it("removes stale custom domain mappings for the same deployment", async () => {
+    vi.stubGlobal("fetch", stubCustomDomainFetch({ repository: "guerrerocarlos/whereis" }));
+    const env = createTestEnv({
+      CLOUDFLARE_API_TOKEN: "cf-token"
+    });
+    const headers = {
+      "x-github-repository": "guerrerocarlos/whereis"
+    };
+
+    const first = await app.fetch(
+      deployRequest(
+        {
+          "CNAME": "whereis.carlosguerrero.com\n",
+          "dist/client/index.html": "<h1>Hello</h1>"
+        },
+        headers
+      ),
+      env
+    );
+    expect(first.status).toBe(200);
+    await expect(loadCustomDomainMapping(env, "whereis.carlosguerrero.com")).resolves.toEqual(
+      expect.objectContaining({ repoSlug: "whereis" })
+    );
+
+    const second = await app.fetch(
+      deployRequest(
+        {
+          "dist/client/index.html": "<h1>Hello again</h1>"
+        },
+        headers
+      ),
+      env
+    );
+
+    expect(second.status).toBe(200);
+    await expect(loadCustomDomainMapping(env, "whereis.carlosguerrero.com")).resolves.toBeNull();
+  });
+
   it("attaches custom domains when TXT authorizes the GitHub owner", async () => {
     vi.stubGlobal(
       "fetch",

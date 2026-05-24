@@ -130,6 +130,42 @@ export const storeCustomDomainMappings = async (
   );
 };
 
+export const replaceCustomDomainMappings = async (
+  env: Env,
+  record: DeploymentRecord,
+  hostnames: string[]
+) => {
+  const wanted = new Set(hostnames.map((hostname) => hostname.trim().toLowerCase()));
+  let cursor: string | undefined;
+  do {
+    const listed = await env.DEPLOYMENTS_KV.list({
+      prefix: "custom_domain:v1:",
+      cursor
+    });
+    await Promise.all(
+      listed.keys.map(async (entry) => {
+        const raw = await env.DEPLOYMENTS_KV.get(entry.name, "json");
+        if (!raw || typeof raw !== "object") return;
+        const mapping = raw as Partial<CustomDomainMapping>;
+        if (
+          mapping.version !== 1 ||
+          mapping.orgSlug !== record.orgSlug ||
+          mapping.repoSlug !== record.repoSlug ||
+          mapping.environment !== record.environment ||
+          !mapping.hostname ||
+          wanted.has(mapping.hostname)
+        ) {
+          return;
+        }
+        await env.DEPLOYMENTS_KV.delete(entry.name);
+      })
+    );
+    cursor = listed.list_complete ? undefined : listed.cursor;
+  } while (cursor);
+
+  await storeCustomDomainMappings(env, record, hostnames);
+};
+
 export const loadCustomDomainMapping = async (env: Env, hostname: string) => {
   const raw = await env.DEPLOYMENTS_KV.get(customDomainKey(hostname), "json");
   if (!raw || typeof raw !== "object") return null;

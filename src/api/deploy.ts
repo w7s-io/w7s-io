@@ -12,7 +12,7 @@ import {
 } from "../deploy/customDomains";
 import { buildDeploymentScriptName, requireSlug, resolveEnvironment, sanitizeScriptPart } from "../names";
 import {
-  storeCustomDomainMappings,
+  replaceCustomDomainMappings,
   storeDeploymentRecord,
   type DeploymentRecord
 } from "../storage/deployments";
@@ -181,8 +181,8 @@ export const handleDeploy = async (c: HonoContext) => {
     targets
   };
   await storeDeploymentRecord(c.env, record);
+  await replaceCustomDomainMappings(c.env, record, attachedCustomDomains);
   if (attachedCustomDomains.length > 0) {
-    await storeCustomDomainMappings(c.env, record, attachedCustomDomains);
     try {
       await attachCustomDomainRoutes(c.env, attachedCustomDomains);
     } catch (error) {

@@ -29,9 +29,12 @@ export class MemoryKV {
     this.values.delete(key);
   }
 
-  async list() {
+  async list(options?: { prefix?: string }) {
+    const prefix = options?.prefix ?? "";
     return {
-      keys: [...this.values.keys()].map((name) => ({ name })),
+      keys: [...this.values.keys()]
+        .filter((name) => name.startsWith(prefix))
+        .map((name) => ({ name })),
       list_complete: true,
       cursor: ""
     };
