@@ -327,12 +327,14 @@ describe("runtime router", () => {
 
   it("lets custom-domain worker redirects run before exact static assets", async () => {
     const calls: string[] = [];
+    const redirectModes: string[] = [];
     const env = createTestEnv({
       DISPATCHER: {
         get: () => ({
           fetch: async (input) => {
             const request = input instanceof Request ? input : new Request(input);
             calls.push(new URL(request.url).pathname);
+            redirectModes.push(request.redirect);
             return Response.redirect("https://community.w7s.io/docs/", 308);
           }
         })
@@ -377,6 +379,7 @@ describe("runtime router", () => {
     expect(response.status).toBe(308);
     expect(response.headers.get("location")).toBe("https://community.w7s.io/docs/");
     expect(calls).toEqual(["/"]);
+    expect(redirectModes).toEqual(["manual"]);
   });
 
   it("dispatches native worker requests with repo path stripped", async () => {

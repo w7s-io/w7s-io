@@ -139,7 +139,8 @@ const dispatchWorker = async (params: {
       new Request(rewrittenUrl.toString(), {
         method: params.request.method,
         headers,
-        body
+        body,
+        redirect: "manual"
       })
     );
   } catch (error) {
