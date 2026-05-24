@@ -311,10 +311,9 @@ export const publishIsolateWorker = async (params: {
   const formData = new FormData();
   formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }), "metadata.json");
   for (const module of modules) {
-    const uploadFileName = module.name.split("/").pop() ?? "index.js";
     formData.append(
       module.name,
-      new File([module.content], uploadFileName, { type: module.contentType })
+      new File([module.content], module.name, { type: module.contentType })
     );
   }
 
