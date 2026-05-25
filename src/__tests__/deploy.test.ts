@@ -845,6 +845,209 @@ describe("deploy API", () => {
     );
   });
 
+  it("uploads durable object bindings and only creates new classes once", async () => {
+    const uploadedMetadata: {
+      bindings?: Array<Record<string, string>>;
+      migrations?: {
+        new_tag?: string;
+        old_tag?: string;
+        steps?: Array<{ new_sqlite_classes?: string[] }>;
+      };
+    }[] = [];
+    let existingMigrationTag: string | null = null;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "w7s-io/demo" });
+        }
+        if (url.endsWith("/workers/dispatch/namespaces/w7s-isolate")) {
+          return Response.json({ success: true, result: {} });
+        }
+        if (
+          url.includes("/workers/dispatch/namespaces/w7s-isolate/scripts/") &&
+          init?.method !== "PUT"
+        ) {
+          if (!existingMigrationTag) return new Response("missing", { status: 404 });
+          return Response.json({
+            success: true,
+            result: {
+              script: {
+                migration_tag: existingMigrationTag
+              }
+            }
+          });
+        }
+        if (
+          url.includes("/workers/dispatch/namespaces/w7s-isolate/scripts/") &&
+          init?.method === "PUT"
+        ) {
+          const form = init.body as FormData;
+          const metadata = form.get("metadata") as Blob;
+          uploadedMetadata.push(JSON.parse(await metadata.text()));
+          return Response.json({ success: true, result: { startup_time_ms: 5 } });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv({
+      CLOUDFLARE_API_TOKEN: "cf-token",
+      CLOUDFLARE_ACCOUNT_ID: "acct-123"
+    });
+    const files = {
+      "backend/index.js": [
+        "export class Counter {",
+        "  constructor(state) { this.state = state; }",
+        "  async fetch() { return new Response('ok'); }",
+        "}",
+        "export default {",
+        "  fetch(request, env) {",
+        "    const id = env.COUNTER.idFromName('global');",
+        "    return env.COUNTER.get(id).fetch(request);",
+        "  }",
+        "};"
+      ].join("\n"),
+      "w7s.json": JSON.stringify({
+        bindings: {
+          durableObjects: [
+            {
+              binding: "COUNTER",
+              className: "Counter"
+            }
+          ]
+        }
+      })
+    };
+
+    const first = await app.fetch(deployRequest(files), env);
+    expect(first.status).toBe(200);
+    const firstRecord = await loadDeploymentRecord(env, "production", "w7s-io", "demo");
+    expect(firstRecord?.targets.worker?.scriptName).toBe("w7s-io--demo--production");
+    expect(firstRecord?.bindings?.durableObjects).toEqual([
+      {
+        binding: "COUNTER",
+        className: "Counter"
+      }
+    ]);
+    expect(uploadedMetadata[0]?.bindings).toEqual(
+      expect.arrayContaining([
+        {
+          type: "durable_object_namespace",
+          name: "COUNTER",
+          class_name: "Counter"
+        }
+      ])
+    );
+    expect(uploadedMetadata[0]?.migrations).toEqual({
+      new_tag: expect.stringMatching(/^w7s-do-/),
+      steps: [
+        {
+          new_sqlite_classes: ["Counter"]
+        }
+      ]
+    });
+
+    existingMigrationTag = uploadedMetadata[0]?.migrations?.new_tag ?? null;
+    const second = await app.fetch(
+      deployRequest(files, {
+        "x-github-sha": "def456"
+      }),
+      env
+    );
+
+    expect(second.status).toBe(200);
+    const secondRecord = await loadDeploymentRecord(env, "production", "w7s-io", "demo");
+    expect(secondRecord?.targets.worker?.scriptName).toBe("w7s-io--demo--production");
+    expect(uploadedMetadata[1]?.migrations).toBeUndefined();
+
+    const expandedFiles = {
+      ...files,
+      "backend/index.js": [
+        "export class Counter {",
+        "  async fetch() { return new Response('counter'); }",
+        "}",
+        "export class Limiter {",
+        "  async fetch() { return new Response('limiter'); }",
+        "}",
+        "export default {",
+        "  fetch(request, env) {",
+        "    const id = env.LIMITER.idFromName('global');",
+        "    return env.LIMITER.get(id).fetch(request);",
+        "  }",
+        "};"
+      ].join("\n"),
+      "w7s.json": JSON.stringify({
+        bindings: {
+          durableObjects: [
+            {
+              binding: "COUNTER",
+              className: "Counter"
+            },
+            {
+              binding: "LIMITER",
+              className: "Limiter"
+            }
+          ]
+        }
+      })
+    };
+    const third = await app.fetch(
+      deployRequest(expandedFiles, {
+        "x-github-sha": "fed789"
+      }),
+      env
+    );
+
+    expect(third.status).toBe(200);
+    expect(uploadedMetadata[2]?.migrations).toEqual({
+      old_tag: existingMigrationTag,
+      new_tag: expect.stringMatching(/^w7s-do-/),
+      steps: [
+        {
+          new_sqlite_classes: ["Limiter"]
+        }
+      ]
+    });
+  });
+
+  it("rejects durable objects on static-only deployments", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "w7s-io/demo" });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv();
+    const response = await app.fetch(
+      deployRequest({
+        "dist/index.html": "<h1>Hello</h1>",
+        "w7s.json": JSON.stringify({
+          bindings: {
+            durableObjects: [
+              {
+                binding: "COUNTER",
+                className: "Counter"
+              }
+            ]
+          }
+        })
+      }),
+      env
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual(
+      expect.objectContaining({
+        error: "Durable Objects require a native backend deployment."
+      })
+    );
+  });
+
   it("rejects invalid app manifests", async () => {
     vi.stubGlobal(
       "fetch",

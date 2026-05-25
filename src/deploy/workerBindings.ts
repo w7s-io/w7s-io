@@ -15,6 +15,13 @@ export type WorkerUploadBinding =
       id: string;
     }
   | {
+      type: "durable_object_namespace";
+      name: string;
+      class_name: string;
+      script_name?: string;
+      environment?: string;
+    }
+  | {
       type: "plain_text";
       name: string;
       text: string;

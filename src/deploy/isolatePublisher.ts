@@ -9,6 +9,7 @@ import {
   requireCloudflareCredentials
 } from "./cloudflareApi";
 import type { WorkerUploadBinding } from "./workerBindings";
+import type { DurableObjectMigrationPlan } from "./storageProvisioner";
 
 type BabelStandaloneApi = {
   transform: (
@@ -23,6 +24,14 @@ type UploadedModule = {
   name: string;
   content: string;
   contentType: string;
+};
+
+type DurableObjectUploadMigrations = {
+  old_tag?: string;
+  new_tag: string;
+  steps: Array<{
+    new_sqlite_classes: string[];
+  }>;
 };
 
 export type IsolatePublishResult = {
@@ -273,12 +282,59 @@ const ensureDispatchNamespace = async (params: {
   await parseCloudflareEnvelope(createResponse);
 };
 
+const readScriptMigrationTag = async (params: {
+  apiToken: string;
+  accountId: string;
+  namespace: string;
+  scriptName: string;
+}) => {
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(params.accountId)}/workers/dispatch/namespaces/${encodeURIComponent(params.namespace)}/scripts/${encodeURIComponent(params.scriptName)}`,
+    {
+      headers: buildCloudflareHeaders(params.apiToken)
+    }
+  );
+  if (response.status === 404) return null;
+  const result = await parseCloudflareEnvelope<{
+    script?: {
+      migration_tag?: string | null;
+    };
+  }>(response);
+  return typeof result?.script?.migration_tag === "string"
+    ? result.script.migration_tag
+    : null;
+};
+
+const buildDurableObjectUploadMigrations = async (params: {
+  apiToken: string;
+  accountId: string;
+  namespace: string;
+  scriptName: string;
+  plan?: DurableObjectMigrationPlan;
+}): Promise<DurableObjectUploadMigrations | undefined> => {
+  if (!params.plan || params.plan.classNames.length === 0) return undefined;
+  const existingTag = await readScriptMigrationTag(params);
+  if (existingTag === params.plan.newTag) return undefined;
+  const classesToCreate = existingTag ? params.plan.newClassNames : params.plan.classNames;
+  if (classesToCreate.length === 0) return undefined;
+  return {
+    ...(existingTag ? { old_tag: existingTag } : {}),
+    new_tag: params.plan.newTag,
+    steps: [
+      {
+        new_sqlite_classes: classesToCreate
+      }
+    ]
+  };
+};
+
 export const publishIsolateWorker = async (params: {
   env: Env;
   archive: DeployArchive;
   scriptName: string;
   entrypoint: string;
   bindings?: WorkerUploadBinding[];
+  durableObjectMigrations?: DurableObjectMigrationPlan;
 }): Promise<IsolatePublishResult> => {
   const { apiToken, accountId } = requireCloudflareCredentials(params.env);
   const namespace =
@@ -299,6 +355,13 @@ export const publishIsolateWorker = async (params: {
     accountId,
     namespace
   });
+  const durableObjectMigrations = await buildDurableObjectUploadMigrations({
+    apiToken,
+    accountId,
+    namespace,
+    scriptName: params.scriptName,
+    plan: params.durableObjectMigrations
+  });
 
   const metadata = {
     main_module: toCloudflareModuleName(entrypoint),
@@ -306,6 +369,7 @@ export const publishIsolateWorker = async (params: {
     ...(workerConfig.compatibilityFlags && workerConfig.compatibilityFlags.length > 0
       ? { compatibility_flags: workerConfig.compatibilityFlags }
       : {}),
+    ...(durableObjectMigrations ? { migrations: durableObjectMigrations } : {}),
     ...(params.bindings && params.bindings.length > 0 ? { bindings: params.bindings } : {})
   };
   const formData = new FormData();

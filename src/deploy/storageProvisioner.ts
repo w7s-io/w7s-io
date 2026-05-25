@@ -2,7 +2,13 @@ import type { Env } from "../env";
 import { sanitizeScriptPart } from "../names";
 import type { DeployArchive } from "./archive";
 import { readTextFile } from "./archive";
-import type { AppManifest, D1BindingDeclaration, KvBindingDeclaration, R2BindingDeclaration } from "./appManifest";
+import type {
+  AppManifest,
+  D1BindingDeclaration,
+  DurableObjectBindingDeclaration,
+  KvBindingDeclaration,
+  R2BindingDeclaration
+} from "./appManifest";
 import { migrationFiles } from "./appManifest";
 import type { DeployValues } from "./deployValues";
 import type { WorkerUploadBinding } from "./workerBindings";
@@ -47,6 +53,12 @@ type D1QueryResult = {
   error?: string;
 };
 
+export type DurableObjectMigrationPlan = {
+  classNames: string[];
+  newClassNames: string[];
+  newTag: string;
+};
+
 const hasStorageBindings = (manifest: AppManifest) =>
   manifest.bindings.kv.length > 0 ||
   manifest.bindings.r2.length > 0 ||
@@ -54,6 +66,7 @@ const hasStorageBindings = (manifest: AppManifest) =>
 
 const hasRuntimeBindings = (manifest: AppManifest, deployValues: DeployValues) =>
   hasStorageBindings(manifest) ||
+  manifest.bindings.durableObjects.length > 0 ||
   Object.keys(deployValues.vars).length > 0 ||
   Object.keys(deployValues.secrets).length > 0;
 
@@ -365,12 +378,53 @@ const d1Name = (
 ) =>
   declaration.name ?? defaultResourceName("d1", orgSlug, repoSlug, environment, declaration.binding);
 
+const uniqueSortedClassNames = (declarations: DurableObjectBindingDeclaration[]) =>
+  [...new Set(declarations.map((declaration) => declaration.className))].sort();
+
+const durableObjectMigrationTag = (classNames: string[]) =>
+  `w7s-do-${shortHash(classNames.join("\0"))}`;
+
+export const storeDurableObjectClassRecords = async (params: {
+  env: Env;
+  orgSlug: string;
+  repoSlug: string;
+  environment: string;
+  classNames: string[];
+}) => {
+  const now = new Date().toISOString();
+  await Promise.all(
+    params.classNames.map(async (className) => {
+      const existing = await loadManagedResourceRecord(
+        params.env,
+        params.environment,
+        params.orgSlug,
+        params.repoSlug,
+        "durable_object",
+        className
+      );
+      await storeManagedResourceRecord(params.env, {
+        version: 1,
+        kind: "durable_object",
+        orgSlug: params.orgSlug,
+        repoSlug: params.repoSlug,
+        environment: params.environment,
+        binding: className,
+        name: className,
+        id: className,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now
+      });
+    })
+  );
+};
+
 export const provisionAppBindings = async (params: ProvisionParams) => {
   const valueBindings = collectRuntimeValues(params);
   if (!hasRuntimeBindings(params.manifest, params.deployValues)) {
     return {
       uploadBindings: [],
-      deploymentBindings: undefined
+      deploymentBindings: undefined,
+      durableObjectMigrations: undefined
     };
   }
 
@@ -464,11 +518,45 @@ export const provisionAppBindings = async (params: ProvisionParams) => {
     });
   }
 
+  const durableObjectClassNames = uniqueSortedClassNames(params.manifest.bindings.durableObjects);
+  const newDurableObjectClassNames: string[] = [];
+  for (const declaration of params.manifest.bindings.durableObjects) {
+    uploadBindings.push({
+      type: "durable_object_namespace",
+      name: declaration.binding,
+      class_name: declaration.className
+    });
+    deploymentBindings.durableObjects ??= [];
+    deploymentBindings.durableObjects.push({
+      binding: declaration.binding,
+      className: declaration.className
+    });
+  }
+  for (const className of durableObjectClassNames) {
+    const existing = await loadManagedResourceRecord(
+      params.env,
+      params.environment,
+      params.orgSlug,
+      params.repoSlug,
+      "durable_object",
+      className
+    );
+    if (!existing) newDurableObjectClassNames.push(className);
+  }
+
   if (valueBindings.vars.length > 0) deploymentBindings.vars = valueBindings.vars;
   if (valueBindings.secrets.length > 0) deploymentBindings.secrets = valueBindings.secrets;
 
   return {
     uploadBindings,
-    deploymentBindings
+    deploymentBindings,
+    durableObjectMigrations:
+      durableObjectClassNames.length > 0
+        ? {
+            classNames: durableObjectClassNames,
+            newClassNames: newDurableObjectClassNames,
+            newTag: durableObjectMigrationTag(durableObjectClassNames)
+          }
+        : undefined
   };
 };

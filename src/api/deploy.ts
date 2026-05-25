@@ -7,7 +7,7 @@ import { detectWorkerEntrypoint, hasNativeWorkerRoot, publishIsolateWorker } fro
 import { hasStaticSite, publishStaticSite } from "../deploy/staticPublisher";
 import { readAppManifest } from "../deploy/appManifest";
 import { readDeployValues } from "../deploy/deployValues";
-import { provisionAppBindings } from "../deploy/storageProvisioner";
+import { provisionAppBindings, storeDurableObjectClassRecords } from "../deploy/storageProvisioner";
 import {
   buildRpcUploadBindings,
   generateRpcToken,
@@ -25,7 +25,7 @@ import {
   planCustomDomainClaims,
   readCustomDomains
 } from "../deploy/customDomains";
-import { buildDeploymentScriptName, requireSlug, resolveEnvironment, sanitizeScriptPart } from "../names";
+import { buildDeploymentScriptName, buildStableScriptName, requireSlug, resolveEnvironment, sanitizeScriptPart } from "../names";
 import {
   replaceCustomDomainMappings,
   replaceQueueMappings,
@@ -139,6 +139,9 @@ export const handleDeploy = async (c: HonoContext) => {
   if (!hasNativeBackend && appManifest.schedules.length > 0) {
     return jsonError("Schedules require a native backend deployment.", 400);
   }
+  if (!hasNativeBackend && appManifest.bindings.durableObjects.length > 0) {
+    return jsonError("Durable Objects require a native backend deployment.", 400);
+  }
 
   const deployedAt = new Date().toISOString();
   const targets: DeploymentRecord["targets"] = {};
@@ -155,7 +158,10 @@ export const handleDeploy = async (c: HonoContext) => {
       if (!entrypoint) {
         return jsonError("Native backend deploy requires worker/index.js, worker/index.mjs, worker/index.ts, worker/index.mts, backend/index.js, backend/index.mjs, backend/index.ts, backend/index.mts, dist/server/index.js, or dist/server/index.mjs.", 400);
       }
-      const scriptName = buildDeploymentScriptName(orgSlug, repoSlug, environment, commitSha);
+      const usesDurableObjects = appManifest.bindings.durableObjects.length > 0;
+      const scriptName = usesDurableObjects
+        ? buildStableScriptName(orgSlug, repoSlug, environment)
+        : buildDeploymentScriptName(orgSlug, repoSlug, environment, commitSha);
       const provisionedBindings = await provisionAppBindings({
         env: c.env,
         archive,
@@ -202,8 +208,18 @@ export const handleDeploy = async (c: HonoContext) => {
         archive,
         scriptName,
         entrypoint,
-        bindings: [...provisionedBindings.uploadBindings, ...rpcBindings, ...queueBindings]
+        bindings: [...provisionedBindings.uploadBindings, ...rpcBindings, ...queueBindings],
+        durableObjectMigrations: provisionedBindings.durableObjectMigrations
       });
+      if (provisionedBindings.durableObjectMigrations) {
+        await storeDurableObjectClassRecords({
+          env: c.env,
+          orgSlug,
+          repoSlug,
+          environment,
+          classNames: provisionedBindings.durableObjectMigrations.classNames
+        });
+      }
       targets.worker = published;
     }
 

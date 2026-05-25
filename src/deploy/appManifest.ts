@@ -23,6 +23,11 @@ export type D1BindingDeclaration = {
   primaryLocationHint?: string;
 };
 
+export type DurableObjectBindingDeclaration = {
+  binding: string;
+  className: string;
+};
+
 export type QueueDeclaration = {
   name: string;
   consumer: string;
@@ -38,6 +43,7 @@ export type AppManifest = {
     kv: KvBindingDeclaration[];
     r2: R2BindingDeclaration[];
     d1: D1BindingDeclaration[];
+    durableObjects: DurableObjectBindingDeclaration[];
   };
   queues: QueueDeclaration[];
   schedules: ScheduleDeclaration[];
@@ -55,7 +61,8 @@ const emptyManifest = (): AppManifest => ({
   bindings: {
     kv: [],
     r2: [],
-    d1: []
+    d1: [],
+    durableObjects: []
   },
   queues: [],
   schedules: [],
@@ -106,6 +113,13 @@ const ensureConsumerPath = (value: unknown, field: string, queueName: string) =>
   if (!trimmed.startsWith("/") || trimmed.startsWith("//")) {
     throw new Error(`${field} must be an absolute path.`);
   }
+  return trimmed;
+};
+
+const ensureClassName = (value: unknown, field: string) => {
+  if (typeof value !== "string") throw new Error(`${field} must be a string.`);
+  const trimmed = value.trim();
+  if (!BINDING_NAME_PATTERN.test(trimmed)) throw new Error(`${field} must be a JavaScript class name.`);
   return trimmed;
 };
 
@@ -161,6 +175,32 @@ const parseD1Bindings = (value: unknown): D1BindingDeclaration[] => {
       jurisdiction,
       primaryLocationHint: optionalString(record.primaryLocationHint ?? record.primary_location_hint, `bindings.d1[${index}].primaryLocationHint`)
     };
+  });
+};
+
+const parseDurableObjectBindings = (value: unknown): DurableObjectBindingDeclaration[] => {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("bindings.durableObjects must be an array.");
+  const seenBindings = new Set<string>();
+  return value.map((entry, index) => {
+    const declaration =
+      typeof entry === "string"
+        ? {
+            binding: ensureBindingName(entry, `bindings.durableObjects[${index}]`),
+            className: ensureClassName(entry, `bindings.durableObjects[${index}]`)
+          }
+        : (() => {
+            const record = asRecord(entry, `bindings.durableObjects[${index}]`);
+            return {
+              binding: ensureBindingName(record.binding, `bindings.durableObjects[${index}].binding`),
+              className: ensureClassName(record.className ?? record.class_name, `bindings.durableObjects[${index}].className`)
+            };
+          })();
+    if (seenBindings.has(declaration.binding)) {
+      throw new Error(`bindings.durableObjects[${index}].binding duplicates ${declaration.binding}.`);
+    }
+    seenBindings.add(declaration.binding);
+    return declaration;
   });
 };
 
@@ -266,7 +306,8 @@ export const readAppManifest = (archive: DeployArchive) => {
     bindings: {
       kv: parseKvBindings(bindings.kv),
       r2: parseR2Bindings(bindings.r2),
-      d1: parseD1Bindings(bindings.d1)
+      d1: parseD1Bindings(bindings.d1),
+      durableObjects: parseDurableObjectBindings(bindings.durableObjects ?? bindings.durable_objects)
     },
     queues: parseQueues(record.queues),
     schedules: parseSchedules(record.schedules),

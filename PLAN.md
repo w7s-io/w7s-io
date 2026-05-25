@@ -43,8 +43,9 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
      - `x-w7s-schedule-time`
 
 2. **Durable Objects**
+   - Status: implemented as the second platform roadmap primitive.
    - Goal: realtime rooms, locks, counters, sessions, WebSocket hubs, and stateful coordination.
-   - Manifest sketch:
+   - Manifest:
      ```json
      {
        "bindings": {
@@ -57,7 +58,10 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
        }
      }
      ```
-   - The first version should bind app-exported Durable Object classes during Worker upload. Migration ergonomics need a careful design before public release.
+   - Native Workers with Durable Objects are uploaded with a stable per-repo/environment script name so DO state survives redeploys.
+   - W7S uploads `durable_object_namespace` bindings for classes exported by the app Worker.
+   - W7S automatically creates SQLite-backed DO classes the first time it sees them.
+   - Renames, transfers, and deletes are intentionally not automated yet.
 
 3. **Hyperdrive**
    - Goal: let apps use external Postgres from Workers.
@@ -110,3 +114,5 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
 - Static-only deployments cannot declare schedules.
 - Docs explain schedule declarations, payloads, headers, and operational limits.
 - Tests cover cron matching, manifest/deploy validation, mapping replacement, and scheduled dispatch.
+- Durable Objects are declared in `w7s.json`, uploaded as Worker metadata bindings, and covered by deploy tests.
+- Durable Object apps use stable script names; non-DO backends keep commit-specific script names.

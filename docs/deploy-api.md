@@ -140,6 +140,12 @@ Example:
         "binding": "DB",
         "migrations": "migrations"
       }
+    ],
+    "durableObjects": [
+      {
+        "binding": "COUNTER",
+        "className": "Counter"
+      }
     ]
   },
   "queues": ["jobs"],
@@ -160,7 +166,7 @@ Example:
 }
 ```
 
-`bindings.kv` entries create Workers KV namespaces. `bindings.r2` entries create R2 buckets. `bindings.d1` entries create D1 databases. String entries use generated resource names; object entries can provide explicit names:
+`bindings.kv` entries create Workers KV namespaces. `bindings.r2` entries create R2 buckets. `bindings.d1` entries create D1 databases. `bindings.durableObjects` entries bind Durable Object classes exported by the native Worker. String storage entries use generated resource names; object entries can provide explicit names:
 
 ```json
 {
@@ -175,6 +181,23 @@ Example:
 Managed storage is scoped to `<environment>/<owner>/<repo>/<binding>`, so redeploys reuse durable resources while non-production branches get separate resources.
 
 D1 migrations are read from the configured migrations directory, sorted by filename, and applied once. W7S tracks applied migration filenames in `_w7s_migrations` inside the app database.
+
+Durable Objects require a native backend deployment. W7S uploads each declaration as a `durable_object_namespace` binding and creates SQLite-backed classes automatically the first time it sees them:
+
+```json
+{
+  "bindings": {
+    "durableObjects": [
+      {
+        "binding": "COUNTER",
+        "className": "Counter"
+      }
+    ]
+  }
+}
+```
+
+The backend must export the class named by `className`. DO-enabled apps use a stable per-repo/environment Worker script name so Durable Object state survives redeploys. W7S does not automate DO class renames, transfers, or deletes yet.
 
 `rpc.allow` is optional. Same-owner backend-to-backend calls are allowed by default. Cross-owner calls are accepted only when the target app lists the caller GitHub owner or exact `owner/repo`.
 
@@ -485,6 +508,8 @@ For same-name repos, the public URL is the org root. A deploy from `guerrerocarl
   - Archive does not contain a deployable root.
 - `400 Native backend deploy requires ...`
   - `backend/` or `worker/` exists but no supported `index.*` entrypoint exists.
+- `400 Durable Objects require a native backend deployment.`
+  - `w7s.json` declares `bindings.durableObjects`, but the archive only contains static frontend output.
 - `400 Schedules require a native backend deployment.`
   - `w7s.json` declares `schedules`, but the archive only contains static frontend output.
 - `400 Invalid custom domain in CNAME file`

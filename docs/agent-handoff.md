@@ -9,12 +9,13 @@ As of the latest docs update:
 - The Worker route `*.w7s.cloud/*` is attached by the deploy workflow.
 - Wildcard DNS is expected to be managed manually.
 - `backend/`, `worker/`, and static frontend deploys are supported.
-- Native backends can declare per-app KV, R2, D1, queues, schedules, vars, and secrets in `w7s.json`.
+- Native backends can declare per-app KV, R2, D1, Durable Objects, queues, schedules, vars, and secrets in `w7s.json`.
 - Native backends receive `W7S_RPC`, `W7S_RPC_TOKEN`, and W7S metadata vars for backend-to-backend RPC.
 - Same-owner RPC is allowed by default; cross-owner RPC requires the target app to list allowed owners or repos in `w7s.json` under `rpc.allow`.
 - Native backends receive `W7S_QUEUE` and `W7S_QUEUE_TOKEN` for queue sends through `/api/v1/queues/<owner>/<repo>/<queue>`.
 - Same-owner queue sends are allowed by default; cross-owner sends require the target app to list allowed owners or repos in `w7s.json` under `queue.allow`.
 - Schedules are declared with `schedules` in `w7s.json`; W7S core runs a per-minute Cloudflare cron trigger and dispatches due schedules to native backend paths.
+- Durable Objects are declared with `bindings.durableObjects` in `w7s.json`; W7S uploads the binding metadata and initial SQLite-backed class migrations.
 - Root `CNAME` files can attach app custom-domain routes when the W7S token can manage that Cloudflare zone.
 - Custom domains use soft TXT verification: the first claim works without TXT, `_w7s.<zone>` becomes an owner/repo allowlist when present, and hostname conflicts require TXT authorization.
 - Empty org roots such as `https://sadasant.w7s.cloud/` show deploy-help HTML instead of a plain 404.
@@ -39,6 +40,7 @@ The point of this repo is to keep the core deploy/routing plane small.
 - W7S does not build user repos. CI must upload ready-to-run files.
 - Native backend deploy supports only relative local imports.
 - Managed storage is provisioned per repository/environment and reused across redeploys.
+- Durable Object apps use stable per-repository/environment script names so DO state survives redeploys. DO class renames, transfers, and deletes are not automated yet.
 - Queues are provisioned per repository/environment and delivered through W7S core to app HTTP consumer routes.
 - Schedules are delivered through W7S core to app HTTP consumer routes. They currently use best-effort KV locks to avoid duplicate schedule/time dispatches.
 - Static hosting supports `frontend/dist`, `dist/client`, `dist`, `build`, and `out`.

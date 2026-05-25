@@ -92,11 +92,15 @@ export type DeploymentBindings = {
     databaseId: string;
     migrationsApplied?: number;
   }>;
+  durableObjects?: Array<{
+    binding: string;
+    className: string;
+  }>;
   vars?: string[];
   secrets?: string[];
 };
 
-export type ManagedResourceKind = "kv" | "r2" | "d1" | "queue";
+export type ManagedResourceKind = "kv" | "r2" | "d1" | "queue" | "durable_object";
 
 export type ManagedResourceRecord = {
   version: 1;

@@ -11,7 +11,7 @@ This repo contains the public W7S worker, deploy API, runtime router, and storag
 - deployments are authorized by the GitHub token's access to the source repo;
 - `worker/` or `backend/` apps publish to Workers for Platforms;
 - Cloudflare-style SSR output in `dist/server` plus assets in `dist/client` is supported;
-- `w7s.json` can declare per-app KV, R2, D1, queues, schedules, vars, and secrets for native backends;
+- `w7s.json` can declare per-app KV, R2, D1, Durable Objects, queues, schedules, vars, and secrets for native backends;
 - native backends receive internal `W7S_RPC` and `W7S_QUEUE` service bindings for backend-to-backend calls and queue sends;
 - static frontend assets publish to R2 and are served from `https://<org>.w7s.cloud/<repo>/*`.
 - same-name repos such as `github.com/<org>/<org>` can serve directly from `https://<org>.w7s.cloud/*`.
@@ -102,7 +102,13 @@ Optional app manifest:
   "bindings": {
     "kv": ["CACHE"],
     "r2": ["FILES"],
-    "d1": [{ "binding": "DB", "migrations": "migrations" }]
+    "d1": [{ "binding": "DB", "migrations": "migrations" }],
+    "durableObjects": [
+      {
+        "binding": "COUNTER",
+        "className": "Counter"
+      }
+    ]
   },
   "queues": ["jobs"],
   "schedules": [
@@ -122,7 +128,9 @@ Optional app manifest:
 }
 ```
 
-Managed storage, queues, and schedules are scoped by repository and environment, so a production deploy and a feature-branch deploy receive separate durable resources. D1 migration files are applied once in sorted order and tracked in the app database.
+Managed storage, Durable Objects, queues, and schedules are scoped by repository and environment, so a production deploy and a feature-branch deploy receive separate durable resources. D1 migration files are applied once in sorted order and tracked in the app database.
+
+Durable Object apps must export the declared classes from the native Worker bundle. W7S uploads them as `durable_object_namespace` bindings and creates SQLite-backed classes automatically the first time they appear.
 
 Native backends automatically receive `W7S_RPC`, `W7S_RPC_TOKEN`, `W7S_OWNER`, `W7S_REPO`, `W7S_REPOSITORY`, and `W7S_ENVIRONMENT`. Same-owner apps can call each other by default. Cross-owner calls are accepted only when the target deployment's `w7s.json` lists the caller owner or exact `owner/repo` in `rpc.allow`.
 
