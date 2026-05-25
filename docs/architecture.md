@@ -62,6 +62,9 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
 - `src/runtime/queueDelivery.ts`
   - Receives Cloudflare Queue batches in the W7S core Worker.
   - Dispatches queue batches to target app consumer routes.
+- `src/runtime/scheduleDelivery.ts`
+  - Receives Cloudflare scheduled events in the W7S core Worker.
+  - Evaluates deployed app schedules and dispatches due jobs to target app routes.
 - `src/deploy/staticPublisher.ts`
   - Publishes detected static frontend output files to R2.
   - Stores a static manifest in KV.
@@ -127,6 +130,15 @@ POST env.W7S_QUEUE.fetch("/api/v1/queues/<owner>/<repo>/<queue>")
   -> receive the batch in W7S core and dispatch to the target consumer route
 ```
 
+```text
+Cloudflare scheduled event
+  -> W7S core runs once per minute
+  -> scan deployed schedule mappings
+  -> match five-field cron expressions against the scheduled minute
+  -> acquire a short KV lock for schedule/time
+  -> dispatch due jobs to native Worker schedule paths
+```
+
 ## Compatibility Choices
 
 - `worker/` and `backend/` are both accepted as native backend roots.
@@ -139,3 +151,4 @@ POST env.W7S_QUEUE.fetch("/api/v1/queues/<owner>/<repo>/<queue>")
 - Per-app storage is stable across redeploys for the same repository and environment. New commits reuse the same managed KV/R2/D1 resources.
 - Backend-to-backend RPC is routed through the core Worker service binding. It does not expose target Workers directly, and cross-owner calls are opt-in through the target app's `w7s.json`.
 - Queues are app-owned, environment-scoped Cloudflare Queues. Apps send through `W7S_QUEUE`; W7S core owns queue provisioning and delivery dispatch.
+- Schedules are environment-scoped path consumers. W7S core owns the Cloudflare cron trigger and dispatches due jobs to native Workers.

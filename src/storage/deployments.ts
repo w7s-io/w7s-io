@@ -33,6 +33,7 @@ export type DeploymentRecord = {
   bindings?: DeploymentBindings;
   rpc?: DeploymentRpc;
   queue?: DeploymentQueueConfig;
+  schedules?: DeploymentSchedule[];
   targets: {
     worker?: {
       namespace: string;
@@ -68,6 +69,11 @@ export type DeploymentQueue = {
   queueName: string;
   queueId: string;
   consumer: string;
+};
+
+export type DeploymentSchedule = {
+  cron: string;
+  path: string;
 };
 
 export type DeploymentBindings = {
@@ -128,6 +134,27 @@ export type QueueMapping = {
   deployedAt: string;
 };
 
+export type ScheduleMapping = {
+  version: 1;
+  id: string;
+  cron: string;
+  path: string;
+  orgSlug: string;
+  repoSlug: string;
+  environment: string;
+  repository: string;
+  deployedAt: string;
+};
+
+const shortHash = (value: string) => {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36).padStart(7, "0").slice(0, 7);
+};
+
 export const deploymentKey = (environment: string, orgSlug: string, repoSlug: string) =>
   `deployment:v1:${sanitizeScriptPart(environment)}:${sanitizeScriptPart(orgSlug)}:${sanitizeScriptPart(repoSlug)}`;
 
@@ -144,6 +171,23 @@ export const customDomainKey = (hostname: string) =>
 
 export const queueMappingKey = (queueName: string) =>
   `queue_mapping:v1:${queueName.trim().toLowerCase()}`;
+
+export const scheduleMappingId = (
+  record: Pick<DeploymentRecord, "environment" | "orgSlug" | "repoSlug">,
+  schedule: DeploymentSchedule
+) =>
+  [
+    sanitizeScriptPart(record.environment),
+    sanitizeScriptPart(record.orgSlug),
+    sanitizeScriptPart(record.repoSlug),
+    shortHash(`${schedule.cron}\0${schedule.path}`)
+  ].join(":");
+
+export const scheduleMappingKey = (id: string) =>
+  `schedule_mapping:v1:${id}`;
+
+export const scheduleLockKey = (id: string, scheduledMinute: string) =>
+  `schedule_lock:v1:${id}:${sanitizeScriptPart(scheduledMinute)}`;
 
 export const managedResourceKey = (
   environment: string,
@@ -325,6 +369,97 @@ export const loadQueueMapping = async (env: Env, queueName: string) => {
   const mapping = raw as Partial<QueueMapping>;
   if (mapping.version !== 1 || typeof mapping.queueName !== "string") return null;
   return mapping as QueueMapping;
+};
+
+export const storeScheduleMappings = async (
+  env: Env,
+  record: DeploymentRecord,
+  schedules: DeploymentSchedule[]
+) => {
+  await Promise.all(
+    schedules.map((schedule) => {
+      const id = scheduleMappingId(record, schedule);
+      return env.DEPLOYMENTS_KV.put(
+        scheduleMappingKey(id),
+        JSON.stringify({
+          version: 1,
+          id,
+          cron: schedule.cron,
+          path: schedule.path,
+          orgSlug: record.orgSlug,
+          repoSlug: record.repoSlug,
+          environment: record.environment,
+          repository: record.repository,
+          deployedAt: record.deployedAt
+        } satisfies ScheduleMapping)
+      );
+    })
+  );
+};
+
+export const replaceScheduleMappings = async (
+  env: Env,
+  record: DeploymentRecord,
+  schedules: DeploymentSchedule[]
+) => {
+  const wanted = new Set(schedules.map((schedule) => scheduleMappingId(record, schedule)));
+  let cursor: string | undefined;
+  do {
+    const listed = await env.DEPLOYMENTS_KV.list({
+      prefix: "schedule_mapping:v1:",
+      cursor
+    });
+    await Promise.all(
+      listed.keys.map(async (entry) => {
+        const raw = await env.DEPLOYMENTS_KV.get(entry.name, "json");
+        if (!raw || typeof raw !== "object") return;
+        const mapping = raw as Partial<ScheduleMapping>;
+        if (
+          mapping.version !== 1 ||
+          mapping.orgSlug !== record.orgSlug ||
+          mapping.repoSlug !== record.repoSlug ||
+          mapping.environment !== record.environment ||
+          !mapping.id ||
+          wanted.has(mapping.id)
+        ) {
+          return;
+        }
+        await env.DEPLOYMENTS_KV.delete(entry.name);
+      })
+    );
+    cursor = listed.list_complete ? undefined : listed.cursor;
+  } while (cursor);
+
+  await storeScheduleMappings(env, record, schedules);
+};
+
+export const listScheduleMappings = async (env: Env) => {
+  const mappings: ScheduleMapping[] = [];
+  let cursor: string | undefined;
+  do {
+    const listed = await env.DEPLOYMENTS_KV.list({
+      prefix: "schedule_mapping:v1:",
+      cursor
+    });
+    await Promise.all(
+      listed.keys.map(async (entry) => {
+        const raw = await env.DEPLOYMENTS_KV.get(entry.name, "json");
+        if (!raw || typeof raw !== "object") return;
+        const mapping = raw as Partial<ScheduleMapping>;
+        if (
+          mapping.version !== 1 ||
+          typeof mapping.id !== "string" ||
+          typeof mapping.cron !== "string" ||
+          typeof mapping.path !== "string"
+        ) {
+          return;
+        }
+        mappings.push(mapping as ScheduleMapping);
+      })
+    );
+    cursor = listed.list_complete ? undefined : listed.cursor;
+  } while (cursor);
+  return mappings;
 };
 
 export const storeManagedResourceRecord = async (

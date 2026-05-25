@@ -6,6 +6,7 @@ const zoneName = process.env.W7S_ZONE_NAME?.trim() || "w7s.cloud";
 const deploymentsKvName = process.env.W7S_DEPLOYMENTS_KV_NAME?.trim() || "w7s-io-deployments";
 const staticBucketName = process.env.W7S_STATIC_ASSETS_BUCKET?.trim() || "w7s-io-static-assets";
 const dispatchNamespace = process.env.W7S_DISPATCH_NAMESPACE?.trim() || "w7s-isolate";
+const scheduleCron = process.env.W7S_CORE_CRON?.trim() || "* * * * *";
 const attachWildcardRoute = /^(1|true|yes|on)$/i.test(
   process.env.W7S_ATTACH_WILDCARD_ROUTE?.trim() || ""
 );
@@ -131,6 +132,9 @@ const config = {
   main: "src/worker.ts",
   compatibility_date: compatibilityDate,
   workers_dev: true,
+  triggers: {
+    crons: [scheduleCron]
+  },
   vars: {
     W7S_BASE_DOMAIN: zoneName,
     W7S_WORKER_NAME: workerName,
@@ -188,6 +192,7 @@ console.log(
       deploymentsKvId: kvNamespaceId,
       staticBucketName,
       dispatchNamespace,
+      scheduleCron,
       attachWildcardRoute,
       routeManagement: "post-deploy"
     },

@@ -80,6 +80,7 @@ The generated config includes:
 - `STATIC_ASSETS`;
 - `DISPATCHER`;
 - runtime vars such as `W7S_BASE_DOMAIN`, `W7S_WORKER_NAME`, `APP_COMMIT_ID`, `APP_DEPLOY_BRANCH`, and `APP_DEPLOYED_AT`;
+- a per-minute core Cron Trigger used to dispatch app-declared schedules;
 - Worker secrets needed for user deploys.
 
 Routes are reconciled after `wrangler deploy` instead of being managed by the generated Wrangler config. This prevents core deploys from deleting W7S app custom-domain routes such as `community.w7s.io/*`.

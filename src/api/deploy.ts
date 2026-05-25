@@ -29,6 +29,7 @@ import { buildDeploymentScriptName, requireSlug, resolveEnvironment, sanitizeScr
 import {
   replaceCustomDomainMappings,
   replaceQueueMappings,
+  replaceScheduleMappings,
   storeDeploymentRecord,
   type DeploymentRecord
 } from "../storage/deployments";
@@ -134,6 +135,9 @@ export const handleDeploy = async (c: HonoContext) => {
   }
   if (!hasNativeBackend && appManifest.queues.length > 0) {
     return jsonError("Queues require a native backend deployment.", 400);
+  }
+  if (!hasNativeBackend && appManifest.schedules.length > 0) {
+    return jsonError("Schedules require a native backend deployment.", 400);
   }
 
   const deployedAt = new Date().toISOString();
@@ -250,11 +254,13 @@ export const handleDeploy = async (c: HonoContext) => {
     ...(deploymentBindings ? { bindings: deploymentBindings } : {}),
     ...(deploymentRpc ? { rpc: deploymentRpc } : {}),
     ...(deploymentQueue ? { queue: deploymentQueue } : {}),
+    ...(appManifest.schedules.length > 0 ? { schedules: appManifest.schedules } : {}),
     targets
   };
   await storeDeploymentRecord(c.env, record);
   await replaceCustomDomainMappings(c.env, record, attachedCustomDomains);
   await replaceQueueMappings(c.env, record, record.queue?.queues ?? []);
+  await replaceScheduleMappings(c.env, record, record.schedules ?? []);
   if (attachedCustomDomains.length > 0) {
     try {
       await attachCustomDomainRoutes(c.env, attachedCustomDomains);

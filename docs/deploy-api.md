@@ -143,6 +143,12 @@ Example:
     ]
   },
   "queues": ["jobs"],
+  "schedules": [
+    {
+      "cron": "*/5 * * * *",
+      "path": "/_w7s/schedules/sync"
+    }
+  ],
   "vars": ["PUBLIC_API_KEY"],
   "secrets": ["PRIVATE_API_KEY"],
   "queue": {
@@ -187,6 +193,38 @@ D1 migrations are read from the configured migrations directory, sorted by filen
 ```
 
 `queue.allow` is optional. Same-owner queue sends are allowed by default. Cross-owner sends are accepted only when the target app lists the caller GitHub owner or exact `owner/repo`.
+
+`schedules` declares cron-driven backend jobs. Each schedule has a five-field UTC cron expression and an absolute backend path:
+
+```json
+{
+  "schedules": [
+    {
+      "cron": "*/5 * * * *",
+      "path": "/_w7s/schedules/sync"
+    }
+  ]
+}
+```
+
+Cron fields support `*`, `*/n`, numeric values, lists, and ranges with optional steps. Schedules require a native backend deployment. W7S core receives a per-minute Cloudflare scheduled event, matches app schedules against that scheduled minute, and dispatches due jobs to the configured path with a JSON payload:
+
+```json
+{
+  "schedule": "*/5 * * * *",
+  "scheduledTime": "2026-05-25T12:00:00.000Z",
+  "repository": "owner/repo",
+  "environment": "production"
+}
+```
+
+The schedule dispatch includes these headers:
+
+```text
+x-w7s-schedule: 1
+x-w7s-schedule-cron: <cron>
+x-w7s-schedule-time: <scheduled-minute-iso>
+```
 
 The `CNAME` file should contain one hostname, for example:
 
@@ -447,6 +485,8 @@ For same-name repos, the public URL is the org root. A deploy from `guerrerocarl
   - Archive does not contain a deployable root.
 - `400 Native backend deploy requires ...`
   - `backend/` or `worker/` exists but no supported `index.*` entrypoint exists.
+- `400 Schedules require a native backend deployment.`
+  - `w7s.json` declares `schedules`, but the archive only contains static frontend output.
 - `400 Invalid custom domain in CNAME file`
   - A `CNAME` file does not contain a valid hostname.
 - `200 success` with `blockedCustomDomains`

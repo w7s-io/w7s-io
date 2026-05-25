@@ -1,4 +1,5 @@
 import { normalizeArchivePath, readTextFile, type DeployArchive } from "./archive";
+import { normalizeCronExpression } from "../cron";
 
 const BINDING_NAME_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -27,6 +28,11 @@ export type QueueDeclaration = {
   consumer: string;
 };
 
+export type ScheduleDeclaration = {
+  cron: string;
+  path: string;
+};
+
 export type AppManifest = {
   bindings: {
     kv: KvBindingDeclaration[];
@@ -34,6 +40,7 @@ export type AppManifest = {
     d1: D1BindingDeclaration[];
   };
   queues: QueueDeclaration[];
+  schedules: ScheduleDeclaration[];
   vars: string[];
   secrets: string[];
   queue: {
@@ -51,6 +58,7 @@ const emptyManifest = (): AppManifest => ({
     d1: []
   },
   queues: [],
+  schedules: [],
   vars: [],
   secrets: [],
   queue: {
@@ -93,6 +101,15 @@ const ensureQueueName = (value: unknown, field: string) => {
 
 const ensureConsumerPath = (value: unknown, field: string, queueName: string) => {
   if (value === undefined) return `/_w7s/queues/${queueName}`;
+  if (typeof value !== "string") throw new Error(`${field} must be a string.`);
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) {
+    throw new Error(`${field} must be an absolute path.`);
+  }
+  return trimmed;
+};
+
+const ensureSchedulePath = (value: unknown, field: string) => {
   if (typeof value !== "string") throw new Error(`${field} must be a string.`);
   const trimmed = value.trim();
   if (!trimmed.startsWith("/") || trimmed.startsWith("//")) {
@@ -197,6 +214,26 @@ const parseQueues = (value: unknown): QueueDeclaration[] => {
   });
 };
 
+const parseSchedules = (value: unknown): ScheduleDeclaration[] => {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("schedules must be an array.");
+  const seen = new Set<string>();
+  return value.map((entry, index) => {
+    const record = asRecord(entry, `schedules[${index}]`);
+    if (typeof record.cron !== "string") {
+      throw new Error(`schedules[${index}].cron must be a string.`);
+    }
+    const declaration = {
+      cron: normalizeCronExpression(record.cron),
+      path: ensureSchedulePath(record.path, `schedules[${index}].path`)
+    };
+    const key = `${declaration.cron}\0${declaration.path}`;
+    if (seen.has(key)) throw new Error(`schedules[${index}] duplicates ${declaration.cron} ${declaration.path}.`);
+    seen.add(key);
+    return declaration;
+  });
+};
+
 const parseQueue = (value: unknown) => {
   if (value === undefined) return { allow: [] };
   const record = asRecord(value, "queue");
@@ -232,6 +269,7 @@ export const readAppManifest = (archive: DeployArchive) => {
       d1: parseD1Bindings(bindings.d1)
     },
     queues: parseQueues(record.queues),
+    schedules: parseSchedules(record.schedules),
     vars: parseEnvNames(record.vars, "vars"),
     secrets: parseEnvNames(record.secrets, "secrets"),
     queue: parseQueue(record.queue),

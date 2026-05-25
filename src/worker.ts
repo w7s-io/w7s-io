@@ -5,6 +5,7 @@ import { handleRpc } from "./api/rpc";
 import { handleQueueSend } from "./api/queues";
 import { json } from "./http";
 import { handleQueueBatch } from "./runtime/queueDelivery";
+import { handleScheduled } from "./runtime/scheduleDelivery";
 import { resolveRuntimeRequest } from "./runtime/router";
 import { landingHtml } from "./static/landing";
 
@@ -46,5 +47,6 @@ app.all("*", async (c) => {
 
 export default {
   fetch: app.fetch,
-  queue: handleQueueBatch
+  queue: handleQueueBatch,
+  scheduled: handleScheduled
 };
