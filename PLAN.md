@@ -9,7 +9,7 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
 - GitHub Actions deploy archives through `w7s-io/w7s-cloud@v1`.
 - Native backends deploy into a Workers for Platforms dispatch namespace.
 - Static assets deploy to R2 and route through the W7S core Worker.
-- `w7s.json` can declare KV, R2, D1, queues, schedules, vars, secrets, RPC allowlists, and queue allowlists.
+- `w7s.json` can declare KV, R2, D1, Durable Objects, Hyperdrive, queues, schedules, vars, secrets, RPC allowlists, and queue allowlists.
 - RPC and Queue sends use internal service bindings because W7S app Workers are dispatch-namespace scripts, not ordinary account-level Workers.
 
 ## Implementation Order
@@ -64,8 +64,9 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
    - Renames, transfers, and deletes are intentionally not automated yet.
 
 3. **Hyperdrive**
+   - Status: implemented as a user-provided binding primitive.
    - Goal: let apps use external Postgres from Workers.
-   - Manifest sketch:
+   - Manifest:
      ```json
      {
        "bindings": {
@@ -78,7 +79,8 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
        }
      }
      ```
-   - Start with user-provided Cloudflare Hyperdrive IDs. Managed creation can come later.
+   - W7S uploads `hyperdrive` Worker bindings using user-provided Cloudflare Hyperdrive IDs.
+   - Managed Hyperdrive creation can come later.
 
 4. **Analytics Engine**
    - Goal: collect per-app deploy, request, RPC, queue, schedule, and platform usage metrics.
@@ -116,3 +118,4 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
 - Tests cover cron matching, manifest/deploy validation, mapping replacement, and scheduled dispatch.
 - Durable Objects are declared in `w7s.json`, uploaded as Worker metadata bindings, and covered by deploy tests.
 - Durable Object apps use stable script names; non-DO backends keep commit-specific script names.
+- Hyperdrive bindings are declared in `w7s.json`, uploaded as Worker metadata bindings, and covered by deploy tests.

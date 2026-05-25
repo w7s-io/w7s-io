@@ -50,7 +50,7 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
 - `src/deploy/storageProvisioner.ts`
   - Creates or reuses per-app KV namespaces, R2 buckets, and D1 databases.
   - Applies D1 migrations declared by the app manifest.
-  - Builds Worker upload metadata bindings for storage, Durable Objects, vars, and secrets.
+  - Builds Worker upload metadata bindings for storage, Durable Objects, Hyperdrive, vars, and secrets.
   - Tracks DO classes that have already been created for a repo/environment.
 - `src/deploy/queueProvisioner.ts`
   - Creates or reuses per-app Cloudflare Queues.
@@ -151,6 +151,7 @@ Cloudflare scheduled event
 - Bare package imports inside native backend code are not supported by deploy-time publishing. Repos should upload bundled code or use relative local modules only.
 - Per-app storage is stable across redeploys for the same repository and environment. New commits reuse the same managed KV/R2/D1 resources.
 - Durable Object apps use stable script names for the same repository and environment. W7S auto-creates new SQLite-backed classes, but it does not automate DO renames, transfers, or deletes yet.
+- Hyperdrive bindings use user-provided Cloudflare Hyperdrive config IDs. W7S does not create or rotate Hyperdrive configs yet.
 - Backend-to-backend RPC is routed through the core Worker service binding. It does not expose target Workers directly, and cross-owner calls are opt-in through the target app's `w7s.json`.
 - Queues are app-owned, environment-scoped Cloudflare Queues. Apps send through `W7S_QUEUE`; W7S core owns queue provisioning and delivery dispatch.
 - Schedules are environment-scoped path consumers. W7S core owns the Cloudflare cron trigger and dispatches due jobs to native Workers.

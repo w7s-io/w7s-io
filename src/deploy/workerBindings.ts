@@ -22,6 +22,11 @@ export type WorkerUploadBinding =
       environment?: string;
     }
   | {
+      type: "hyperdrive";
+      name: string;
+      id: string;
+    }
+  | {
       type: "plain_text";
       name: string;
       text: string;

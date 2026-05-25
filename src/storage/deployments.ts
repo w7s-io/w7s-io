@@ -96,6 +96,10 @@ export type DeploymentBindings = {
     binding: string;
     className: string;
   }>;
+  hyperdrive?: Array<{
+    binding: string;
+    id: string;
+  }>;
   vars?: string[];
   secrets?: string[];
 };

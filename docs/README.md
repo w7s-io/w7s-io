@@ -19,7 +19,7 @@ Start here:
 - GitHub Actions uploads full repo zip archives to `POST /api/v1/deploy`;
 - deploy auth is the caller's GitHub token checked against the source repo;
 - `backend/` or `worker/` is published as a native Workers for Platforms user Worker;
-- optional `w7s.json` manifests declare per-app KV, R2, D1, Durable Objects, queues, schedules, vars, and secrets;
+- optional `w7s.json` manifests declare per-app KV, R2, D1, Durable Objects, Hyperdrive, queues, schedules, vars, and secrets;
 - native backends receive `W7S_RPC` and `W7S_QUEUE` service bindings through the core;
 - static frontend output is published to R2 and served as static assets;
 - public repo apps are routed as `https://<org>.w7s.cloud/<repo>/*`;

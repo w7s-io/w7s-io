@@ -142,6 +142,9 @@ export const handleDeploy = async (c: HonoContext) => {
   if (!hasNativeBackend && appManifest.bindings.durableObjects.length > 0) {
     return jsonError("Durable Objects require a native backend deployment.", 400);
   }
+  if (!hasNativeBackend && appManifest.bindings.hyperdrive.length > 0) {
+    return jsonError("Hyperdrive bindings require a native backend deployment.", 400);
+  }
 
   const deployedAt = new Date().toISOString();
   const targets: DeploymentRecord["targets"] = {};

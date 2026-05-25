@@ -28,6 +28,11 @@ export type DurableObjectBindingDeclaration = {
   className: string;
 };
 
+export type HyperdriveBindingDeclaration = {
+  binding: string;
+  id: string;
+};
+
 export type QueueDeclaration = {
   name: string;
   consumer: string;
@@ -44,6 +49,7 @@ export type AppManifest = {
     r2: R2BindingDeclaration[];
     d1: D1BindingDeclaration[];
     durableObjects: DurableObjectBindingDeclaration[];
+    hyperdrive: HyperdriveBindingDeclaration[];
   };
   queues: QueueDeclaration[];
   schedules: ScheduleDeclaration[];
@@ -62,7 +68,8 @@ const emptyManifest = (): AppManifest => ({
     kv: [],
     r2: [],
     d1: [],
-    durableObjects: []
+    durableObjects: [],
+    hyperdrive: []
   },
   queues: [],
   schedules: [],
@@ -120,6 +127,13 @@ const ensureClassName = (value: unknown, field: string) => {
   if (typeof value !== "string") throw new Error(`${field} must be a string.`);
   const trimmed = value.trim();
   if (!BINDING_NAME_PATTERN.test(trimmed)) throw new Error(`${field} must be a JavaScript class name.`);
+  return trimmed;
+};
+
+const ensureNonEmptyString = (value: unknown, field: string) => {
+  if (typeof value !== "string") throw new Error(`${field} must be a string.`);
+  const trimmed = value.trim();
+  if (!trimmed) throw new Error(`${field} must not be empty.`);
   return trimmed;
 };
 
@@ -198,6 +212,24 @@ const parseDurableObjectBindings = (value: unknown): DurableObjectBindingDeclara
           })();
     if (seenBindings.has(declaration.binding)) {
       throw new Error(`bindings.durableObjects[${index}].binding duplicates ${declaration.binding}.`);
+    }
+    seenBindings.add(declaration.binding);
+    return declaration;
+  });
+};
+
+const parseHyperdriveBindings = (value: unknown): HyperdriveBindingDeclaration[] => {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("bindings.hyperdrive must be an array.");
+  const seenBindings = new Set<string>();
+  return value.map((entry, index) => {
+    const record = asRecord(entry, `bindings.hyperdrive[${index}]`);
+    const declaration = {
+      binding: ensureBindingName(record.binding, `bindings.hyperdrive[${index}].binding`),
+      id: ensureNonEmptyString(record.id, `bindings.hyperdrive[${index}].id`)
+    };
+    if (seenBindings.has(declaration.binding)) {
+      throw new Error(`bindings.hyperdrive[${index}].binding duplicates ${declaration.binding}.`);
     }
     seenBindings.add(declaration.binding);
     return declaration;
@@ -307,7 +339,8 @@ export const readAppManifest = (archive: DeployArchive) => {
       kv: parseKvBindings(bindings.kv),
       r2: parseR2Bindings(bindings.r2),
       d1: parseD1Bindings(bindings.d1),
-      durableObjects: parseDurableObjectBindings(bindings.durableObjects ?? bindings.durable_objects)
+      durableObjects: parseDurableObjectBindings(bindings.durableObjects ?? bindings.durable_objects),
+      hyperdrive: parseHyperdriveBindings(bindings.hyperdrive)
     },
     queues: parseQueues(record.queues),
     schedules: parseSchedules(record.schedules),

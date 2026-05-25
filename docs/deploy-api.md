@@ -146,6 +146,12 @@ Example:
         "binding": "COUNTER",
         "className": "Counter"
       }
+    ],
+    "hyperdrive": [
+      {
+        "binding": "DB",
+        "id": "cloudflare-hyperdrive-id"
+      }
     ]
   },
   "queues": ["jobs"],
@@ -166,7 +172,7 @@ Example:
 }
 ```
 
-`bindings.kv` entries create Workers KV namespaces. `bindings.r2` entries create R2 buckets. `bindings.d1` entries create D1 databases. `bindings.durableObjects` entries bind Durable Object classes exported by the native Worker. String storage entries use generated resource names; object entries can provide explicit names:
+`bindings.kv` entries create Workers KV namespaces. `bindings.r2` entries create R2 buckets. `bindings.d1` entries create D1 databases. `bindings.durableObjects` entries bind Durable Object classes exported by the native Worker. `bindings.hyperdrive` entries bind existing Cloudflare Hyperdrive configurations by ID. String storage entries use generated resource names; object entries can provide explicit names:
 
 ```json
 {
@@ -198,6 +204,23 @@ Durable Objects require a native backend deployment. W7S uploads each declaratio
 ```
 
 The backend must export the class named by `className`. DO-enabled apps use a stable per-repo/environment Worker script name so Durable Object state survives redeploys. W7S does not automate DO class renames, transfers, or deletes yet.
+
+Hyperdrive bindings require a native backend deployment and an existing Cloudflare Hyperdrive config ID:
+
+```json
+{
+  "bindings": {
+    "hyperdrive": [
+      {
+        "binding": "DB",
+        "id": "cloudflare-hyperdrive-id"
+      }
+    ]
+  }
+}
+```
+
+W7S uploads those declarations as `hyperdrive` Worker bindings. It does not create Hyperdrive configs or rotate database credentials yet. Apps using common Postgres drivers usually need a bundled backend and Node.js compatibility flags from `dist/server/wrangler.json`.
 
 `rpc.allow` is optional. Same-owner backend-to-backend calls are allowed by default. Cross-owner calls are accepted only when the target app lists the caller GitHub owner or exact `owner/repo`.
 
@@ -510,6 +533,8 @@ For same-name repos, the public URL is the org root. A deploy from `guerrerocarl
   - `backend/` or `worker/` exists but no supported `index.*` entrypoint exists.
 - `400 Durable Objects require a native backend deployment.`
   - `w7s.json` declares `bindings.durableObjects`, but the archive only contains static frontend output.
+- `400 Hyperdrive bindings require a native backend deployment.`
+  - `w7s.json` declares `bindings.hyperdrive`, but the archive only contains static frontend output.
 - `400 Schedules require a native backend deployment.`
   - `w7s.json` declares `schedules`, but the archive only contains static frontend output.
 - `400 Invalid custom domain in CNAME file`

@@ -6,6 +6,7 @@ import type {
   AppManifest,
   D1BindingDeclaration,
   DurableObjectBindingDeclaration,
+  HyperdriveBindingDeclaration,
   KvBindingDeclaration,
   R2BindingDeclaration
 } from "./appManifest";
@@ -67,6 +68,7 @@ const hasStorageBindings = (manifest: AppManifest) =>
 const hasRuntimeBindings = (manifest: AppManifest, deployValues: DeployValues) =>
   hasStorageBindings(manifest) ||
   manifest.bindings.durableObjects.length > 0 ||
+  manifest.bindings.hyperdrive.length > 0 ||
   Object.keys(deployValues.vars).length > 0 ||
   Object.keys(deployValues.secrets).length > 0;
 
@@ -378,6 +380,12 @@ const d1Name = (
 ) =>
   declaration.name ?? defaultResourceName("d1", orgSlug, repoSlug, environment, declaration.binding);
 
+const hyperdriveBinding = (declaration: HyperdriveBindingDeclaration): WorkerUploadBinding => ({
+  type: "hyperdrive",
+  name: declaration.binding,
+  id: declaration.id
+});
+
 const uniqueSortedClassNames = (declarations: DurableObjectBindingDeclaration[]) =>
   [...new Set(declarations.map((declaration) => declaration.className))].sort();
 
@@ -515,6 +523,15 @@ export const provisionAppBindings = async (params: ProvisionParams) => {
       name: record.name,
       databaseId: record.id,
       ...(migrationsApplied > 0 ? { migrationsApplied } : {})
+    });
+  }
+
+  for (const declaration of params.manifest.bindings.hyperdrive) {
+    uploadBindings.push(hyperdriveBinding(declaration));
+    deploymentBindings.hyperdrive ??= [];
+    deploymentBindings.hyperdrive.push({
+      binding: declaration.binding,
+      id: declaration.id
     });
   }
 
