@@ -8,6 +8,7 @@ export interface Env {
   DISPATCHER?: DispatchNamespace;
   DEPLOYMENTS_KV: KVNamespace;
   STATIC_ASSETS?: R2Bucket;
+  W7S_ANALYTICS?: AnalyticsEngineDataset;
   CLOUDFLARE_API_TOKEN?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_DISPATCH_NAMESPACE?: string;

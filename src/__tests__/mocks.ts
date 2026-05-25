@@ -162,6 +162,14 @@ export class MemoryR2 {
   }
 }
 
+export class MemoryAnalyticsEngine {
+  readonly points: AnalyticsEngineDataPoint[] = [];
+
+  writeDataPoint(point?: AnalyticsEngineDataPoint) {
+    if (point) this.points.push(point);
+  }
+}
+
 export const createTestEnv = (overrides: Partial<Env> = {}): Env => ({
   DEPLOYMENTS_KV: new MemoryKV() as unknown as KVNamespace,
   STATIC_ASSETS: new MemoryR2() as unknown as R2Bucket,

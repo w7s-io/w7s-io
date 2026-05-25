@@ -1,3 +1,4 @@
+import { responseOutcome, writeAnalyticsEvent } from "../analytics";
 import { isCronExpressionDue, scheduledMinuteIso } from "../cron";
 import type { Env } from "../env";
 import {
@@ -29,6 +30,7 @@ const dispatchSchedule = async (params: {
   mapping: ScheduleMapping;
   scheduledMinute: string;
 }) => {
+  const startedAt = Date.now();
   const deployment = await loadDeploymentRecord(
     params.env,
     params.mapping.environment,
@@ -66,6 +68,20 @@ const dispatchSchedule = async (params: {
       "x-w7s-schedule-cron": params.mapping.cron,
       "x-w7s-schedule-time": params.scheduledMinute
     }
+  });
+
+  writeAnalyticsEvent(params.env, {
+    event: "schedule_delivery",
+    repository: params.mapping.repository,
+    environment: params.mapping.environment,
+    orgSlug: params.mapping.orgSlug,
+    repoSlug: params.mapping.repoSlug,
+    outcome: responseOutcome(response.status),
+    source: params.mapping.cron,
+    method: "POST",
+    status: response.status,
+    durationMs: Date.now() - startedAt,
+    count: 1
   });
 
   if (response.status < 200 || response.status >= 300) {

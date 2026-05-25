@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { app } from "../worker";
-import { createTestEnv } from "./mocks";
+import { createTestEnv, MemoryAnalyticsEngine } from "./mocks";
 import { hashRpcToken } from "../deploy/rpcBindings";
 import { storeDeploymentRecord, type DeploymentRecord } from "../storage/deployments";
 
@@ -42,7 +42,9 @@ const workerRecord = (params: {
 describe("RPC API", () => {
   it("dispatches same-owner backend calls with caller identity headers", async () => {
     const calls: string[] = [];
+    const analytics = new MemoryAnalyticsEngine();
     const env = createTestEnv({
+      W7S_ANALYTICS: analytics as unknown as AnalyticsEngineDataset,
       DISPATCHER: {
         get: (scriptName: string) => ({
           fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -100,6 +102,22 @@ describe("RPC API", () => {
       caller: "acme/caller"
     });
     expect(calls[0]).toBe("acme--target");
+    expect(analytics.points).toHaveLength(1);
+    expect(analytics.points[0]).toMatchObject({
+      indexes: ["acme/caller"],
+      blobs: [
+        "rpc",
+        "acme/caller",
+        "production",
+        "acme",
+        "caller",
+        "success",
+        "dispatch",
+        "acme/target",
+        "POST"
+      ],
+      doubles: [1, 200, expect.any(Number)]
+    });
   });
 
   it("rejects invalid caller tokens", async () => {

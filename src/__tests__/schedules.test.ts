@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { zipSync } from "fflate";
 import { app } from "../worker";
-import { createTestEnv } from "./mocks";
+import { createTestEnv, MemoryAnalyticsEngine } from "./mocks";
 import { dispatchDueSchedules } from "../runtime/scheduleDelivery";
 import {
   listScheduleMappings,
@@ -178,7 +178,9 @@ describe("scheduled dispatch", () => {
 
   it("dispatches due schedules to mapped deployment paths once per scheduled minute", async () => {
     const calls: Array<{ scriptName: string; path: string; headers: Record<string, string>; body: unknown }> = [];
+    const analytics = new MemoryAnalyticsEngine();
     const env = createTestEnv({
+      W7S_ANALYTICS: analytics as unknown as AnalyticsEngineDataset,
       DISPATCHER: {
         get: (scriptName: string) => ({
           fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -223,5 +225,21 @@ describe("scheduled dispatch", () => {
         }
       }
     ]);
+    expect(analytics.points).toHaveLength(1);
+    expect(analytics.points[0]).toMatchObject({
+      indexes: ["w7s-io/scheduled-worker"],
+      blobs: [
+        "schedule_delivery",
+        "w7s-io/scheduled-worker",
+        "production",
+        "w7s-io",
+        "scheduled-worker",
+        "success",
+        "*/5 * * * *",
+        "",
+        "POST"
+      ],
+      doubles: [1, 200, expect.any(Number)]
+    });
   });
 });

@@ -17,6 +17,7 @@ As of the latest docs update:
 - Schedules are declared with `schedules` in `w7s.json`; W7S core runs a per-minute Cloudflare cron trigger and dispatches due schedules to native backend paths.
 - Durable Objects are declared with `bindings.durableObjects` in `w7s.json`; W7S uploads the binding metadata and initial SQLite-backed class migrations.
 - Hyperdrive bindings are declared with `bindings.hyperdrive` in `w7s.json`; W7S uploads user-provided Hyperdrive config IDs as Worker bindings.
+- If `W7S_ANALYTICS_DATASET` is configured, the core writes Workers Analytics Engine datapoints for deploys, runtime requests, RPC, queues, and schedules.
 - Root `CNAME` files can attach app custom-domain routes when the W7S token can manage that Cloudflare zone.
 - Custom domains use soft TXT verification: the first claim works without TXT, `_w7s.<zone>` becomes an owner/repo allowlist when present, and hostname conflicts require TXT authorization.
 - Empty org roots such as `https://sadasant.w7s.cloud/` show deploy-help HTML instead of a plain 404.
@@ -43,6 +44,7 @@ The point of this repo is to keep the core deploy/routing plane small.
 - Managed storage is provisioned per repository/environment and reused across redeploys.
 - Durable Object apps use stable per-repository/environment script names so DO state survives redeploys. DO class renames, transfers, and deletes are not automated yet.
 - Hyperdrive config creation and credential rotation are not managed by W7S yet. Apps must provide existing Cloudflare Hyperdrive IDs.
+- Analytics Engine is currently core-internal only. User app analytics bindings are not exposed yet.
 - Queues are provisioned per repository/environment and delivered through W7S core to app HTTP consumer routes.
 - Schedules are delivered through W7S core to app HTTP consumer routes. They currently use best-effort KV locks to avoid duplicate schedule/time dispatches.
 - Static hosting supports `frontend/dist`, `dist/client`, `dist`, `build`, and `out`.
@@ -64,6 +66,7 @@ Good near-term tasks:
 - add delete/rollback for deployed user Workers;
 - add typed RPC/queue clients and first-party plugin conventions on top of `W7S_RPC` and `W7S_QUEUE`;
 - add structured deploy logs;
+- add Analytics Engine query APIs and dashboards;
 - add end-to-end tests that deploy a demo archive against a staging Worker.
 
 ## Important Repos

@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { writeAnalyticsEvent } from "../analytics";
 import type { Env } from "../env";
 import { jsonError, jsonSuccess, parseBearerToken } from "../http";
 import { requireSlug } from "../names";
@@ -73,6 +74,7 @@ const readDelaySeconds = (c: HonoContext) => {
 };
 
 export const handleQueueSend = async (c: HonoContext) => {
+  const startedAt = Date.now();
   const token = parseBearerToken(c.req.raw);
   if (!token) return jsonError("Missing queue bearer token.", 401);
 
@@ -148,6 +150,21 @@ export const handleQueueSend = async (c: HonoContext) => {
         queue: target.queue
       }
     }
+  });
+
+  writeAnalyticsEvent(c.env, {
+    event: "queue_send",
+    repository: `${caller.orgSlug}/${caller.repoSlug}`,
+    environment: caller.environment,
+    orgSlug: caller.orgSlug,
+    repoSlug: caller.repoSlug,
+    outcome: "success",
+    source: target.queue,
+    target: `${target.orgSlug}/${target.repoSlug}`,
+    method: c.req.method,
+    status: 200,
+    durationMs: Date.now() - startedAt,
+    count: 1
   });
 
   return jsonSuccess({

@@ -11,6 +11,7 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
 - Static assets deploy to R2 and route through the W7S core Worker.
 - `w7s.json` can declare KV, R2, D1, Durable Objects, Hyperdrive, queues, schedules, vars, secrets, RPC allowlists, and queue allowlists.
 - RPC and Queue sends use internal service bindings because W7S app Workers are dispatch-namespace scripts, not ordinary account-level Workers.
+- W7S core can optionally write platform metrics to Workers Analytics Engine when `W7S_ANALYTICS_DATASET` is configured.
 
 ## Implementation Order
 
@@ -83,8 +84,11 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
    - Managed Hyperdrive creation can come later.
 
 4. **Analytics Engine**
+   - Status: implemented as optional W7S-internal writes.
    - Goal: collect per-app deploy, request, RPC, queue, schedule, and platform usage metrics.
-   - First phase should be W7S-internal writes for observability and billing.
+   - Set `W7S_ANALYTICS_DATASET` to add the core `W7S_ANALYTICS` binding.
+   - Datapoints are written for deploy success, runtime requests, deploy-help showcases, RPC dispatches, queue sends, queue deliveries, and schedule deliveries.
+   - Schema uses the repository as the Analytics Engine index, blobs for dimensions, and doubles for count/status/duration.
    - App-visible analytics bindings can be added later.
 
 5. **Workflows**
@@ -119,3 +123,4 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
 - Durable Objects are declared in `w7s.json`, uploaded as Worker metadata bindings, and covered by deploy tests.
 - Durable Object apps use stable script names; non-DO backends keep commit-specific script names.
 - Hyperdrive bindings are declared in `w7s.json`, uploaded as Worker metadata bindings, and covered by deploy tests.
+- Analytics Engine is optional in the generated Wrangler config and covered by deploy, runtime, RPC, queue, schedule, and helper tests.

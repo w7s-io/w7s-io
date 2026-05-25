@@ -6,6 +6,7 @@ const zoneName = process.env.W7S_ZONE_NAME?.trim() || "w7s.cloud";
 const deploymentsKvName = process.env.W7S_DEPLOYMENTS_KV_NAME?.trim() || "w7s-io-deployments";
 const staticBucketName = process.env.W7S_STATIC_ASSETS_BUCKET?.trim() || "w7s-io-static-assets";
 const dispatchNamespace = process.env.W7S_DISPATCH_NAMESPACE?.trim() || "w7s-isolate";
+const analyticsDataset = process.env.W7S_ANALYTICS_DATASET?.trim() || "";
 const scheduleCron = process.env.W7S_CORE_CRON?.trim() || "* * * * *";
 const attachWildcardRoute = /^(1|true|yes|on)$/i.test(
   process.env.W7S_ATTACH_WILDCARD_ROUTE?.trim() || ""
@@ -164,7 +165,17 @@ const config = {
       bucket_name: staticBucketName,
       preview_bucket_name: staticBucketName
     }
-  ]
+  ],
+  ...(analyticsDataset
+    ? {
+        analytics_engine_datasets: [
+          {
+            binding: "W7S_ANALYTICS",
+            dataset: analyticsDataset
+          }
+        ]
+      }
+    : {})
 };
 
 await mkdir(".wrangler", { recursive: true });
@@ -192,6 +203,7 @@ console.log(
       deploymentsKvId: kvNamespaceId,
       staticBucketName,
       dispatchNamespace,
+      analyticsDataset: analyticsDataset || null,
       scheduleCron,
       attachWildcardRoute,
       routeManagement: "post-deploy"

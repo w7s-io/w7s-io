@@ -17,6 +17,7 @@ This repo contains the public W7S worker, deploy API, runtime router, and storag
 - same-name repos such as `github.com/<org>/<org>` can serve directly from `https://<org>.w7s.cloud/*`.
 - non-production branches serve from `https://<branch>--<org>.w7s.cloud/<repo>/*`.
 - `CNAME` can declare custom domains for a deployment, with optional `_w7s.<zone>` TXT allowlists for ownership control.
+- optional Workers Analytics Engine writes track deploy, request, RPC, queue, and schedule events for platform observability.
 
 ## Deploy API
 
@@ -165,6 +166,7 @@ await env.W7S_QUEUE.fetch(
 - `DISPATCHER`: Workers for Platforms dispatch namespace
 - `DEPLOYMENTS_KV`: deployment metadata and static manifests
 - `STATIC_ASSETS`: R2 bucket for deployed frontend assets
+- `W7S_ANALYTICS`: optional Workers Analytics Engine dataset for platform metrics
 - `CLOUDFLARE_API_TOKEN`: secret with dispatch namespace publish access
 - `CLOUDFLARE_ACCOUNT_ID`: Cloudflare account id
 
@@ -184,6 +186,7 @@ Optional repo variables:
 - `W7S_STATIC_ASSETS_BUCKET`, default `w7s-io-static-assets`
 - `W7S_DISPATCH_NAMESPACE`, default `w7s-isolate`
 - `W7S_ATTACH_WILDCARD_ROUTE`, default `false`
+- `W7S_ANALYTICS_DATASET`, optional Analytics Engine dataset name
 
 Set `W7S_ATTACH_WILDCARD_ROUTE=true` only when this worker should attach the `*.w7s.cloud/*` route. Cloudflare rejects the deploy if another worker already owns that route.
 

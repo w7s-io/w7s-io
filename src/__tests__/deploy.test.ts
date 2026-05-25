@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { zipSync } from "fflate";
 import { app } from "../worker";
-import { createTestEnv } from "./mocks";
+import { createTestEnv, MemoryAnalyticsEngine } from "./mocks";
 import {
   loadCustomDomainMapping,
   loadDeploymentRecord,
@@ -97,7 +97,10 @@ describe("deploy API", () => {
         return Response.json({ success: true, result: {} });
       })
     );
-    const env = createTestEnv();
+    const analytics = new MemoryAnalyticsEngine();
+    const env = createTestEnv({
+      W7S_ANALYTICS: analytics as unknown as AnalyticsEngineDataset
+    });
     const response = await app.fetch(
       deployRequest({
         "frontend/dist/index.html": "<h1>Hello</h1>",
@@ -114,6 +117,22 @@ describe("deploy API", () => {
     expect(record?.targets.static?.manifestKey).toContain("abc123");
     expect(record?.targets.static?.fileCount).toBe(2);
     expect(record?.targets.worker).toBeUndefined();
+    expect(analytics.points).toHaveLength(1);
+    expect(analytics.points[0]).toMatchObject({
+      indexes: ["w7s-io/demo"],
+      blobs: [
+        "deploy",
+        "w7s-io/demo",
+        "production",
+        "w7s-io",
+        "demo",
+        "success",
+        "static",
+        "",
+        ""
+      ],
+      doubles: [2, 200, 0]
+    });
   });
 
   it("publishes root dist static deployments", async () => {

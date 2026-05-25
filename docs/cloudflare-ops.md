@@ -53,6 +53,7 @@ W7S_ZONE_NAME                  default: w7s.cloud
 W7S_DEPLOYMENTS_KV_NAME         default: w7s-io-deployments
 W7S_STATIC_ASSETS_BUCKET        default: w7s-io-static-assets
 W7S_DISPATCH_NAMESPACE          default: w7s-isolate
+W7S_ANALYTICS_DATASET           optional Analytics Engine dataset name
 W7S_ATTACH_WILDCARD_ROUTE       default: false
 W7S_COMPATIBILITY_DATE          default: 2026-05-23
 ```
@@ -79,6 +80,7 @@ The generated config includes:
 - `DEPLOYMENTS_KV`;
 - `STATIC_ASSETS`;
 - `DISPATCHER`;
+- `W7S_ANALYTICS`, when `W7S_ANALYTICS_DATASET` is set;
 - runtime vars such as `W7S_BASE_DOMAIN`, `W7S_WORKER_NAME`, `APP_COMMIT_ID`, `APP_DEPLOY_BRANCH`, and `APP_DEPLOYED_AT`;
 - a per-minute core Cron Trigger used to dispatch app-declared schedules;
 - Worker secrets needed for user deploys.
@@ -208,3 +210,48 @@ w7s-<environment>-<org>-<repo>-<kind>-<binding>
 ```
 
 These resources are stored in `DEPLOYMENTS_KV` and reused across redeploys for the same repository/environment.
+
+## Analytics Engine
+
+Set `W7S_ANALYTICS_DATASET` as a GitHub repo variable to add this binding to the generated Wrangler config:
+
+```json
+{
+  "binding": "W7S_ANALYTICS",
+  "dataset": "w7s_platform_events"
+}
+```
+
+The core writes one Analytics Engine datapoint for successful deploys and for runtime request, RPC, queue send, queue delivery, and schedule delivery paths. Missing or failing analytics writes are ignored so observability cannot affect app traffic.
+
+Datapoint schema:
+
+```text
+index1  repository, or w7s-core
+
+blob1   event
+blob2   repository
+blob3   environment
+blob4   org slug
+blob5   repo slug
+blob6   outcome
+blob7   source
+blob8   target repository
+blob9   method
+
+double1 count
+double2 HTTP status
+double3 duration in milliseconds
+```
+
+Current event names:
+
+```text
+deploy
+runtime_request
+runtime_showcase
+rpc
+queue_send
+queue_delivery
+schedule_delivery
+```

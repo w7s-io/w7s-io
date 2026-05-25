@@ -38,6 +38,9 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
   - Implements internal queue sends through RPC-style `w7s.internal` URLs.
   - Verifies caller tokens issued during deploy.
   - Sends messages to Cloudflare Queues owned by target deployments.
+- `src/analytics.ts`
+  - Writes best-effort Workers Analytics Engine datapoints when `W7S_ANALYTICS` is bound.
+  - Keeps a stable low-cardinality schema for deploy, request, RPC, queue, and schedule events.
 - `src/deploy/archive.ts`
   - Reads zip archives into normalized file maps.
   - Strips common GitHub archive roots while preserving W7S app roots.
@@ -95,6 +98,7 @@ POST /api/v1/deploy
   -> detect static frontend output
   -> upload static files to R2
   -> store deployment record in KV
+  -> write deploy analytics when configured
 ```
 
 ```text
@@ -105,6 +109,7 @@ GET https://<org>.w7s.cloud/<repo>/<path>
   -> serve exact static asset if present
   -> dispatch to native Worker if present
   -> if native Worker returns 404/405, serve static SPA fallback if present
+  -> write request analytics when configured
 ```
 
 ```text
@@ -116,6 +121,7 @@ GET/POST env.W7S_RPC.fetch("/api/v1/rpc/<owner>/<repo>/<path>")
   -> allow same-owner calls by default
   -> require target w7s.json rpc.allow for cross-owner calls
   -> dispatch to the target Worker with caller identity headers
+  -> write RPC analytics when configured
 ```
 
 ```text
@@ -129,6 +135,7 @@ POST env.W7S_QUEUE.fetch("/api/v1/queues/<owner>/<repo>/<queue>")
   -> require target w7s.json queue.allow for cross-owner sends
   -> send a Cloudflare Queue message
   -> receive the batch in W7S core and dispatch to the target consumer route
+  -> write queue send and delivery analytics when configured
 ```
 
 ```text
@@ -138,6 +145,7 @@ Cloudflare scheduled event
   -> match five-field cron expressions against the scheduled minute
   -> acquire a short KV lock for schedule/time
   -> dispatch due jobs to native Worker schedule paths
+  -> write schedule delivery analytics when configured
 ```
 
 ## Compatibility Choices
@@ -155,3 +163,4 @@ Cloudflare scheduled event
 - Backend-to-backend RPC is routed through the core Worker service binding. It does not expose target Workers directly, and cross-owner calls are opt-in through the target app's `w7s.json`.
 - Queues are app-owned, environment-scoped Cloudflare Queues. Apps send through `W7S_QUEUE`; W7S core owns queue provisioning and delivery dispatch.
 - Schedules are environment-scoped path consumers. W7S core owns the Cloudflare cron trigger and dispatches due jobs to native Workers.
+- Analytics Engine is an optional W7S-core binding. It is for platform observability first; app-visible analytics bindings can be added later.

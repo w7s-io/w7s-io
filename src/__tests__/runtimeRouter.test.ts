@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { app } from "../worker";
-import { createTestEnv } from "./mocks";
+import { createTestEnv, MemoryAnalyticsEngine } from "./mocks";
 import {
   storeCustomDomainMappings,
   storeDeploymentRecord,
@@ -80,7 +80,10 @@ const storeStaticDemoDeployment = async (env: ReturnType<typeof createTestEnv>) 
 
 describe("runtime router", () => {
   it("serves static assets from repo routes", async () => {
-    const env = createTestEnv();
+    const analytics = new MemoryAnalyticsEngine();
+    const env = createTestEnv({
+      W7S_ANALYTICS: analytics as unknown as AnalyticsEngineDataset
+    });
     await storeStaticDemoDeployment(env);
 
     const response = await app.fetch(
@@ -95,6 +98,22 @@ describe("runtime router", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-cache");
     expect(await response.text()).toContain("App");
+    expect(analytics.points).toHaveLength(1);
+    expect(analytics.points[0]).toMatchObject({
+      indexes: ["w7s-io/demo"],
+      blobs: [
+        "runtime_request",
+        "w7s-io/demo",
+        "production",
+        "w7s-io",
+        "demo",
+        "success",
+        "static_exact:repo-prefix",
+        "",
+        "GET"
+      ],
+      doubles: [1, 200, expect.any(Number)]
+    });
   });
 
   it("redirects static repo root routes to a directory path", async () => {

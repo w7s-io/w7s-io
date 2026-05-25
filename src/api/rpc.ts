@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { responseOutcome, writeAnalyticsEvent } from "../analytics";
 import type { Env } from "../env";
 import { jsonError, parseBearerToken } from "../http";
 import { requireSlug } from "../names";
@@ -59,6 +60,7 @@ const isAuthorizedCaller = (params: {
 };
 
 export const handleRpc = async (c: HonoContext) => {
+  const startedAt = Date.now();
   const token = parseBearerToken(c.req.raw);
   if (!token) return jsonError("Missing RPC bearer token.", 401);
 
@@ -107,7 +109,7 @@ export const handleRpc = async (c: HonoContext) => {
     return jsonError("RPC caller is not authorized for this target.", 403);
   }
 
-  return dispatchWorker({
+  const response = await dispatchWorker({
     env: c.env,
     request: c.req.raw,
     repoPath: target.repoPath,
@@ -128,4 +130,20 @@ export const handleRpc = async (c: HonoContext) => {
       "x-w7s-rpc-caller-environment": caller.environment
     }
   });
+
+  writeAnalyticsEvent(c.env, {
+    event: "rpc",
+    repository: `${caller.orgSlug}/${caller.repoSlug}`,
+    environment: caller.environment,
+    orgSlug: caller.orgSlug,
+    repoSlug: caller.repoSlug,
+    outcome: responseOutcome(response.status),
+    source: "dispatch",
+    target: `${target.orgSlug}/${target.repoSlug}`,
+    method: c.req.method,
+    status: response.status,
+    durationMs: Date.now() - startedAt
+  });
+
+  return response;
 };

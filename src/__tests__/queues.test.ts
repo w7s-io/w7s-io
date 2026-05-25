@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { app } from "../worker";
-import { createTestEnv } from "./mocks";
+import { createTestEnv, MemoryAnalyticsEngine } from "./mocks";
 import { hashBindingToken } from "../deploy/tokens";
 import {
   storeDeploymentRecord,
@@ -65,7 +65,9 @@ describe("Queue API", () => {
         return Response.json({ success: true, result: {} });
       })
     );
+    const analytics = new MemoryAnalyticsEngine();
     const env = createTestEnv({
+      W7S_ANALYTICS: analytics as unknown as AnalyticsEngineDataset,
       CLOUDFLARE_API_TOKEN: "cf-token",
       CLOUDFLARE_ACCOUNT_ID: "acct-123"
     });
@@ -128,6 +130,22 @@ describe("Queue API", () => {
         content_type: "json"
       }
     ]);
+    expect(analytics.points).toHaveLength(1);
+    expect(analytics.points[0]).toMatchObject({
+      indexes: ["acme/caller"],
+      blobs: [
+        "queue_send",
+        "acme/caller",
+        "production",
+        "acme",
+        "caller",
+        "success",
+        "jobs",
+        "acme/target",
+        "POST"
+      ],
+      doubles: [1, 200, expect.any(Number)]
+    });
   });
 
   it("rejects invalid queue caller tokens", async () => {
@@ -238,7 +256,9 @@ describe("Queue API", () => {
 describe("Queue delivery", () => {
   it("dispatches queue batches to the mapped deployment consumer path", async () => {
     const calls: Array<{ scriptName: string; path: string; body: unknown }> = [];
+    const analytics = new MemoryAnalyticsEngine();
     const env = createTestEnv({
+      W7S_ANALYTICS: analytics as unknown as AnalyticsEngineDataset,
       DISPATCHER: {
         get: (scriptName: string) => ({
           fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -319,5 +339,21 @@ describe("Queue delivery", () => {
         }
       }
     ]);
+    expect(analytics.points).toHaveLength(1);
+    expect(analytics.points[0]).toMatchObject({
+      indexes: ["acme/target"],
+      blobs: [
+        "queue_delivery",
+        "acme/target",
+        "production",
+        "acme",
+        "target",
+        "success",
+        "jobs",
+        "",
+        "POST"
+      ],
+      doubles: [1, 200, expect.any(Number)]
+    });
   });
 });

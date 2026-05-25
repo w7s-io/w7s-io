@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { writeAnalyticsEvent } from "../analytics";
 import type { Env } from "../env";
 import { jsonError, jsonSuccess, parseBearerToken } from "../http";
 import { parseGitHubRepository, verifyGitHubRepoAccess } from "../deploy/githubAuth";
@@ -287,6 +288,18 @@ export const handleDeploy = async (c: HonoContext) => {
       return jsonError(error instanceof Error ? error.message : String(error), 500);
     }
   }
+
+  writeAnalyticsEvent(c.env, {
+    event: "deploy",
+    repository: repo.fullName,
+    environment,
+    orgSlug,
+    repoSlug,
+    outcome: "success",
+    source: hasNativeBackend && hasStatic ? "fullstack" : hasNativeBackend ? "backend" : "static",
+    status: 200,
+    count: targets.static?.fileCount ?? 1
+  });
 
   return jsonSuccess({
     deployment: {

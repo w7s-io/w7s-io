@@ -1,7 +1,9 @@
 import type { Env } from "../env";
+import { responseOutcome, writeAnalyticsEvent } from "../analytics";
 import {
   loadCustomDomainMapping,
-  loadDeploymentRecordWithCandidates
+  loadDeploymentRecordWithCandidates,
+  type DeploymentRecord
 } from "../storage/deployments";
 import { cleanHost, resolveRuntimeHost } from "./host";
 import { resolveStaticAssetResponse } from "./static";
@@ -112,7 +114,32 @@ const redirectToDirectoryPath = (request: Request) => {
   return Response.redirect(url.toString(), 308);
 };
 
+const writeRuntimeAnalytics = (params: {
+  env: Env;
+  request: Request;
+  startedAt: number;
+  deployment: DeploymentRecord;
+  response: Response;
+  source: string;
+  mount?: RouteCandidate["mount"];
+}) => {
+  writeAnalyticsEvent(params.env, {
+    event: "runtime_request",
+    repository: params.deployment.repository,
+    environment: params.deployment.environment,
+    orgSlug: params.deployment.orgSlug,
+    repoSlug: params.deployment.repoSlug,
+    outcome: responseOutcome(params.response.status),
+    source: params.mount ? `${params.source}:${params.mount}` : params.source,
+    method: params.request.method,
+    status: params.response.status,
+    durationMs: Date.now() - params.startedAt
+  });
+  return params.response;
+};
+
 export const resolveRuntimeRequest = async (request: Request, env: Env) => {
+  const startedAt = Date.now();
   const url = new URL(request.url);
   const requestHost = cleanHost(request.headers.get("host") || url.host);
   const host = resolveRuntimeHost(request, env);
@@ -150,7 +177,15 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
       deployment.targets.static &&
       shouldRedirectStaticRepoRoot(request, candidate.repoPath)
     ) {
-      return redirectToDirectoryPath(request);
+      return writeRuntimeAnalytics({
+        env,
+        request,
+        startedAt,
+        deployment,
+        response: redirectToDirectoryPath(request),
+        source: "static_redirect",
+        mount: candidate.mount
+      });
     }
 
     const workerTarget = deployment.targets.worker;
@@ -165,7 +200,15 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
         scriptName: workerTarget.scriptName
       });
       if (isRedirectResponse(workerResponse)) {
-        return workerResponse;
+        return writeRuntimeAnalytics({
+          env,
+          request,
+          startedAt,
+          deployment,
+          response: workerResponse,
+          source: "worker_redirect",
+          mount: candidate.mount
+        });
       }
     }
 
@@ -176,7 +219,17 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
       repoPath: candidate.repoPath,
       mode: "exact"
     });
-    if (exactStatic) return exactStatic;
+    if (exactStatic) {
+      return writeRuntimeAnalytics({
+        env,
+        request,
+        startedAt,
+        deployment,
+        response: exactStatic,
+        source: "static_exact",
+        mount: candidate.mount
+      });
+    }
 
     if (workerTarget) {
       workerResponse ??= await dispatchWorker({
@@ -188,7 +241,15 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
         scriptName: workerTarget.scriptName
       });
       if (!shouldFallbackFromWorkerToStatic(request, workerResponse)) {
-        return workerResponse;
+        return writeRuntimeAnalytics({
+          env,
+          request,
+          startedAt,
+          deployment,
+          response: workerResponse,
+          source: "worker",
+          mount: candidate.mount
+        });
       }
     }
 
@@ -199,13 +260,49 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
       repoPath: candidate.repoPath,
       mode: "fallback"
     });
-    if (fallbackStatic) return fallbackStatic;
+    if (fallbackStatic) {
+      return writeRuntimeAnalytics({
+        env,
+        request,
+        startedAt,
+        deployment,
+        response: fallbackStatic,
+        source: "static_fallback",
+        mount: candidate.mount
+      });
+    }
 
-    return workerTarget ? new Response("Not found.", { status: 404 }) : null;
+    if (workerTarget) {
+      return writeRuntimeAnalytics({
+        env,
+        request,
+        startedAt,
+        deployment,
+        response: new Response("Not found.", { status: 404 }),
+        source: "not_found",
+        mount: candidate.mount
+      });
+    }
+    return null;
   }
 
   if (host && shouldShowDeployShowcase(request)) {
-    return deployShowcaseResponse(request, requestHost, orgSlug);
+    const target = deployShowcaseTarget(request, requestHost, orgSlug);
+    const response = deployShowcaseResponse(request, requestHost, orgSlug);
+    const repoSlug = target.repository.split("/")[1] ?? orgSlug;
+    writeAnalyticsEvent(env, {
+      event: "runtime_showcase",
+      repository: target.repository,
+      environment: environments[0] ?? "production",
+      orgSlug,
+      repoSlug,
+      outcome: "success",
+      source: target.isOwnerRoot ? "org_root" : "repo_prefix",
+      method: request.method,
+      status: response.status,
+      durationMs: Date.now() - startedAt
+    });
+    return response;
   }
 
   return new Response("Deployment not found.", { status: 404 });

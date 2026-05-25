@@ -1,3 +1,4 @@
+import { responseOutcome, writeAnalyticsEvent } from "../analytics";
 import type { Env } from "../env";
 import {
   loadDeploymentRecord,
@@ -24,6 +25,7 @@ export const handleQueueBatch = async (
   batch: MessageBatch<unknown>,
   env: Env
 ) => {
+  const startedAt = Date.now();
   const mapping = await loadQueueMapping(env, batch.queue);
   if (!mapping) {
     throw new Error(`W7S queue mapping was not found for ${batch.queue}.`);
@@ -75,6 +77,20 @@ export const handleQueueBatch = async (
       "x-w7s-queue": mapping.queue,
       "x-w7s-queue-name": mapping.queueName
     }
+  });
+
+  writeAnalyticsEvent(env, {
+    event: "queue_delivery",
+    repository: mapping.repository,
+    environment: mapping.environment,
+    orgSlug: mapping.orgSlug,
+    repoSlug: mapping.repoSlug,
+    outcome: responseOutcome(response.status),
+    source: mapping.queue,
+    method: "POST",
+    status: response.status,
+    durationMs: Date.now() - startedAt,
+    count: messages.length
   });
 
   if (response.status < 200 || response.status >= 300) {
