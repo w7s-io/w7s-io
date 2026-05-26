@@ -208,6 +208,63 @@ describe("Workflow API", () => {
     expect(workflows.created).toEqual([]);
   });
 
+  it("rejects workflow creates when the target has too many active instances", async () => {
+    const workflows = new MemoryWorkflowBinding();
+    const env = createTestEnv({
+      W7S_WORKFLOWS: workflows as unknown as Workflow<W7SWorkflowPayload>,
+      W7S_WORKFLOW_ACTIVE_LIMIT: "1"
+    });
+    const token = "workflow-token";
+    await storeDeploymentRecord(
+      env,
+      workerRecord({
+        orgSlug: "acme",
+        repoSlug: "caller",
+        scriptName: "acme--caller",
+        tokenHash: await hashBindingToken(token)
+      })
+    );
+    await storeDeploymentRecord(
+      env,
+      workerRecord({
+        orgSlug: "acme",
+        repoSlug: "target",
+        scriptName: "acme--target",
+        tokenHash: await hashBindingToken("target-token"),
+        workflows: [
+          {
+            name: "process-order",
+            path: "/_w7s/workflows/process-order"
+          }
+        ]
+      })
+    );
+
+    const request = (id: string) =>
+      new Request(`https://w7s.cloud/api/v1/workflows/acme/target/process-order/${id}`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          "x-w7s-workflow-caller": "acme/caller",
+          "x-w7s-workflow-environment": "production",
+          "x-w7s-workflow-instance-id": id
+        },
+        body: "{}"
+      });
+
+    expect((await app.fetch(request("first"), env)).status).toBe(200);
+    const response = await app.fetch(request("second"), env);
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        error: expect.stringContaining("Active workflow limit exceeded")
+      })
+    );
+    expect(workflows.created).toHaveLength(1);
+  });
+
   it("returns workflow instance status", async () => {
     const workflows = new MemoryWorkflowBinding();
     workflows.statuses.set("production-acme-target-process-order-order-123", {

@@ -58,16 +58,22 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
 - `src/logs.ts`
   - Implements the W7S `tail()` handler.
   - Maps Tail Worker script names back to deployed repositories and stores only mapped user Worker records.
+  - Applies log write usage limits before persisting Tail Worker records.
 - `src/usage.ts`
   - Writes best-effort daily usage counters into `DEPLOYMENTS_KV`.
+  - Mirrors repo usage into owner-level and global aggregate daily rollups.
   - Tracks count, units, success, error, and last-seen time per metric.
 - `src/usageLimits.ts`
   - Evaluates daily usage limits from a usage rollup.
-  - Layers W7S-owned policy overrides from owner, owner/environment, repo, and repo/environment KV records.
+  - Layers W7S-owned policy overrides from repo, owner aggregate, and global aggregate KV records.
   - Provides `checkUsageLimit(...)` metadata for hard enforcement hooks.
+- `src/rateLimits.ts`
+  - Applies short-window KV burst counters for high-risk cost paths.
 - `src/usageEnforcement.ts`
   - Converts projected over-limit checks into HTTP `429` responses for public APIs.
   - Lets internal delivery paths skip queue, schedule, or workflow dispatch once delivery limits are exceeded.
+- `src/cleanup.ts`
+  - Runs from the scheduled handler to remove stale static assets, old usage records, expired suspensions, and stale dispatch Worker scripts.
 - `src/deploy/archive.ts`
   - Reads zip archives into normalized file maps.
   - Strips common GitHub archive roots while preserving W7S app roots.
@@ -234,11 +240,11 @@ GET /api/v1/limits/<owner>/<repo>
 - Durable Object apps use stable script names for the same repository and environment. W7S auto-creates new SQLite-backed classes, but it does not automate DO renames, transfers, or deletes yet.
 - Hyperdrive bindings use user-provided Cloudflare Hyperdrive config IDs. W7S does not create or rotate Hyperdrive configs yet.
 - Backend-to-backend RPC is routed through the core Worker service binding. It does not expose target Workers directly, and cross-owner calls are opt-in through the target app's `w7s.json`.
-- Queues are app-owned, environment-scoped Cloudflare Queues. Apps send through `W7S_QUEUE`; W7S core owns queue provisioning and delivery dispatch.
+- Queues are app-owned, environment-scoped Cloudflare Queues. Apps send through `W7S_QUEUE`; W7S core owns queue provisioning and delivery dispatch, caps message size, and creates consumers with bounded batch/retry settings.
 - Schedules are environment-scoped path consumers. W7S core owns the Cloudflare cron trigger and dispatches due jobs to native Workers.
 - Workflows are app-declared, environment-scoped path consumers. W7S core owns the Cloudflare Workflow definition and starts instances on behalf of apps.
 - Analytics Engine is an optional W7S-core binding. It is for platform observability first; app-visible analytics bindings can be added later.
 - The analytics API exposes summaries, time buckets, and recent platform events.
 - The logs API exposes recent app `console.*` output, uncaught exceptions, and non-OK Worker outcomes captured through Tail Worker events.
-- Usage rollups are stored in `DEPLOYMENTS_KV` with read-modify-write updates. Direct Cloudflare resource usage is synced hourly from Cloudflare analytics. These are enough for free-tier protection, but not atomic billing-grade counters.
-- `checkUsageLimit(...)` reports whether a future request would exceed policy. Public runtime, deploy, RPC, queue-send, and workflow-start paths return HTTP `429`; internal queue, schedule, and workflow delivery paths skip dispatch when their delivery metric would exceed policy.
+- Usage rollups are stored in `DEPLOYMENTS_KV` with read-modify-write updates. Repo rollups are mirrored into owner/global aggregates, and direct Cloudflare resource usage is synced hourly from Cloudflare analytics. These are enough for free-tier protection, but not atomic billing-grade counters.
+- `checkUsageLimit(...)` reports whether a future request would exceed policy. Public runtime, deploy, RPC, queue-send, and workflow-start paths return HTTP `429`; internal queue, schedule, and workflow delivery paths skip dispatch when their delivery metric would exceed policy. `src/rateLimits.ts` adds minute/hour burst protection before daily counters are reached.

@@ -151,17 +151,19 @@ const writeRuntimeAnalytics = async (params: {
     source: "w7s"
   });
   if (params.source.startsWith("static_") && params.response.status >= 200 && params.response.status < 300) {
-    await recordUsageEvent(params.env, {
-      metric: "static.r2_class_b",
-      repository: params.deployment.repository,
-      environment: params.deployment.environment,
-      orgSlug: params.deployment.orgSlug,
-      repoSlug: params.deployment.repoSlug,
-      outcome,
-      count: 1,
-      units: 1,
-      source: "w7s"
-    });
+    if (params.response.headers.get("x-w7s-static-cache") !== "hit") {
+      await recordUsageEvent(params.env, {
+        metric: "static.r2_class_b",
+        repository: params.deployment.repository,
+        environment: params.deployment.environment,
+        orgSlug: params.deployment.orgSlug,
+        repoSlug: params.deployment.repoSlug,
+        outcome,
+        count: 1,
+        units: 1,
+        source: "w7s"
+      });
+    }
   }
   return params.response;
 };

@@ -1,5 +1,11 @@
 import type { Env } from "./env";
 import { json } from "./http";
+import {
+  checkRateLimit,
+  rateLimitExceededMessage,
+  rateLimitExceededResponse,
+  type RateLimitCheck
+} from "./rateLimits";
 import { checkUsageLimit, type UsageLimitCheck } from "./usageLimits";
 
 const secondsUntilNextUtcDay = (now = new Date()) => {
@@ -9,7 +15,12 @@ const secondsUntilNextUtcDay = (now = new Date()) => {
 };
 
 export const usageLimitExceededMessage = (check: UsageLimitCheck) =>
-  `Daily usage limit exceeded for ${check.metric} (${check.used}/${check.limit} used, requested ${check.requestedUnits}).`;
+  `Daily usage limit exceeded for ${check.metric} at ${check.scope} scope (${check.used}/${check.limit} used, requested ${check.requestedUnits}).`;
+
+export const costGuardExceededMessage = (check: UsageLimitCheck | RateLimitCheck) =>
+  check.enforcement === "rate"
+    ? rateLimitExceededMessage(check)
+    : usageLimitExceededMessage(check);
 
 export const usageLimitExceededResponse = (check: UsageLimitCheck) =>
   json(
@@ -37,6 +48,8 @@ export const checkBlockedUsageLimit = async (
     at?: Date;
   }
 ) => {
+  const rateCheck = await checkRateLimit(env, params);
+  if (rateCheck?.wouldBlock) return rateCheck;
   const check = await checkUsageLimit(env, params);
   return check?.wouldBlock ? check : null;
 };
@@ -52,6 +65,8 @@ export const enforceUsageLimit = async (
     at?: Date;
   }
 ) => {
-  const blocked = await checkBlockedUsageLimit(env, params);
-  return blocked ? usageLimitExceededResponse(blocked) : null;
+  const rateCheck = await checkRateLimit(env, params);
+  if (rateCheck?.wouldBlock) return rateLimitExceededResponse(rateCheck);
+  const blocked = await checkUsageLimit(env, params);
+  return blocked?.wouldBlock ? usageLimitExceededResponse(blocked) : null;
 };

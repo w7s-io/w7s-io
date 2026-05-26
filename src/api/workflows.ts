@@ -8,11 +8,19 @@ import { loadDeploymentRecord } from "../storage/deployments";
 import { recordUsageEvent } from "../usage";
 import { enforceUsageLimit } from "../usageEnforcement";
 import { enforceAppNotSuspended } from "../appLimits";
+import { enforceActiveWorkflowLimit, trackActiveWorkflow } from "../workflowLimits";
 
 type HonoContext = Context<{ Bindings: Env }>;
 
 const WORKFLOW_PREFIX = "/api/v1/workflows/";
 const MAX_INSTANCE_ID_LENGTH = 100;
+const DEFAULT_MAX_WORKFLOW_PAYLOAD_BYTES = 64 * 1024;
+
+class WorkflowRequestError extends Error {
+  constructor(message: string, readonly status = 400) {
+    super(message);
+  }
+}
 
 const splitPath = (path: string) =>
   path.split("/").map((segment) => segment.trim()).filter(Boolean);
@@ -70,12 +78,27 @@ const isAuthorizedCaller = (params: {
   return params.targetAllow.includes(params.callerOrg) || params.targetAllow.includes(callerRepository);
 };
 
-const readJsonBody = async (request: Request) => {
+const maxWorkflowPayloadBytes = (env: Env) => {
+  const parsed = Number(env.W7S_WORKFLOW_MAX_PAYLOAD_BYTES);
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.floor(parsed)
+    : DEFAULT_MAX_WORKFLOW_PAYLOAD_BYTES;
+};
+
+const jsonByteLength = (value: unknown) =>
+  new TextEncoder().encode(JSON.stringify(value)).byteLength;
+
+const readJsonBody = async (request: Request, env: Env) => {
   if (!request.body) return null;
+  const text = await request.text();
+  if (!text.trim()) return null;
+  if (new TextEncoder().encode(text).byteLength > maxWorkflowPayloadBytes(env)) {
+    throw new WorkflowRequestError(`Workflow payload exceeds ${maxWorkflowPayloadBytes(env)} bytes.`, 413);
+  }
   try {
-    return await request.json();
+    return JSON.parse(text) as unknown;
   } catch {
-    throw new Error("Workflow payload must be valid JSON.");
+    throw new WorkflowRequestError("Workflow payload must be valid JSON.");
   }
 };
 
@@ -188,7 +211,7 @@ export const handleWorkflowCreate = async (c: HonoContext) => {
   try {
     const workflows = requireWorkflowBinding(c.env);
     const context = await requireAuthorizedContext(c);
-    const payload = await readJsonBody(c.req.raw);
+    const payload = await readJsonBody(c.req.raw, c.env);
     const callerSuspended = await enforceAppNotSuspended(c.env, {
       environment: context.caller.environment,
       orgSlug: context.caller.orgSlug,
@@ -211,6 +234,12 @@ export const handleWorkflowCreate = async (c: HonoContext) => {
       units: 1
     });
     if (limitResponse) return limitResponse;
+    const activeLimitResponse = await enforceActiveWorkflowLimit(c.env, {
+      environment: context.caller.environment,
+      orgSlug: context.target.orgSlug,
+      repoSlug: context.target.repoSlug
+    });
+    if (activeLimitResponse) return activeLimitResponse;
     const requestedId = c.req.header("x-w7s-workflow-instance-id")?.trim() || null;
     const createdAt = new Date().toISOString();
     const instanceId = buildInstanceId({
@@ -239,9 +268,20 @@ export const handleWorkflowCreate = async (c: HonoContext) => {
         path: context.workflow.path
       }
     };
+    if (jsonByteLength(instancePayload) > maxWorkflowPayloadBytes(c.env)) {
+      return jsonError(`Workflow instance payload exceeds ${maxWorkflowPayloadBytes(c.env)} bytes.`, 413);
+    }
     const instance = await workflows.create({
       id: instanceId,
       params: instancePayload
+    });
+    await trackActiveWorkflow(c.env, {
+      environment: context.caller.environment,
+      orgSlug: context.target.orgSlug,
+      repoSlug: context.target.repoSlug,
+      workflow: context.target.workflow,
+      instanceId: instance.id,
+      createdAt
     });
     const status = await instance.status();
 
@@ -283,6 +323,9 @@ export const handleWorkflowCreate = async (c: HonoContext) => {
       createdAt
     });
   } catch (error) {
+    if (error instanceof WorkflowRequestError) {
+      return jsonError(error.message, error.status);
+    }
     return responseFromThrown(error);
   }
 };

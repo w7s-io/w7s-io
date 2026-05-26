@@ -6,7 +6,7 @@ import {
   loadQueueMapping
 } from "../storage/deployments";
 import { dispatchWorker } from "./dispatch";
-import { checkBlockedUsageLimit, usageLimitExceededMessage } from "../usageEnforcement";
+import { checkBlockedUsageLimit, costGuardExceededMessage } from "../usageEnforcement";
 
 type QueueEnvelope = {
   version?: number;
@@ -76,7 +76,7 @@ export const handleQueueBatch = async (
       durationMs: Date.now() - startedAt,
       count: messages.length
     });
-    console.warn(usageLimitExceededMessage(blocked));
+    console.warn(costGuardExceededMessage(blocked));
     return;
   }
   const request = new Request(`https://${mapping.orgSlug}.w7s.internal${mapping.consumer}`, {

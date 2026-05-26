@@ -165,4 +165,4 @@ Response shape:
 
 Exception records use `kind: "exception"` and include `exception.name`, `exception.message`, and `exception.stack` when Cloudflare provides a stack. Non-OK invocations without a specific exception are stored as `kind: "outcome"`.
 
-Default retention is seven days. Operators can set `W7S_LOG_RETENTION_SECONDS` up to 30 days. Existing user Workers need to be redeployed once after this feature ships so their upload metadata includes the Tail Worker consumer.
+Default retention is seven days. Operators can set `W7S_LOG_RETENTION_SECONDS` up to 30 days. W7S truncates large log values and applies `log.write` daily and burst limits before storing Tail Worker records, so runaway logging is dropped instead of becoming a platform cost burn. Existing user Workers need to be redeployed once after this feature ships so their upload metadata includes the Tail Worker consumer.

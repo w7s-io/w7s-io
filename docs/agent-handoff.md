@@ -23,11 +23,13 @@ As of the latest docs update:
 - If `W7S_ANALYTICS_DATASET` is configured, the core writes Workers Analytics Engine datapoints for deploys, runtime requests, RPC, queues, schedules, and workflows.
 - `/api/v1/analytics/<owner>/<repo>` reads those Analytics Engine datapoints for authorized repo users.
 - Native user Worker uploads include a Tail Worker consumer pointing at W7S unless disabled; `/api/v1/logs/<owner>/<repo>` reads captured console, exception, and outcome records for authorized repo users.
-- The core stores per-app daily usage rollups in `DEPLOYMENTS_KV`, syncs direct Cloudflare resource usage hourly, and exposes both through `GET /api/v1/usage/<owner>/<repo>`.
+- The core stores per-app daily usage rollups in `DEPLOYMENTS_KV`, mirrors repo usage into owner/global aggregate rollups, syncs direct Cloudflare resource usage hourly, and exposes repo usage through `GET /api/v1/usage/<owner>/<repo>`.
 - Effective limit policies are exposed through `GET /api/v1/limits/<owner>/<repo>` and can be overridden only with W7S-owned KV policy records.
 - W7S operators can manage limit policy KV records with `npm run limits:get`, `npm run limits:set`, and `npm run limits:delete`.
 - `checkUsageLimit(...)` returns hard-enforcement metadata. Public runtime, deploy, RPC, queue-send, and workflow-start paths return HTTP `429` when the request would exceed the effective daily limit.
+- Short-window burst guards protect deploys, runtime requests, RPC, queues, schedules, workflows, and log ingestion.
 - Hourly Cloudflare usage collection stores `usage_cf_hourly:v1:*` and can write `app_limit_state:v1:*` to suspend apps until the next UTC day.
+- The scheduled handler also cleans stale static assets, stale dispatch Worker scripts, expired app suspension states, and old usage records.
 - Root `CNAME` files can attach app custom-domain routes when the W7S token can manage that Cloudflare zone.
 - Custom domains use soft TXT verification: the first claim works without TXT, `_w7s.<zone>` becomes an owner/repo allowlist when present, and hostname conflicts require TXT authorization.
 - Empty org roots such as `https://sadasant.w7s.cloud/` show deploy-help HTML instead of a plain 404.
@@ -56,7 +58,7 @@ The point of this repo is to keep the core deploy/routing plane small.
 - Hyperdrive config creation and credential rotation are not managed by W7S yet. Apps must provide existing Cloudflare Hyperdrive IDs.
 - Analytics Engine is currently W7S-core platform event analytics. User app analytics bindings are not exposed yet.
 - User Worker logs are captured from Tail Worker events after a user Worker has been redeployed with the tail consumer metadata.
-- Usage rollups are approximate KV counters, and Cloudflare-polled direct binding metrics are delayed by the hourly collector. Limits are enforced for free-tier protection, but they are not atomic billing-grade accounting. There is no public policy write API yet.
+- Usage rollups and burst guards are approximate KV counters, and Cloudflare-polled direct binding metrics are delayed by the hourly collector. Limits are enforced for free-tier protection, but they are not atomic billing-grade accounting. There is no public policy write API yet.
 - Queues are provisioned per repository/environment and delivered through W7S core to app HTTP consumer routes.
 - Schedules are delivered through W7S core to app HTTP consumer routes. They currently use best-effort KV locks to avoid duplicate schedule/time dispatches.
 - Workflows are delivered through W7S core to app HTTP consumer routes. The first implementation is a durable one-step dispatch with retries, not a user-defined multi-step WorkflowEntrypoint inside the app Worker.

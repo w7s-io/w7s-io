@@ -44,6 +44,8 @@ This file tracks the main known gaps after the current deploy core, runtime rout
   - Warning limits now exist in the usage API.
   - Effective policy reads and W7S-owned KV overrides now exist.
   - Hard daily usage guards now protect runtime requests, deploys, RPC dispatches, queue sends, workflow starts, and internal delivery paths.
+  - Owner-level and global aggregate daily guards now exist.
+  - Short-window burst guards now exist for deploys, runtime requests, RPC, queues, schedules, workflows, and log ingestion.
   - Hourly Cloudflare analytics sync now records direct resource usage and can suspend apps until the next UTC day.
   - No billing-grade accounting, strongly consistent counter store, or admin policy write API exists yet.
 
@@ -90,6 +92,8 @@ This file tracks the main known gaps after the current deploy core, runtime rout
 
 - **Accounting and limits**
   - Daily KV usage rollups exist for runtime, deploy, RPC, queue, schedule, and workflow paths.
+  - Owner-level and global daily aggregate rollups exist for account-wide circuit breakers.
+  - Short-window KV burst counters protect the fastest cost-burn paths.
   - Hourly Cloudflare analytics records exist for direct resource usage where Cloudflare exposes reliable per-resource metrics.
   - The usage API evaluates daily limits from default policy plus W7S-owned KV overrides and returns warning metadata.
   - `checkUsageLimit(...)` reports projected exceedance with `wouldBlock`; public handlers use it for blocking.

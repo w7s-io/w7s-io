@@ -30,26 +30,55 @@ const resolveSpaFallbackAsset = (manifest: StaticSiteManifest) => {
   return manifest.files["index.html"] ?? null;
 };
 
+const isCacheableAsset = (asset: StaticAssetEntry) =>
+  !asset.contentType.startsWith("text/html") &&
+  !asset.path.endsWith(".html") &&
+  asset.path.includes(".");
+
+const cacheControlForAsset = (asset: StaticAssetEntry) =>
+  isCacheableAsset(asset)
+    ? "public, max-age=31536000, immutable"
+    : "no-cache";
+
+const staticCache = () => {
+  const maybeCaches = (globalThis as unknown as { caches?: { default?: Cache } }).caches;
+  return maybeCaches?.default ?? null;
+};
+
+const cacheRequestForAsset = (asset: StaticAssetEntry) =>
+  new Request(`https://w7s-static-cache.local/${asset.r2Key}`);
+
 const responseFromAsset = async (env: Env, asset: StaticAssetEntry, request: Request) => {
   if (!env.STATIC_ASSETS) return null;
+  const cache = request.method === "GET" && isCacheableAsset(asset) ? staticCache() : null;
+  const cacheRequest = cache ? cacheRequestForAsset(asset) : null;
+  if (cache && cacheRequest) {
+    const cached = await cache.match(cacheRequest);
+    if (cached) {
+      const headers = new Headers(cached.headers);
+      headers.set("x-w7s-static-cache", "hit");
+      return new Response(cached.body, {
+        status: cached.status,
+        headers
+      });
+    }
+  }
   const object = await env.STATIC_ASSETS.get(asset.r2Key);
   if (!object) return null;
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set("content-type", headers.get("content-type") || asset.contentType);
-  headers.set(
-    "cache-control",
-    asset.contentType.startsWith("text/html") || asset.path.endsWith(".html")
-      ? "no-cache"
-      : asset.path.includes(".")
-        ? "public, max-age=31536000, immutable"
-        : "no-cache"
-  );
+  headers.set("cache-control", cacheControlForAsset(asset));
   if (asset.etag) headers.set("etag", `"${asset.etag}"`);
+  headers.set("x-w7s-static-cache", "miss");
   if (request.method === "HEAD") {
     return new Response(null, { status: 200, headers });
   }
-  return new Response(object.body, { status: 200, headers });
+  const response = new Response(object.body, { status: 200, headers });
+  if (cache && cacheRequest) {
+    await cache.put(cacheRequest, response.clone());
+  }
+  return response;
 };
 
 export const resolveStaticAssetResponse = async (params: {

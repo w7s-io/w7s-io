@@ -8,6 +8,7 @@ import {
   loadEffectiveUsageLimitPolicies,
   usageLimitPolicyKey
 } from "../usageLimits";
+import { checkRateLimit } from "../rateLimits";
 
 describe("usage rollups", () => {
   afterEach(() => {
@@ -66,6 +67,99 @@ describe("usage rollups", () => {
         }
       }
     });
+  });
+
+  it("records owner and global aggregate rollups for cost guards", async () => {
+    const env = createTestEnv();
+    const at = new Date("2026-05-26T12:00:00.000Z");
+
+    await recordUsageEvent(env, {
+      metric: "runtime.request",
+      repository: "acme/app",
+      environment: "production",
+      orgSlug: "acme",
+      repoSlug: "app",
+      outcome: "success",
+      count: 8,
+      units: 8,
+      at
+    });
+    await recordUsageEvent(env, {
+      metric: "runtime.request",
+      repository: "acme/other",
+      environment: "production",
+      orgSlug: "acme",
+      repoSlug: "other",
+      outcome: "success",
+      count: 4,
+      units: 4,
+      at
+    });
+    await env.DEPLOYMENTS_KV.put(
+      usageLimitPolicyKey({
+        scope: "owner_total",
+        orgSlug: "acme"
+      }),
+      JSON.stringify({
+        version: 1,
+        metrics: {
+          "runtime.request": 10
+        }
+      })
+    );
+
+    await expect(
+      checkUsageLimit(env, {
+        metric: "runtime.request",
+        environment: "production",
+        orgSlug: "acme",
+        repoSlug: "app",
+        units: 1,
+        at: new Date("2026-05-26T12:05:00.000Z")
+      })
+    ).resolves.toEqual(
+      expect.objectContaining({
+        scope: "owner",
+        used: 12,
+        limit: 10,
+        wouldBlock: true,
+        source: "owner_total"
+      })
+    );
+  });
+
+  it("enforces short-window burst limits", async () => {
+    const env = createTestEnv();
+    const at = new Date("2026-05-26T12:00:00.000Z");
+    for (let index = 0; index < 5; index += 1) {
+      await checkRateLimit(env, {
+        metric: "deploy",
+        environment: "production",
+        orgSlug: "acme",
+        repoSlug: "app",
+        at
+      });
+    }
+
+    await expect(
+      checkRateLimit(env, {
+        metric: "deploy",
+        environment: "production",
+        orgSlug: "acme",
+        repoSlug: "app",
+        at
+      })
+    ).resolves.toEqual(
+      expect.objectContaining({
+        enforcement: "rate",
+        metric: "deploy",
+        scope: "repo",
+        used: 5,
+        projectedUnits: 6,
+        limit: 5,
+        wouldBlock: true
+      })
+    );
   });
 
   it("returns usage through an authenticated GitHub repo check", async () => {

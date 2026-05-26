@@ -12,7 +12,7 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
 - `w7s.json` can declare KV, R2, D1, Durable Objects, Hyperdrive, queues, schedules, workflows, vars, secrets, RPC allowlists, queue allowlists, and workflow allowlists.
 - RPC, Queue sends, and Workflow starts use internal service bindings because W7S app Workers are dispatch-namespace scripts, not ordinary account-level Workers.
 - W7S core can optionally write platform metrics to Workers Analytics Engine when `W7S_ANALYTICS_DATASET` is configured.
-- W7S core stores best-effort daily usage rollups in `DEPLOYMENTS_KV` and exposes them with effective limit warnings through `GET /api/v1/usage/<owner>/<repo>`.
+- W7S core stores best-effort daily usage rollups in `DEPLOYMENTS_KV`, mirrors repo events into owner/global aggregate rollups, and exposes repo usage with effective limit warnings through `GET /api/v1/usage/<owner>/<repo>`.
 
 ## Current Focus
 
@@ -144,22 +144,26 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
    - Revisit direct app integration if Cloudflare exposes a direct WFP-compatible consumer model.
 
 6. **Usage accounting and limits**
-   - Status: basic rollups, hourly Cloudflare analytics sync, effective policy reads, warning thresholds, suspension state, and hard daily enforcement are implemented.
+   - Status: repo/owner/global rollups, hourly Cloudflare analytics sync, effective policy reads, warning thresholds, suspension state, hard daily enforcement, and short-window burst guards are implemented.
    - Goal: make platform usage visible before enabling costly primitives.
    - Current API:
      ```text
      GET /api/v1/usage/<owner>/<repo>?date=YYYY-MM-DD
      ```
    - GitHub bearer tokens must have access to the target repo.
-   - Current rollups are KV read-modify-write counters for deploy, runtime request, RPC, queue, schedule, and workflow usage.
+   - Current rollups are KV read-modify-write counters for deploy, runtime request, RPC, queue, schedule, workflow, and log usage.
+   - Repo usage is aggregated into owner-level and global daily rollups so W7S can stop cross-repo or account-wide cost burn.
+   - Short-window burst counters protect deploys, runtime requests, RPC, queues, schedules, workflows, and log ingestion before daily counters or hourly Cloudflare analytics react.
    - Direct Cloudflare resource usage is synced hourly from Cloudflare analytics into `usage_cf_hourly:v1:*` records and merged into daily usage.
    - Durable Object storage operation units are attributed by namespace ID when namespace IDs are discoverable from DO invocation analytics for the app's Worker script.
    - Public runtime, deploy, RPC, queue-send, and workflow-start paths return HTTP `429` when projected usage exceeds the effective daily limit.
    - Internal queue, schedule, and workflow delivery paths skip dispatch when their delivery metric would exceed policy.
    - Hourly Cloudflare sync stores `app_limit_state:v1:*` and suspends apps that exceed reliably attributed limits until the next UTC day.
    - Effective policy reads are available at `GET /api/v1/limits/<owner>/<repo>`.
-   - W7S-owned KV overrides can target owner, owner/environment, repo, or repo/environment scopes.
+   - W7S-owned KV overrides can target owner, owner/environment, repo, repo/environment, owner aggregate, owner/environment aggregate, global, or global/environment scopes.
    - `checkUsageLimit(...)` reports whether projected usage would exceed policy and feeds the hard enforcement helper.
+   - Queue messages and workflow payloads have 64 KB default caps; queue consumers use bounded batch/retry settings; workflow active instances are capped per target repo.
+   - The scheduled handler cleans old static assets, old usage records, expired app suspensions, and stale dispatch namespace scripts.
    - DO stored bytes are not enforced per app yet because Cloudflare's current stored-bytes analytics are not attributable by app namespace/script.
    - Next phase should upgrade the counter store beyond KV read-modify-write rollups before treating limits as billing-grade.
 

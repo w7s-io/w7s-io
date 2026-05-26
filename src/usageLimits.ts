@@ -1,6 +1,12 @@
 import type { Env } from "./env";
 import { sanitizeScriptPart } from "./names";
-import { loadUsageDailyRollup, usageDate, type UsageDailyRollup } from "./usage";
+import {
+  loadUsageDailyRollup,
+  loadUsageGlobalDailyRollup,
+  loadUsageOwnerDailyRollup,
+  usageDate,
+  type UsageDailyRollup
+} from "./usage";
 
 export type UsageLimitStatus = "ok" | "warning" | "exceeded";
 export type UsageLimitPolicySource =
@@ -8,7 +14,13 @@ export type UsageLimitPolicySource =
   | "owner"
   | "owner_environment"
   | "repo"
-  | "repo_environment";
+  | "repo_environment"
+  | "owner_total"
+  | "owner_total_environment"
+  | "global"
+  | "global_environment";
+
+export type UsageLimitScope = "repo" | "owner" | "global";
 
 export type UsageLimitPolicy = {
   metric: string;
@@ -53,6 +65,7 @@ export type UsageLimitCheck = {
   environment: string;
   orgSlug: string;
   repoSlug: string;
+  scope: UsageLimitScope;
   used: number;
   requestedUnits: number;
   projectedUnits: number;
@@ -100,8 +113,38 @@ export const DEFAULT_DAILY_USAGE_LIMITS: UsageLimitPolicy[] = [
   { metric: "queue.delivery", dailyUnits: 10_000, warningThreshold: 0.8, source: "default" },
   { metric: "schedule.delivery", dailyUnits: 2_000, warningThreshold: 0.8, source: "default" },
   { metric: "workflow.create", dailyUnits: 1_000, warningThreshold: 0.8, source: "default" },
-  { metric: "workflow.delivery", dailyUnits: 1_000, warningThreshold: 0.8, source: "default" }
+  { metric: "workflow.delivery", dailyUnits: 1_000, warningThreshold: 0.8, source: "default" },
+  { metric: "log.write", dailyUnits: 5_000, warningThreshold: 0.8, source: "default" }
 ];
+
+const scalePolicies = (
+  policies: UsageLimitPolicy[],
+  scale: number,
+  minimums: Record<string, number> = {}
+) =>
+  policies.map((policy) => ({
+    ...policy,
+    dailyUnits: Math.max(policy.dailyUnits * scale, minimums[policy.metric] ?? 0),
+    source: "default" as const
+  }));
+
+export const DEFAULT_OWNER_DAILY_USAGE_LIMITS: UsageLimitPolicy[] = scalePolicies(
+  DEFAULT_DAILY_USAGE_LIMITS,
+  10,
+  {
+    deploy: 200,
+    "worker.script": 50
+  }
+);
+
+export const DEFAULT_GLOBAL_DAILY_USAGE_LIMITS: UsageLimitPolicy[] = scalePolicies(
+  DEFAULT_DAILY_USAGE_LIMITS,
+  100,
+  {
+    deploy: 2_000,
+    "worker.script": 1_000
+  }
+);
 
 export type UsageLimitPolicyRecord = {
   version: 1;
@@ -144,6 +187,14 @@ export const usageLimitPolicyKey = (params: {
   if (params.scope === "owner") return `usage_limit_policy:v1:owner:${org}`;
   if (params.scope === "owner_environment") {
     return `usage_limit_policy:v1:owner_environment:${environment}:${org}`;
+  }
+  if (params.scope === "owner_total") return `usage_limit_policy:v1:owner_total:${org}`;
+  if (params.scope === "owner_total_environment") {
+    return `usage_limit_policy:v1:owner_total_environment:${environment}:${org}`;
+  }
+  if (params.scope === "global") return "usage_limit_policy:v1:global";
+  if (params.scope === "global_environment") {
+    return `usage_limit_policy:v1:global_environment:${environment}`;
   }
   if (params.scope === "repo") return `usage_limit_policy:v1:repo:${org}:${repo}`;
   return `usage_limit_policy:v1:repo_environment:${environment}:${org}:${repo}`;
@@ -320,6 +371,75 @@ export const loadEffectiveUsageLimitPolicies = async (
   };
 };
 
+const loadEffectiveOwnerUsageLimitPolicies = async (
+  env: Env,
+  params: {
+    environment: string;
+    orgSlug: string;
+  }
+) => {
+  const policies = new Map(
+    DEFAULT_OWNER_DAILY_USAGE_LIMITS.map((policy) => [policy.metric, { ...policy }])
+  );
+  const keys: Array<{ scope: Extract<UsageLimitPolicySource, "owner_total" | "owner_total_environment">; key: string }> = [
+    {
+      scope: "owner_total",
+      key: usageLimitPolicyKey({
+        scope: "owner_total",
+        orgSlug: params.orgSlug
+      })
+    },
+    {
+      scope: "owner_total_environment",
+      key: usageLimitPolicyKey({
+        scope: "owner_total_environment",
+        environment: params.environment,
+        orgSlug: params.orgSlug
+      })
+    }
+  ];
+
+  for (const { scope, key } of keys) {
+    const { record } = await readPolicyRecord(env, key, scope);
+    if (record) applyPolicyRecord(policies, record, scope);
+  }
+  return Object.fromEntries([...policies.values()].sort(policySort).map((policy) => [policy.metric, policy]));
+};
+
+const loadEffectiveGlobalUsageLimitPolicies = async (
+  env: Env,
+  params: {
+    environment: string;
+  }
+) => {
+  const policies = new Map(
+    DEFAULT_GLOBAL_DAILY_USAGE_LIMITS.map((policy) => [policy.metric, { ...policy }])
+  );
+  const keys: Array<{ scope: Extract<UsageLimitPolicySource, "global" | "global_environment">; key: string }> = [
+    {
+      scope: "global",
+      key: usageLimitPolicyKey({
+        scope: "global",
+        orgSlug: "global"
+      })
+    },
+    {
+      scope: "global_environment",
+      key: usageLimitPolicyKey({
+        scope: "global_environment",
+        environment: params.environment,
+        orgSlug: "global"
+      })
+    }
+  ];
+
+  for (const { scope, key } of keys) {
+    const { record } = await readPolicyRecord(env, key, scope);
+    if (record) applyPolicyRecord(policies, record, scope);
+  }
+  return Object.fromEntries([...policies.values()].sort(policySort).map((policy) => [policy.metric, policy]));
+};
+
 export const evaluateUsageLimits = (
   usage: Pick<UsageDailyRollup, "metrics">,
   policies = DEFAULT_DAILY_USAGE_LIMITS
@@ -386,48 +506,80 @@ export const checkUsageLimit = async (
     orgSlug: params.orgSlug,
     repoSlug: params.repoSlug
   });
-  const policy = policies.policy[metric];
-  if (!policy) return null;
+  const ownerPolicies = await loadEffectiveOwnerUsageLimitPolicies(env, {
+    environment: params.environment,
+    orgSlug: params.orgSlug
+  });
+  const globalPolicies = await loadEffectiveGlobalUsageLimitPolicies(env, {
+    environment: params.environment
+  });
+  const repoPolicy = policies.policy[metric];
+  if (!repoPolicy && !ownerPolicies[metric] && !globalPolicies[metric]) return null;
 
-  const rollup = await loadUsageDailyRollup(env, {
+  const repoRollup = await loadUsageDailyRollup(env, {
     date,
     environment: params.environment,
     orgSlug: params.orgSlug,
     repoSlug: params.repoSlug
   });
-  const used = rollup?.metrics[metric]?.units ?? 0;
-  const projectedUnits = used + requestedUnits;
-  const status = statusFor({
-    used,
-    limit: policy.dailyUnits,
-    warningThreshold: policy.warningThreshold
-  });
-  const projectedStatus = statusFor({
-    used: projectedUnits,
-    limit: policy.dailyUnits,
-    warningThreshold: policy.warningThreshold
-  });
-
-  return {
-    version: 1,
-    mode: "enforce",
-    enforcement: "hard",
-    metric,
+  const ownerRollup = await loadUsageOwnerDailyRollup(env, {
     date,
     environment: params.environment,
-    orgSlug: params.orgSlug,
-    repoSlug: params.repoSlug,
-    used,
-    requestedUnits,
-    projectedUnits,
-    limit: policy.dailyUnits,
-    remaining: Math.max(0, policy.dailyUnits - used),
-    usageRatio: ratio(used, policy.dailyUnits),
-    projectedUsageRatio: ratio(projectedUnits, policy.dailyUnits),
-    status,
-    projectedStatus,
-    wouldBlock: projectedUnits > policy.dailyUnits,
-    source: policy.source,
-    policy
+    orgSlug: params.orgSlug
+  });
+  const globalRollup = await loadUsageGlobalDailyRollup(env, {
+    date,
+    environment: params.environment
+  });
+
+  const buildCheck = (
+    scope: UsageLimitScope,
+    policy: UsageLimitPolicy | undefined,
+    rollup: UsageDailyRollup | null
+  ): UsageLimitCheck | null => {
+    if (!policy) return null;
+    const used = rollup?.metrics[metric]?.units ?? 0;
+    const projectedUnits = used + requestedUnits;
+    const status = statusFor({
+      used,
+      limit: policy.dailyUnits,
+      warningThreshold: policy.warningThreshold
+    });
+    const projectedStatus = statusFor({
+      used: projectedUnits,
+      limit: policy.dailyUnits,
+      warningThreshold: policy.warningThreshold
+    });
+
+    return {
+      version: 1,
+      mode: "enforce",
+      enforcement: "hard",
+      metric,
+      date,
+      environment: params.environment,
+      orgSlug: params.orgSlug,
+      repoSlug: params.repoSlug,
+      scope,
+      used,
+      requestedUnits,
+      projectedUnits,
+      limit: policy.dailyUnits,
+      remaining: Math.max(0, policy.dailyUnits - used),
+      usageRatio: ratio(used, policy.dailyUnits),
+      projectedUsageRatio: ratio(projectedUnits, policy.dailyUnits),
+      status,
+      projectedStatus,
+      wouldBlock: projectedUnits > policy.dailyUnits,
+      source: policy.source,
+      policy
+    };
   };
+
+  const checks = [
+    buildCheck("repo", repoPolicy, repoRollup),
+    buildCheck("owner", ownerPolicies[metric], ownerRollup),
+    buildCheck("global", globalPolicies[metric], globalRollup)
+  ].filter((check): check is UsageLimitCheck => Boolean(check));
+  return checks.find((check) => check.wouldBlock) ?? checks[0] ?? null;
 };

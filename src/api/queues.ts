@@ -13,6 +13,13 @@ import { enforceAppNotSuspended } from "../appLimits";
 type HonoContext = Context<{ Bindings: Env }>;
 
 const QUEUE_PREFIX = "/api/v1/queues/";
+const DEFAULT_MAX_QUEUE_MESSAGE_BYTES = 64 * 1024;
+
+class QueueRequestError extends Error {
+  constructor(message: string, readonly status = 400) {
+    super(message);
+  }
+}
 
 const splitPath = (path: string) =>
   path.split("/").map((segment) => segment.trim()).filter(Boolean);
@@ -57,12 +64,27 @@ const isAuthorizedCaller = (params: {
   return params.targetAllow.includes(params.callerOrg) || params.targetAllow.includes(callerRepository);
 };
 
-const readJsonBody = async (request: Request) => {
+const maxQueueMessageBytes = (env: Env) => {
+  const parsed = Number(env.W7S_QUEUE_MAX_MESSAGE_BYTES);
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.floor(parsed)
+    : DEFAULT_MAX_QUEUE_MESSAGE_BYTES;
+};
+
+const jsonByteLength = (value: unknown) =>
+  new TextEncoder().encode(JSON.stringify(value)).byteLength;
+
+const readJsonBody = async (request: Request, env: Env) => {
   if (!request.body) return null;
+  const text = await request.text();
+  if (!text.trim()) return null;
+  if (new TextEncoder().encode(text).byteLength > maxQueueMessageBytes(env)) {
+    throw new QueueRequestError(`Queue message body exceeds ${maxQueueMessageBytes(env)} bytes.`, 413);
+  }
   try {
-    return await request.json();
+    return JSON.parse(text) as unknown;
   } catch {
-    throw new Error("Queue message body must be valid JSON.");
+    throw new QueueRequestError("Queue message body must be valid JSON.");
   }
 };
 
@@ -88,10 +110,13 @@ export const handleQueueSend = async (c: HonoContext) => {
   try {
     caller = parseCaller(c);
     target = parseTarget(c.req.raw);
-    body = await readJsonBody(c.req.raw);
+    body = await readJsonBody(c.req.raw, c.env);
     delaySeconds = readDelaySeconds(c);
   } catch (error) {
-    return jsonError(error instanceof Error ? error.message : String(error), 400);
+    return jsonError(
+      error instanceof Error ? error.message : String(error),
+      error instanceof QueueRequestError ? error.status : 400
+    );
   }
 
   const callerDeployment = await loadDeploymentRecord(
@@ -156,27 +181,31 @@ export const handleQueueSend = async (c: HonoContext) => {
   if (limitResponse) return limitResponse;
 
   const enqueuedAt = new Date().toISOString();
+  const envelope = {
+    version: 1,
+    body,
+    enqueuedAt,
+    caller: {
+      orgSlug: caller.orgSlug,
+      repoSlug: caller.repoSlug,
+      repository: `${caller.orgSlug}/${caller.repoSlug}`,
+      environment: caller.environment
+    },
+    target: {
+      orgSlug: target.orgSlug,
+      repoSlug: target.repoSlug,
+      repository: `${target.orgSlug}/${target.repoSlug}`,
+      queue: target.queue
+    }
+  };
+  if (jsonByteLength(envelope) > maxQueueMessageBytes(c.env)) {
+    return jsonError(`Queue message envelope exceeds ${maxQueueMessageBytes(c.env)} bytes.`, 413);
+  }
   const result = await sendQueueMessage({
     env: c.env,
     queueId: targetQueue.queueId,
     delaySeconds,
-    body: {
-      version: 1,
-      body,
-      enqueuedAt,
-      caller: {
-        orgSlug: caller.orgSlug,
-        repoSlug: caller.repoSlug,
-        repository: `${caller.orgSlug}/${caller.repoSlug}`,
-        environment: caller.environment
-      },
-      target: {
-        orgSlug: target.orgSlug,
-        repoSlug: target.repoSlug,
-        repository: `${target.orgSlug}/${target.repoSlug}`,
-        queue: target.queue
-      }
-    }
+    body: envelope
   });
 
   writeAnalyticsEvent(c.env, {

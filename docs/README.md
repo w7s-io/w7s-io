@@ -30,7 +30,7 @@ Start here:
 - optional Workers Analytics Engine writes provide core platform observability when `W7S_ANALYTICS_DATASET` is configured.
 - authenticated analytics reads expose those platform events through `/api/v1/analytics/<owner>/<repo>`.
 - authenticated log reads expose user Worker `console.*` output and uncaught exceptions through `/api/v1/logs/<owner>/<repo>`.
-- daily usage rollups, hourly Cloudflare usage sync, app suspension state, and effective limit warnings are exposed through `GET /api/v1/usage/<owner>/<repo>`.
+- daily repo/owner/global usage rollups, hourly Cloudflare usage sync, app suspension state, short-window burst guards, and effective limit warnings are exposed through `GET /api/v1/usage/<owner>/<repo>`.
 - effective limit policies are exposed through `GET /api/v1/limits/<owner>/<repo>`.
 
 The old workflow editor, `jsInterpreter`, plugin bridge, DB control, and telemetry stack are not part of this core.

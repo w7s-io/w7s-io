@@ -871,7 +871,13 @@ describe("deploy API", () => {
     expect(createdConsumers).toEqual([
       {
         type: "worker",
-        script_name: "w7s-io"
+        script_name: "w7s-io",
+        settings: {
+          batch_size: 10,
+          max_retries: 3,
+          retry_delay: 10,
+          visibility_timeout_ms: 300000
+        }
       }
     ]);
     expect(uploadedMetadata[0]?.bindings).toEqual(

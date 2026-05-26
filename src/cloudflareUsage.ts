@@ -1,8 +1,15 @@
 import { clearAppLimitState, suspendAppForLimits } from "./appLimits";
 import type { Env } from "./env";
 import { sanitizeScriptPart } from "./names";
-import { loadUsageDailyRollup, usageDate, usageKey, type UsageDailyRollup, type UsageMetricRollup } from "./usage";
-import { evaluateUsageLimits, loadEffectiveUsageLimitPolicies } from "./usageLimits";
+import {
+  loadUsageDailyRollup,
+  rebuildUsageAggregatesForDate,
+  usageDate,
+  usageKey,
+  type UsageDailyRollup,
+  type UsageMetricRollup
+} from "./usage";
+import { checkUsageLimit, evaluateUsageLimits, loadEffectiveUsageLimitPolicies } from "./usageLimits";
 import {
   listDeploymentRecords,
   type DeploymentRecord
@@ -600,6 +607,10 @@ export const mergeCloudflareHourlyIntoDaily = async (
   daily.cloudflareHours = hourly.map((record) => record.hour);
 
   await env.DEPLOYMENTS_KV.put(usageKey(params), JSON.stringify(daily));
+  await rebuildUsageAggregatesForDate(env, {
+    date: params.date,
+    environment: params.environment
+  });
   return daily;
 };
 
@@ -710,6 +721,26 @@ const collectDeploymentMetrics = async (env: Env, deployment: DeploymentRecord, 
     warning.status === "exceeded" &&
     daily.metrics[warning.metric]?.source !== "cloudflare_estimated"
   );
+  for (const [metric, rollup] of Object.entries(daily.metrics)) {
+    if (rollup.source === "cloudflare_estimated") continue;
+    const scopedCheck = await checkUsageLimit(env, {
+      metric,
+      environment: deployment.environment,
+      orgSlug: deployment.orgSlug,
+      repoSlug: deployment.repoSlug,
+      units: 1,
+      at: params.syncedAt
+    });
+    if (!scopedCheck || scopedCheck.scope === "repo" || scopedCheck.status !== "exceeded") continue;
+    exceeded.push({
+      metric: scopedCheck.metric,
+      status: "exceeded",
+      used: scopedCheck.used,
+      limit: scopedCheck.limit,
+      remaining: scopedCheck.remaining,
+      message: `${scopedCheck.metric} exceeded the ${scopedCheck.scope} daily limit (${scopedCheck.used}/${scopedCheck.limit}).`
+    });
+  }
   if (exceeded.length > 0) {
     await suspendAppForLimits(env, {
       environment: deployment.environment,

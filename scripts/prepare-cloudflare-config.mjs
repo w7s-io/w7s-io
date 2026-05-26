@@ -11,6 +11,20 @@ const analyticsDataset = process.env.W7S_ANALYTICS_DATASET?.trim() || "";
 const logRetentionSeconds = process.env.W7S_LOG_RETENTION_SECONDS?.trim() || "604800";
 const logTailConsumer = process.env.W7S_LOG_TAIL_CONSUMER?.trim() || workerName;
 const disableWorkerLogs = process.env.W7S_DISABLE_WORKER_LOGS?.trim() || "";
+const queueMaxMessageBytes = process.env.W7S_QUEUE_MAX_MESSAGE_BYTES?.trim() || "65536";
+const queueBatchSize = process.env.W7S_QUEUE_BATCH_SIZE?.trim() || "10";
+const queueMaxRetries = process.env.W7S_QUEUE_MAX_RETRIES?.trim() || "3";
+const queueRetryDelaySeconds = process.env.W7S_QUEUE_RETRY_DELAY_SECONDS?.trim() || "10";
+const queueVisibilityTimeoutMs = process.env.W7S_QUEUE_VISIBILITY_TIMEOUT_MS?.trim() || "300000";
+const workflowMaxPayloadBytes = process.env.W7S_WORKFLOW_MAX_PAYLOAD_BYTES?.trim() || "65536";
+const workflowActiveLimit = process.env.W7S_WORKFLOW_ACTIVE_LIMIT?.trim() || "50";
+const workflowActiveTtlSeconds = process.env.W7S_WORKFLOW_ACTIVE_TTL_SECONDS?.trim() || "86400";
+const workflowMaxRetries = process.env.W7S_WORKFLOW_MAX_RETRIES?.trim() || "3";
+const workflowRetryDelaySeconds = process.env.W7S_WORKFLOW_RETRY_DELAY_SECONDS?.trim() || "10";
+const workflowTimeoutSeconds = process.env.W7S_WORKFLOW_TIMEOUT_SECONDS?.trim() || "300";
+const staticRetentionDays = process.env.W7S_STATIC_RETENTION_DAYS?.trim() || "7";
+const usageRetentionDays = process.env.W7S_USAGE_RETENTION_DAYS?.trim() || "14";
+const workerScriptRetentionDays = process.env.W7S_WORKER_SCRIPT_RETENTION_DAYS?.trim() || "7";
 const workflowName = process.env.W7S_WORKFLOW_NAME?.trim() || "w7s-workflows";
 const userWorkerCpuMs = process.env.W7S_USER_WORKER_CPU_MS?.trim() || "50";
 const userWorkerSubrequests = process.env.W7S_USER_WORKER_SUBREQUESTS?.trim() || "25";
@@ -158,6 +172,20 @@ const config = {
     W7S_USER_WORKER_SUBREQUESTS: userWorkerSubrequests,
     W7S_LOG_RETENTION_SECONDS: logRetentionSeconds,
     W7S_LOG_TAIL_CONSUMER: logTailConsumer,
+    W7S_QUEUE_MAX_MESSAGE_BYTES: queueMaxMessageBytes,
+    W7S_QUEUE_BATCH_SIZE: queueBatchSize,
+    W7S_QUEUE_MAX_RETRIES: queueMaxRetries,
+    W7S_QUEUE_RETRY_DELAY_SECONDS: queueRetryDelaySeconds,
+    W7S_QUEUE_VISIBILITY_TIMEOUT_MS: queueVisibilityTimeoutMs,
+    W7S_WORKFLOW_MAX_PAYLOAD_BYTES: workflowMaxPayloadBytes,
+    W7S_WORKFLOW_ACTIVE_LIMIT: workflowActiveLimit,
+    W7S_WORKFLOW_ACTIVE_TTL_SECONDS: workflowActiveTtlSeconds,
+    W7S_WORKFLOW_MAX_RETRIES: workflowMaxRetries,
+    W7S_WORKFLOW_RETRY_DELAY_SECONDS: workflowRetryDelaySeconds,
+    W7S_WORKFLOW_TIMEOUT_SECONDS: workflowTimeoutSeconds,
+    W7S_STATIC_RETENTION_DAYS: staticRetentionDays,
+    W7S_USAGE_RETENTION_DAYS: usageRetentionDays,
+    W7S_WORKER_SCRIPT_RETENTION_DAYS: workerScriptRetentionDays,
     ...(disableWorkerLogs ? { W7S_DISABLE_WORKER_LOGS: disableWorkerLogs } : {}),
     ...(analyticsDataset ? { W7S_ANALYTICS_DATASET: analyticsDataset } : {}),
     ...(appCommitId ? { APP_COMMIT_ID: appCommitId } : {}),
@@ -229,6 +257,20 @@ console.log(
       logRetentionSeconds,
       logTailConsumer,
       disableWorkerLogs: disableWorkerLogs || null,
+      queueMaxMessageBytes,
+      queueBatchSize,
+      queueMaxRetries,
+      queueRetryDelaySeconds,
+      queueVisibilityTimeoutMs,
+      workflowMaxPayloadBytes,
+      workflowActiveLimit,
+      workflowActiveTtlSeconds,
+      workflowMaxRetries,
+      workflowRetryDelaySeconds,
+      workflowTimeoutSeconds,
+      staticRetentionDays,
+      usageRetentionDays,
+      workerScriptRetentionDays,
       scheduleCron,
       attachWildcardRoute,
       routeManagement: "post-deploy"

@@ -3,6 +3,7 @@ import { app } from "../worker";
 import { handleTailEvents } from "../logs";
 import { storeDeploymentRecord, type DeploymentRecord } from "../storage/deployments";
 import { createTestEnv } from "./mocks";
+import { usageLimitPolicyKey } from "../usageLimits";
 
 const deployment = (overrides: Partial<DeploymentRecord> = {}): DeploymentRecord => ({
   version: 1,
@@ -175,5 +176,61 @@ describe("worker log retrieval", () => {
       env
     );
     expect(missingAuth.status).toBe(401);
+  });
+
+  it("drops log records when the daily log write limit is exceeded", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input) === "https://api.github.com/repos/acme/app") {
+          return Response.json({ full_name: "acme/app" });
+        }
+        return new Response("not found", { status: 404 });
+      })
+    );
+    const env = createTestEnv();
+    await storeDeploymentRecord(env, deployment());
+    await env.DEPLOYMENTS_KV.put(
+      usageLimitPolicyKey({
+        scope: "repo",
+        orgSlug: "acme",
+        repoSlug: "app"
+      }),
+      JSON.stringify({
+        version: 1,
+        metrics: {
+          "log.write": 1
+        }
+      })
+    );
+
+    const stored = await handleTailEvents(
+      [
+        {
+          scriptName: "acme--app--production--abc123",
+          eventTimestamp: 1779796800000,
+          outcome: "ok",
+          logs: [
+            { timestamp: 1779796800000, level: "log", message: ["one"] },
+            { timestamp: 1779796800001, level: "log", message: ["two"] }
+          ],
+          exceptions: []
+        }
+      ],
+      env
+    );
+
+    expect(stored).toBe(0);
+    const response = await app.fetch(
+      new Request("https://w7s.cloud/api/v1/logs/acme/app?from=2026-05-26T11:00:00.000Z&to=2026-05-26T13:00:00.000Z", {
+        headers: {
+          authorization: "Bearer github-token"
+        }
+      }),
+      env
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data: { logs: { records: unknown[] } } };
+    expect(body.data.logs.records).toEqual([]);
   });
 });

@@ -1,6 +1,8 @@
 import type { Env } from "./env";
 import { sanitizeScriptPart } from "./names";
 import { loadWorkerScriptMapping, type WorkerScriptMapping } from "./storage/deployments";
+import { recordUsageEvent } from "./usage";
+import { checkBlockedUsageLimit, costGuardExceededMessage } from "./usageEnforcement";
 
 export type AppLogKind = "console" | "exception" | "outcome";
 
@@ -288,6 +290,9 @@ export const storeAppLogRecords = async (env: Env, records: AppLogRecord[]) => {
   );
 };
 
+const repositoryKey = (record: AppLogRecord) =>
+  `${record.environment}\0${record.orgSlug}\0${record.repoSlug}`;
+
 export const persistTailEvents = async (events: unknown[], env: Env) => {
   const mappings = new Map<string, WorkerScriptMapping | null>();
   const records: AppLogRecord[] = [];
@@ -303,8 +308,42 @@ export const persistTailEvents = async (events: unknown[], env: Env) => {
     if (!mapping) continue;
     records.push(...recordsFromTrace(trace, mapping));
   }
-  if (records.length > 0) await storeAppLogRecords(env, records);
-  return records.length;
+  const allowedRecords: AppLogRecord[] = [];
+  const grouped = new Map<string, AppLogRecord[]>();
+  for (const record of records) {
+    const key = repositoryKey(record);
+    grouped.set(key, [...(grouped.get(key) ?? []), record]);
+  }
+
+  for (const group of grouped.values()) {
+    const first = group[0];
+    if (!first) continue;
+    const blocked = await checkBlockedUsageLimit(env, {
+      metric: "log.write",
+      environment: first.environment,
+      orgSlug: first.orgSlug,
+      repoSlug: first.repoSlug,
+      units: group.length
+    });
+    if (blocked) {
+      console.warn(costGuardExceededMessage(blocked));
+      continue;
+    }
+    allowedRecords.push(...group);
+    await recordUsageEvent(env, {
+      metric: "log.write",
+      repository: first.repository,
+      environment: first.environment,
+      orgSlug: first.orgSlug,
+      repoSlug: first.repoSlug,
+      outcome: "success",
+      count: group.length,
+      units: group.length
+    });
+  }
+
+  if (allowedRecords.length > 0) await storeAppLogRecords(env, allowedRecords);
+  return allowedRecords.length;
 };
 
 export const handleTailEvents = (

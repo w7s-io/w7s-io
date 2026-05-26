@@ -26,6 +26,18 @@ type QueueConsumer = {
   type?: string;
 };
 
+const positiveInteger = (value: string | undefined, fallback: number) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+};
+
+const queueConsumerSettings = (env: Env) => ({
+  batch_size: positiveInteger(env.W7S_QUEUE_BATCH_SIZE, 10),
+  max_retries: positiveInteger(env.W7S_QUEUE_MAX_RETRIES, 3),
+  retry_delay: positiveInteger(env.W7S_QUEUE_RETRY_DELAY_SECONDS, 10),
+  visibility_timeout_ms: positiveInteger(env.W7S_QUEUE_VISIBILITY_TIMEOUT_MS, 300_000)
+});
+
 const shortHash = (value: string) => {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index += 1) {
@@ -146,6 +158,7 @@ const getOrCreateQueueRecord = async (params: {
 };
 
 const ensureQueueConsumer = async (params: {
+  env: Env;
   credentials: CloudflareCredentials;
   queueId: string;
   scriptName: string;
@@ -169,7 +182,8 @@ const ensureQueueConsumer = async (params: {
       headers: buildCloudflareHeaders(params.credentials.apiToken, "application/json"),
       body: JSON.stringify({
         type: "worker",
-        script_name: params.scriptName
+        script_name: params.scriptName,
+        settings: queueConsumerSettings(params.env)
       })
     }
   );
@@ -204,6 +218,7 @@ export const provisionAppQueues = async (params: {
       declaration
     });
     await ensureQueueConsumer({
+      env: params.env,
       credentials,
       queueId: record.id,
       scriptName: consumerScriptName

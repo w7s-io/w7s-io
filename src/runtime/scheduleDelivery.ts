@@ -1,9 +1,10 @@
 import { responseOutcome, writeAnalyticsEvent } from "../analytics";
+import { cleanupPlatformState } from "../cleanup";
 import { collectHourlyCloudflareUsage } from "../cloudflareUsage";
 import { isCronExpressionDue, scheduledMinuteIso } from "../cron";
 import type { Env } from "../env";
 import { recordUsageEvent } from "../usage";
-import { checkBlockedUsageLimit, usageLimitExceededMessage } from "../usageEnforcement";
+import { checkBlockedUsageLimit, costGuardExceededMessage } from "../usageEnforcement";
 import {
   listScheduleMappings,
   loadDeploymentRecord,
@@ -66,7 +67,7 @@ const dispatchSchedule = async (params: {
       durationMs: Date.now() - startedAt,
       count: 1
     });
-    console.warn(usageLimitExceededMessage(blocked));
+    console.warn(costGuardExceededMessage(blocked));
     return;
   }
 
@@ -160,4 +161,5 @@ export const handleScheduled = (
   const scheduledTime = new Date(controller.scheduledTime);
   ctx.waitUntil(dispatchDueSchedules(env, scheduledTime));
   ctx.waitUntil(collectHourlyCloudflareUsage(env, scheduledTime));
+  ctx.waitUntil(cleanupPlatformState(env, scheduledTime));
 };

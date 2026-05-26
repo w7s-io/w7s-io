@@ -2,7 +2,9 @@
 
 W7S keeps daily usage rollups for each deployed repository and environment. W7S-managed paths update counters directly, and direct Cloudflare resources are synced hourly from Cloudflare analytics into the same daily rollup.
 
-The same response includes daily limits and warnings. W7S enforces immediate limits on deploys, runtime requests, RPC dispatches, queue sends, workflow starts, and internal queue/schedule/workflow deliveries. Direct binding usage such as D1/R2/KV/Durable Object cost is enforced after the hourly Cloudflare sync.
+The same response includes daily limits and warnings. W7S enforces immediate limits on deploys, runtime requests, RPC dispatches, queue sends, workflow starts, log ingestion, and internal queue/schedule/workflow deliveries. Direct binding usage such as D1/R2/KV/Durable Object cost is enforced after the hourly Cloudflare sync.
+
+Every repo usage event is also aggregated into owner-level and global daily rollups. Runtime guards check all three scopes, so one owner cannot multiply the free tier across many repos, and the whole shared account has a final circuit breaker.
 
 ## API
 
@@ -46,6 +48,8 @@ Rollups are stored in `DEPLOYMENTS_KV` under:
 
 ```text
 usage_daily:v1:<date>:<environment>:<owner>:<repo>
+usage_owner_daily:v1:<date>:<environment>:<owner>
+usage_global_daily:v1:<date>:<environment>
 ```
 
 Example response:
@@ -151,6 +155,7 @@ queue.delivery
 schedule.delivery
 workflow.create
 workflow.delivery
+log.write
 ```
 
 `count` is the event count. `units` is usually the same value, except batch-like paths can record more than one unit per event, such as queue deliveries, bytes, rows, or CPU milliseconds. Cloudflare-polled metrics can have `source: "cloudflare"` or `source: "cloudflare_estimated"` when Cloudflare exposes only a derived signal.
@@ -193,7 +198,10 @@ queue.delivery       10000
 schedule.delivery    2000
 workflow.create      1000
 workflow.delivery    1000
+log.write            5000
 ```
+
+Owner-level default limits are 10x the repo defaults, with minimums of 200 deploys/day and 50 Worker scripts/day. Global default limits are 100x the repo defaults, with minimums of 2,000 deploys/day and 1,000 Worker scripts/day.
 
 Each metric is marked:
 
@@ -209,13 +217,14 @@ The response duplicates non-`ok` entries in `warnings` so dashboards and CLIs ca
 
 W7S also has a reusable `checkUsageLimit(...)` helper for expensive primitives. It reads the effective policy, reads the current daily usage rollup, and projects whether a requested number of units would exceed the daily limit.
 
-The hook reports hard enforcement:
+The hook reports hard enforcement and includes the scope that blocked the request:
 
 ```json
 {
   "mode": "enforce",
   "enforcement": "hard",
   "metric": "workflow.create",
+  "scope": "repo",
   "used": 8,
   "requestedUnits": 3,
   "projectedUnits": 11,
@@ -227,6 +236,22 @@ The hook reports hard enforcement:
 ```
 
 `wouldBlock: true` means the request exceeds policy. Public APIs return HTTP `429`; internal delivery paths skip dispatch once the effective daily delivery limit would be exceeded.
+
+W7S also has short-window burst guards stored under `usage_rate:v1:*`. These are approximate KV counters with small TTLs. They protect against cost spikes that happen faster than daily limits or hourly Cloudflare analytics can react.
+
+Current burst limits:
+
+```text
+deploy            repo 5/hour      owner 25/hour      global 200/hour
+runtime.request   repo 300/min     owner 2000/min     global 10000/min
+rpc.dispatch      repo 120/min     owner 600/min      global 5000/min
+queue.send        repo 120/min     owner 600/min      global 5000/min
+queue.delivery    repo 300/min     owner 1500/min     global 10000/min
+schedule.delivery repo 30/min      owner 200/min      global 2000/min
+workflow.create   repo 60/min      owner 300/min      global 2000/min
+workflow.delivery repo 120/min     owner 600/min      global 5000/min
+log.write         repo 500/min     owner 2000/min     global 10000/min
+```
 
 ## Hourly Cloudflare Sync
 
@@ -244,7 +269,43 @@ app_limit_state:v1:<environment>:<owner>:<repo>
 
 Suspended apps return HTTP `429` before static serving, Worker dispatch, deploys, RPC, queue sends, or workflow starts. Apps automatically resume at the next UTC day unless an operator writes a stricter state.
 
-Direct binding limits are delayed by the hourly sync. Immediate protection comes from deploy shape caps, runtime request limits, and Cloudflare dispatch custom CPU limits on user Workers. Static asset storage is capped by deploy shape limits. Durable Object storage operation units are attributed by namespace ID when W7S can discover namespace IDs from invocation analytics; stored bytes are not per-app attributable in the current Cloudflare analytics schema and remain a tracked gap.
+Direct binding limits are delayed by the hourly sync. Immediate protection comes from deploy shape caps, runtime request limits, short-window burst limits, and Cloudflare dispatch custom CPU limits on user Workers. Static asset storage is capped by deploy shape limits, and immutable static assets are served through the Worker Cache API using versioned asset keys to reduce R2 reads. Durable Object storage operation units are attributed by namespace ID when W7S can discover namespace IDs from invocation analytics; stored bytes are not per-app attributable in the current Cloudflare analytics schema and remain a tracked gap.
+
+## Other Cost Guards
+
+Queue sends reject JSON envelopes larger than `W7S_QUEUE_MAX_MESSAGE_BYTES`, default `65536`. New Cloudflare Queue consumers are created with bounded settings:
+
+```text
+W7S_QUEUE_BATCH_SIZE               10
+W7S_QUEUE_MAX_RETRIES              3
+W7S_QUEUE_RETRY_DELAY_SECONDS      10
+W7S_QUEUE_VISIBILITY_TIMEOUT_MS    300000
+```
+
+Workflow starts reject instance payloads larger than `W7S_WORKFLOW_MAX_PAYLOAD_BYTES`, default `65536`. W7S also tracks active workflow instances in KV and blocks new starts for a target repo when `W7S_WORKFLOW_ACTIVE_LIMIT` is reached, default `50`. Active markers expire after `W7S_WORKFLOW_ACTIVE_TTL_SECONDS`, default `86400`, and are cleared when the W7S workflow delivery finishes. Workflow delivery retry/timeout defaults are:
+
+```text
+W7S_WORKFLOW_MAX_RETRIES           3
+W7S_WORKFLOW_RETRY_DELAY_SECONDS   10
+W7S_WORKFLOW_TIMEOUT_SECONDS       300
+```
+
+Worker log ingestion is capped by `log.write`, has a 7-day default retention window, truncates large log values, and drops whole tail batches when the target repo would exceed daily or burst log limits.
+
+## Cleanup
+
+The scheduled handler runs cleanup behind an hourly lock:
+
+```text
+cleanup_lock:v1:<hour>
+```
+
+Cleanup removes:
+
+- stale static manifests and their R2 objects after `W7S_STATIC_RETENTION_DAYS`, default `7`;
+- expired app suspension states after their `resumeAfter`;
+- old usage daily, owner, global, and hourly records after `W7S_USAGE_RETENTION_DAYS`, default `14`;
+- stale dispatch-namespace Worker scripts and `worker_script:v1:*` mappings after `W7S_WORKER_SCRIPT_RETENTION_DAYS`, default `7`, when they are no longer referenced by the latest deployment.
 
 ## Policy Overrides
 
@@ -257,9 +318,13 @@ usage_limit_policy:v1:owner:<owner>
 usage_limit_policy:v1:owner_environment:<environment>:<owner>
 usage_limit_policy:v1:repo:<owner>:<repo>
 usage_limit_policy:v1:repo_environment:<environment>:<owner>:<repo>
+usage_limit_policy:v1:owner_total:<owner>
+usage_limit_policy:v1:owner_total_environment:<environment>:<owner>
+usage_limit_policy:v1:global
+usage_limit_policy:v1:global_environment:<environment>
 ```
 
-Later records override earlier records. Repo/environment overrides are the most specific.
+The first four scopes tune a repo's own daily policy. `owner_total`, `owner_total_environment`, `global`, and `global_environment` tune aggregate guardrails. Later records override earlier records within their own policy family.
 
 Policy record shape:
 
@@ -297,6 +362,25 @@ npm run limits:set -- \
   --metric workflow.create \
   --daily-units 5000 \
   --warning-threshold 0.7
+```
+
+Set an owner aggregate circuit breaker:
+
+```sh
+npm run limits:set -- \
+  --scope owner_total \
+  --owner w7s-io \
+  --metric durable_object.duration_ms \
+  --daily-units 2000000
+```
+
+Set a global aggregate circuit breaker:
+
+```sh
+npm run limits:set -- \
+  --scope global \
+  --metric runtime.request \
+  --daily-units 2000000
 ```
 
 Read a raw scope record:

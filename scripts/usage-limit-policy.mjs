@@ -34,10 +34,20 @@ const DEFAULT_LIMITS = [
   ["queue.delivery", 10_000, 0.8],
   ["schedule.delivery", 2_000, 0.8],
   ["workflow.create", 1_000, 0.8],
-  ["workflow.delivery", 1_000, 0.8]
+  ["workflow.delivery", 1_000, 0.8],
+  ["log.write", 5_000, 0.8]
 ];
 const KNOWN_METRICS = new Set(DEFAULT_LIMITS.map(([metric]) => metric));
-const SCOPES = new Set(["owner", "owner_environment", "repo", "repo_environment"]);
+const SCOPES = new Set([
+  "owner",
+  "owner_environment",
+  "repo",
+  "repo_environment",
+  "owner_total",
+  "owner_total_environment",
+  "global",
+  "global_environment"
+]);
 
 const usage = `Usage:
   npm run limits:get -- --owner <owner> --repo <repo> [--environment production]
@@ -50,6 +60,10 @@ Scopes:
   owner_environment
   repo
   repo_environment
+  owner_total
+  owner_total_environment
+  global
+  global_environment
 
 Metrics:
   ${[...KNOWN_METRICS].join(", ")}`;
@@ -128,6 +142,12 @@ const usageLimitPolicyKey = (params) => {
   if (params.scope === "owner_environment") {
     return `usage_limit_policy:v1:owner_environment:${environment}:${org}`;
   }
+  if (params.scope === "owner_total") return `usage_limit_policy:v1:owner_total:${org}`;
+  if (params.scope === "owner_total_environment") {
+    return `usage_limit_policy:v1:owner_total_environment:${environment}:${org}`;
+  }
+  if (params.scope === "global") return "usage_limit_policy:v1:global";
+  if (params.scope === "global_environment") return `usage_limit_policy:v1:global_environment:${environment}`;
   if (params.scope === "repo") return `usage_limit_policy:v1:repo:${org}:${repo}`;
   return `usage_limit_policy:v1:repo_environment:${environment}:${org}:${repo}`;
 };
@@ -135,7 +155,7 @@ const usageLimitPolicyKey = (params) => {
 const validateScopeTarget = (args) => {
   const scope = String(args.scope || "").trim();
   if (!SCOPES.has(scope)) fail("Missing or invalid --scope.");
-  const owner = requiredSlug(args, "owner");
+  const owner = scope.startsWith("global") ? "global" : requiredSlug(args, "owner");
   const repo = scope.startsWith("repo") ? requiredSlug(args, "repo") : normalizeSlug(args.repo || "");
   const environment = scope.endsWith("_environment") ? optionalEnvironment(args) : normalizeSlug(args.environment || "");
   return { scope, owner, repo, environment };
@@ -296,7 +316,7 @@ const getEffective = async (client, args) => {
   return {
     version: 1,
     period: "daily",
-    mode: "warn",
+    mode: "enforce",
     environment,
     owner,
     repo,
