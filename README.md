@@ -18,7 +18,7 @@ This repo contains the public W7S worker, deploy API, runtime router, and storag
 - non-production branches serve from `https://<branch>--<org>.w7s.cloud/<repo>/*`.
 - `CNAME` can declare custom domains for a deployment, with optional `_w7s.<zone>` TXT allowlists for ownership control.
 - optional Workers Analytics Engine writes track deploy, request, RPC, queue, schedule, and workflow events for platform observability.
-- best-effort per-app daily usage rollups, warning thresholds, and hard daily limits are exposed through an authenticated usage API.
+- per-app daily usage rollups, hourly Cloudflare analytics sync, warning thresholds, app suspension, and hard daily limits are exposed through an authenticated usage API.
 
 ## Deploy API
 
@@ -67,7 +67,7 @@ Optional environment override:
 - query: `?environment=staging`
 - header: `x-w7s-environment: staging`
 
-Tracked metrics currently include `deploy`, `rpc.dispatch`, `queue.send`, `queue.delivery`, `schedule.delivery`, `workflow.create`, and `workflow.delivery`. The response includes enforced daily limits and warnings for metrics that approach or exceed those limits. Rollups are best-effort KV counters, so enforcement is abuse protection rather than billing-grade accounting.
+Tracked metrics include deploys, runtime requests, Cloudflare-polled Worker/R2/KV/D1/Durable Object signals, RPC dispatches, queues, schedules, and workflows. The response includes enforced daily limits and warnings for metrics that approach or exceed those limits. W7S-managed paths are counted immediately; direct binding usage is synced hourly from Cloudflare analytics.
 
 Effective limit policies are available separately:
 
@@ -86,7 +86,7 @@ npm run limits:set -- --scope repo --owner w7s-io --repo example-workflows --met
 npm run limits:delete -- --scope repo --owner w7s-io --repo example-workflows --metric workflow.create
 ```
 
-Internally, `checkUsageLimit(...)` reports whether projected usage would exceed policy. Public deploy, RPC, queue-send, and workflow-start paths return HTTP `429` when the effective daily limit would be exceeded.
+Internally, `checkUsageLimit(...)` reports whether projected usage would exceed policy. Public runtime, deploy, RPC, queue-send, and workflow-start paths return HTTP `429` when the effective daily limit would be exceeded. Hourly Cloudflare usage collection can also suspend an app until the next UTC day.
 
 ## Repository Layout
 
@@ -231,6 +231,8 @@ await env.W7S_WORKFLOW.fetch(
 - `STATIC_ASSETS`: R2 bucket for deployed frontend assets
 - `W7S_ANALYTICS`: optional Workers Analytics Engine dataset for platform metrics
 - `W7S_WORKFLOWS`: Cloudflare Workflow binding used for app workflow instances
+- `W7S_USER_WORKER_CPU_MS`: dispatch custom CPU limit for user Workers, default `50`
+- `W7S_USER_WORKER_SUBREQUESTS`: dispatch subrequest limit for user Workers, default `25`
 - `CLOUDFLARE_API_TOKEN`: secret with dispatch namespace publish access
 - `CLOUDFLARE_ACCOUNT_ID`: Cloudflare account id
 
@@ -252,6 +254,8 @@ Optional repo variables:
 - `W7S_ATTACH_WILDCARD_ROUTE`, default `false`
 - `W7S_ANALYTICS_DATASET`, optional Analytics Engine dataset name
 - `W7S_WORKFLOW_NAME`, default `w7s-workflows`
+- `W7S_USER_WORKER_CPU_MS`, default `50`
+- `W7S_USER_WORKER_SUBREQUESTS`, default `25`
 
 Set `W7S_ATTACH_WILDCARD_ROUTE=true` only when this worker should attach the `*.w7s.cloud/*` route. Cloudflare rejects the deploy if another worker already owns that route.
 

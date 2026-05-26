@@ -2,13 +2,34 @@ import { readFile } from "node:fs/promises";
 
 const DEFAULT_NAMESPACE_NAME = "w7s-io-deployments";
 const DEFAULT_LIMITS = [
-  ["deploy", 100, 0.8],
-  ["rpc.dispatch", 100_000, 0.8],
-  ["queue.send", 100_000, 0.8],
-  ["queue.delivery", 100_000, 0.8],
-  ["schedule.delivery", 10_000, 0.8],
-  ["workflow.create", 10_000, 0.8],
-  ["workflow.delivery", 10_000, 0.8]
+  ["deploy", 50, 0.8],
+  ["runtime.request", 10_000, 0.8],
+  ["worker.request", 10_000, 0.8],
+  ["runtime.cpu_ms", 300_000, 0.8],
+  ["worker.script", 5, 0.8],
+  ["static.r2_class_a", 1_000, 0.8],
+  ["static.r2_class_b", 20_000, 0.8],
+  ["r2.class_a", 1_000, 0.8],
+  ["r2.class_b", 20_000, 0.8],
+  ["r2.storage_bytes", 100 * 1024 * 1024, 0.8],
+  ["kv.read", 10_000, 0.8],
+  ["kv.write", 1_000, 0.8],
+  ["kv.delete", 1_000, 0.8],
+  ["kv.list", 1_000, 0.8],
+  ["kv.storage_bytes", 50 * 1024 * 1024, 0.8],
+  ["d1.rows_read", 100_000, 0.8],
+  ["d1.rows_written", 10_000, 0.8],
+  ["d1.read_queries", 10_000, 0.8],
+  ["d1.write_queries", 1_000, 0.8],
+  ["d1.storage_bytes", 50 * 1024 * 1024, 0.8],
+  ["durable_object.request", 5_000, 0.8],
+  ["durable_object.duration_ms", 300_000, 0.8],
+  ["rpc.dispatch", 10_000, 0.8],
+  ["queue.send", 10_000, 0.8],
+  ["queue.delivery", 10_000, 0.8],
+  ["schedule.delivery", 2_000, 0.8],
+  ["workflow.create", 1_000, 0.8],
+  ["workflow.delivery", 1_000, 0.8]
 ];
 const KNOWN_METRICS = new Set(DEFAULT_LIMITS.map(([metric]) => metric));
 const SCOPES = new Set(["owner", "owner_environment", "repo", "repo_environment"]);

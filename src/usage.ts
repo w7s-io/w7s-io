@@ -12,6 +12,7 @@ export type UsageEvent = {
   count?: number;
   units?: number;
   outcome?: UsageOutcome;
+  source?: UsageMetricRollup["source"];
   at?: Date;
 };
 
@@ -21,6 +22,7 @@ export type UsageMetricRollup = {
   success: number;
   error: number;
   lastAt: string;
+  source?: "w7s" | "cloudflare" | "cloudflare_estimated";
 };
 
 export type UsageDailyRollup = {
@@ -32,6 +34,8 @@ export type UsageDailyRollup = {
   repository: string;
   metrics: Record<string, UsageMetricRollup>;
   updatedAt: string;
+  cloudflareSyncedAt?: string;
+  cloudflareHours?: string[];
 };
 
 const METRIC_PATTERN = /^[a-z][a-z0-9_.:-]{0,63}$/;
@@ -120,6 +124,7 @@ export const recordUsageEvent = async (env: Env, event: UsageEvent) => {
     if (event.outcome === "error") current.error += count;
     else current.success += count;
     current.lastAt = at.toISOString();
+    if (event.source) current.source = event.source;
     record.metrics[metric] = current;
 
     await env.DEPLOYMENTS_KV.put(key, JSON.stringify(record));

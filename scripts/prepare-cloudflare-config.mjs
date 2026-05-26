@@ -8,6 +8,8 @@ const staticBucketName = process.env.W7S_STATIC_ASSETS_BUCKET?.trim() || "w7s-io
 const dispatchNamespace = process.env.W7S_DISPATCH_NAMESPACE?.trim() || "w7s-isolate";
 const analyticsDataset = process.env.W7S_ANALYTICS_DATASET?.trim() || "";
 const workflowName = process.env.W7S_WORKFLOW_NAME?.trim() || "w7s-workflows";
+const userWorkerCpuMs = process.env.W7S_USER_WORKER_CPU_MS?.trim() || "50";
+const userWorkerSubrequests = process.env.W7S_USER_WORKER_SUBREQUESTS?.trim() || "25";
 const scheduleCron = process.env.W7S_CORE_CRON?.trim() || "* * * * *";
 const attachWildcardRoute = /^(1|true|yes|on)$/i.test(
   process.env.W7S_ATTACH_WILDCARD_ROUTE?.trim() || ""
@@ -149,6 +151,8 @@ const config = {
     W7S_WORKER_NAME: workerName,
     CLOUDFLARE_DISPATCH_NAMESPACE: dispatchNamespace,
     CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE: compatibilityDate,
+    W7S_USER_WORKER_CPU_MS: userWorkerCpuMs,
+    W7S_USER_WORKER_SUBREQUESTS: userWorkerSubrequests,
     ...(appCommitId ? { APP_COMMIT_ID: appCommitId } : {}),
     ...(appDeployBranch ? { APP_DEPLOY_BRANCH: appDeployBranch } : {}),
     ...(appDeployedAt ? { APP_DEPLOYED_AT: appDeployedAt } : {})
@@ -213,6 +217,8 @@ console.log(
       dispatchNamespace,
       analyticsDataset: analyticsDataset || null,
       workflowName,
+      userWorkerCpuMs,
+      userWorkerSubrequests,
       scheduleCron,
       attachWildcardRoute,
       routeManagement: "post-deploy"

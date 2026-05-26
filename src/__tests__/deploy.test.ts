@@ -224,6 +224,45 @@ describe("deploy API", () => {
     expect(record?.targets.static?.hasIndex).toBe(true);
   });
 
+  it("rejects deployments that exceed free-tier shape caps", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "w7s-io/demo" });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv();
+    const response = await app.fetch(
+      deployRequest({
+        "frontend/dist/index.html": "<h1>Hello</h1>",
+        CNAME: [
+          "one.example.com",
+          "two.example.com",
+          "three.example.com",
+          "four.example.com"
+        ].join("\n")
+      }),
+      env
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        status: "error",
+        error: "Deploy exceeds W7S free-tier shape limits.",
+        details: expect.objectContaining({
+          limits: expect.arrayContaining([
+            expect.stringContaining("more than 3 custom domains")
+          ])
+        })
+      })
+    );
+  });
+
   it("returns org root URLs for same-name repo deployments", async () => {
     vi.stubGlobal(
       "fetch",
@@ -669,6 +708,7 @@ describe("deploy API", () => {
   it("stores declared workflows and uploads workflow runtime bindings", async () => {
     const uploadedMetadata: Array<{
       bindings?: Array<Record<string, string>>;
+      tags?: string[];
     }> = [];
     vi.stubGlobal(
       "fetch",
@@ -726,6 +766,16 @@ describe("deploy API", () => {
         expect.objectContaining({ type: "secret_text", name: "W7S_WORKFLOW_TOKEN" })
       ])
     );
+    expect(uploadedMetadata[0]?.tags).toEqual(
+      expect.arrayContaining([
+        "w7s",
+        "w7s-env-production",
+        "w7s-owner-w7s-io",
+        "w7s-repo-demo",
+        "w7s-app-w7s-io-demo"
+      ])
+    );
+    expect(record?.targets.worker?.tags).toEqual(uploadedMetadata[0]?.tags);
   });
 
   it("provisions declared queues and uploads queue runtime bindings", async () => {

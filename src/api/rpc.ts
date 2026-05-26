@@ -8,6 +8,7 @@ import { requireSlug } from "../names";
 import { hashRpcToken } from "../deploy/rpcBindings";
 import { loadDeploymentRecord } from "../storage/deployments";
 import { dispatchWorker } from "../runtime/dispatch";
+import { enforceAppNotSuspended } from "../appLimits";
 
 type HonoContext = Context<{ Bindings: Env }>;
 
@@ -110,6 +111,21 @@ export const handleRpc = async (c: HonoContext) => {
   ) {
     return jsonError("RPC caller is not authorized for this target.", 403);
   }
+
+  const callerSuspended = await enforceAppNotSuspended(c.env, {
+    environment: caller.environment,
+    orgSlug: caller.orgSlug,
+    repoSlug: caller.repoSlug,
+    request: c.req.raw
+  });
+  if (callerSuspended) return callerSuspended;
+  const targetSuspended = await enforceAppNotSuspended(c.env, {
+    environment: caller.environment,
+    orgSlug: target.orgSlug,
+    repoSlug: target.repoSlug,
+    request: c.req.raw
+  });
+  if (targetSuspended) return targetSuspended;
 
   const limitResponse = await enforceUsageLimit(c.env, {
     metric: "rpc.dispatch",

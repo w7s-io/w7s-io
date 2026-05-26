@@ -190,6 +190,9 @@ Cloudflare scheduled event
   -> dispatch due jobs to native Worker schedule paths
   -> write schedule delivery analytics when configured
   -> record schedule delivery usage for the target repo
+  -> acquire a separate hourly Cloudflare usage lock
+  -> sync direct resource analytics into usage_cf_hourly:v1:* records
+  -> merge hourly usage into daily rollups and suspend exceeded apps
 ```
 
 ```text
@@ -227,5 +230,5 @@ GET /api/v1/limits/<owner>/<repo>
 - Schedules are environment-scoped path consumers. W7S core owns the Cloudflare cron trigger and dispatches due jobs to native Workers.
 - Workflows are app-declared, environment-scoped path consumers. W7S core owns the Cloudflare Workflow definition and starts instances on behalf of apps.
 - Analytics Engine is an optional W7S-core binding. It is for platform observability first; app-visible analytics bindings can be added later.
-- Usage rollups are stored in `DEPLOYMENTS_KV` with read-modify-write updates. They are enough for product visibility and abuse protection, but not atomic billing-grade counters.
-- `checkUsageLimit(...)` reports whether a future request would exceed policy. Public deploy, RPC, queue-send, and workflow-start paths return HTTP `429`; internal queue, schedule, and workflow delivery paths skip dispatch when their delivery metric would exceed policy.
+- Usage rollups are stored in `DEPLOYMENTS_KV` with read-modify-write updates. Direct Cloudflare resource usage is synced hourly from Cloudflare analytics. These are enough for free-tier protection, but not atomic billing-grade counters.
+- `checkUsageLimit(...)` reports whether a future request would exceed policy. Public runtime, deploy, RPC, queue-send, and workflow-start paths return HTTP `429`; internal queue, schedule, and workflow delivery paths skip dispatch when their delivery metric would exceed policy.

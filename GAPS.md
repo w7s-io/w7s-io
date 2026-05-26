@@ -37,10 +37,11 @@ This file tracks the main known gaps after the current deploy core, runtime rout
 
 - **Usage limits API**
   - Basic daily KV usage rollups now exist.
-  - Soft warning limits now exist in the usage API.
+  - Warning limits now exist in the usage API.
   - Effective policy reads and W7S-owned KV overrides now exist.
-  - Hard daily usage guards now protect deploys, RPC dispatches, queue sends, workflow starts, and internal delivery paths.
-  - No hard quota, rate-limit, billing-grade accounting, or admin policy write API exists yet.
+  - Hard daily usage guards now protect runtime requests, deploys, RPC dispatches, queue sends, workflow starts, and internal delivery paths.
+  - Hourly Cloudflare analytics sync now records direct resource usage and can suspend apps until the next UTC day.
+  - No billing-grade accounting, strongly consistent counter store, or admin policy write API exists yet.
 
 ## Developer Experience
 
@@ -66,6 +67,7 @@ This file tracks the main known gaps after the current deploy core, runtime rout
 - **Durable Object lifecycle**
   - W7S creates initial SQLite-backed classes and keeps stable script names.
   - It does not automate class renames, transfers, or deletes.
+  - Durable Object request and duration metrics are synced by Worker script name, but storage usage is not enforced per app because the current Cloudflare storage analytics dataset is not attributable by script or namespace.
 
 - **App-visible Analytics Engine**
   - W7S core writes internal platform analytics.
@@ -81,8 +83,9 @@ This file tracks the main known gaps after the current deploy core, runtime rout
   - `*.w7s.cloud` DNS is expected to exist outside this repo's automation.
 
 - **Accounting and limits**
-  - Daily KV usage rollups exist for deploy, RPC, queue, schedule, and workflow paths.
+  - Daily KV usage rollups exist for runtime, deploy, RPC, queue, schedule, and workflow paths.
+  - Hourly Cloudflare analytics records exist for direct resource usage where Cloudflare exposes reliable per-resource metrics.
   - The usage API evaluates daily limits from default policy plus W7S-owned KV overrides and returns warning metadata.
-  - `checkUsageLimit(...)` reports projected exceedance with `wouldBlock`, but does not enforce blocking.
+  - `checkUsageLimit(...)` reports projected exceedance with `wouldBlock`; public handlers use it for blocking.
   - They are best-effort read-modify-write counters, so concurrent writes can be approximate.
   - Billing-grade accounting still needs a stronger storage path before AI/Vectorize/AI Gateway are exposed broadly.

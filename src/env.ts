@@ -1,5 +1,14 @@
 export type DispatchNamespace = {
-  get: (name: string) => {
+  get: (
+    name: string,
+    props?: Record<string, unknown>,
+    options?: {
+      limits?: {
+        cpuMs?: number;
+        subRequests?: number;
+      };
+    }
+  ) => {
     fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   };
 };
@@ -14,6 +23,8 @@ export interface Env {
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_DISPATCH_NAMESPACE?: string;
   CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE?: string;
+  W7S_USER_WORKER_CPU_MS?: string;
+  W7S_USER_WORKER_SUBREQUESTS?: string;
   W7S_WORKER_NAME?: string;
   W7S_BASE_DOMAIN?: string;
   APP_COMMIT_ID?: string;

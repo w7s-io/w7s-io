@@ -113,16 +113,18 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
    - Revisit direct app integration if Cloudflare exposes a direct WFP-compatible consumer model.
 
 6. **Usage accounting and limits**
-   - Status: basic rollups, effective policy reads, warning thresholds, and hard daily enforcement are implemented.
+   - Status: basic rollups, hourly Cloudflare analytics sync, effective policy reads, warning thresholds, suspension state, and hard daily enforcement are implemented.
    - Goal: make platform usage visible before enabling costly primitives.
    - Current API:
      ```text
      GET /api/v1/usage/<owner>/<repo>?date=YYYY-MM-DD
      ```
    - GitHub bearer tokens must have access to the target repo.
-   - Current rollups are KV read-modify-write counters for deploy, RPC, queue, schedule, and workflow usage.
-   - Public deploy, RPC, queue-send, and workflow-start paths return HTTP `429` when projected usage exceeds the effective daily limit.
+   - Current rollups are KV read-modify-write counters for deploy, runtime request, RPC, queue, schedule, and workflow usage.
+   - Direct Cloudflare resource usage is synced hourly from Cloudflare analytics into `usage_cf_hourly:v1:*` records and merged into daily usage.
+   - Public runtime, deploy, RPC, queue-send, and workflow-start paths return HTTP `429` when projected usage exceeds the effective daily limit.
    - Internal queue, schedule, and workflow delivery paths skip dispatch when their delivery metric would exceed policy.
+   - Hourly Cloudflare sync stores `app_limit_state:v1:*` and suspends apps that exceed reliably attributed limits until the next UTC day.
    - Effective policy reads are available at `GET /api/v1/limits/<owner>/<repo>`.
    - W7S-owned KV overrides can target owner, owner/environment, repo, or repo/environment scopes.
    - `checkUsageLimit(...)` reports whether projected usage would exceed policy and feeds the hard enforcement helper.

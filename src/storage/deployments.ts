@@ -42,11 +42,13 @@ export type DeploymentRecord = {
       entrypoint: string;
       compatibilityDate: string;
       startupTimeMs: number | null;
+      tags?: string[];
     };
     static?: {
       manifestKey: string;
       assetPrefix: string;
       fileCount: number;
+      totalSize?: number;
       hasIndex: boolean;
     };
   };
@@ -253,6 +255,29 @@ export const loadDeploymentRecordWithCandidates = async (
     if (record) return record;
   }
   return null;
+};
+
+export const listDeploymentRecords = async (env: Env) => {
+  const records: DeploymentRecord[] = [];
+  let cursor: string | undefined;
+  do {
+    const listed = await env.DEPLOYMENTS_KV.list({
+      prefix: "deployment:v1:",
+      cursor
+    });
+    const loaded = await Promise.all(
+      listed.keys.map(async (entry) => {
+        const raw = await env.DEPLOYMENTS_KV.get(entry.name, "json");
+        if (!raw || typeof raw !== "object") return null;
+        const record = raw as Partial<DeploymentRecord>;
+        if (record.version !== 1 || typeof record.orgSlug !== "string") return null;
+        return record as DeploymentRecord;
+      })
+    );
+    records.push(...loaded.filter((record): record is DeploymentRecord => Boolean(record)));
+    cursor = listed.list_complete ? undefined : listed.cursor;
+  } while (cursor);
+  return records;
 };
 
 export const storeCustomDomainMappings = async (

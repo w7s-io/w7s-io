@@ -1,4 +1,5 @@
 import { responseOutcome, writeAnalyticsEvent } from "../analytics";
+import { collectHourlyCloudflareUsage } from "../cloudflareUsage";
 import { isCronExpressionDue, scheduledMinuteIso } from "../cron";
 import type { Env } from "../env";
 import { recordUsageEvent } from "../usage";
@@ -156,5 +157,7 @@ export const handleScheduled = (
   env: Env,
   ctx: ExecutionContext
 ) => {
-  ctx.waitUntil(dispatchDueSchedules(env, new Date(controller.scheduledTime)));
+  const scheduledTime = new Date(controller.scheduledTime);
+  ctx.waitUntil(dispatchDueSchedules(env, scheduledTime));
+  ctx.waitUntil(collectHourlyCloudflareUsage(env, scheduledTime));
 };

@@ -7,6 +7,9 @@ import {
   storeStaticSiteManifest
 } from "../storage/deployments";
 import type { DeploymentRecord, StaticSiteManifest } from "../storage/deployments";
+import { suspendAppForLimits } from "../appLimits";
+import { recordUsageEvent } from "../usage";
+import { usageLimitPolicyKey } from "../usageLimits";
 
 const storeStaticDeployment = async (
   env: ReturnType<typeof createTestEnv>,
@@ -114,6 +117,92 @@ describe("runtime router", () => {
       ],
       doubles: [1, 200, expect.any(Number)]
     });
+  });
+
+  it("records and enforces runtime request limits", async () => {
+    const env = createTestEnv();
+    await storeStaticDemoDeployment(env);
+    await env.DEPLOYMENTS_KV.put(
+      usageLimitPolicyKey({
+        scope: "repo",
+        orgSlug: "w7s-io",
+        repoSlug: "demo"
+      }),
+      JSON.stringify({
+        version: 1,
+        metrics: {
+          "runtime.request": 1
+        }
+      })
+    );
+    await recordUsageEvent(env, {
+      metric: "runtime.request",
+      repository: "w7s-io/demo",
+      environment: "production",
+      orgSlug: "w7s-io",
+      repoSlug: "demo",
+      units: 1
+    });
+
+    const response = await app.fetch(
+      new Request("https://w7s-io.w7s.cloud/demo/", {
+        headers: {
+          host: "w7s-io.w7s.cloud"
+        }
+      }),
+      env
+    );
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        error: expect.stringContaining("runtime.request")
+      })
+    );
+  });
+
+  it("blocks suspended apps before serving runtime traffic", async () => {
+    const env = createTestEnv();
+    await storeStaticDemoDeployment(env);
+    await suspendAppForLimits(env, {
+      environment: "production",
+      orgSlug: "w7s-io",
+      repoSlug: "demo",
+      reason: "W7S free-tier limit exceeded for d1.rows_read.",
+      metrics: [
+        {
+          metric: "d1.rows_read",
+          status: "exceeded",
+          used: 100001,
+          limit: 100000,
+          remaining: 0,
+          message: "d1.rows_read exceeded the daily limit."
+        }
+      ],
+      at: new Date("2026-05-26T12:00:00.000Z")
+    });
+
+    const response = await app.fetch(
+      new Request("https://w7s-io.w7s.cloud/demo/", {
+        headers: {
+          host: "w7s-io.w7s.cloud",
+          accept: "application/json"
+        }
+      }),
+      env
+    );
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        details: expect.objectContaining({
+          appLimitState: expect.objectContaining({
+            status: "suspended",
+            reason: "W7S free-tier limit exceeded for d1.rows_read."
+          })
+        })
+      })
+    );
   });
 
   it("redirects static repo root routes to a directory path", async () => {

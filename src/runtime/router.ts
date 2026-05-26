@@ -10,6 +10,9 @@ import { resolveStaticAssetResponse } from "./static";
 import { normalizeSlug } from "../names";
 import { landingHtml, type DeployShowcaseTarget } from "../static/landing";
 import { dispatchWorker } from "./dispatch";
+import { enforceAppNotSuspended } from "../appLimits";
+import { enforceUsageLimit } from "../usageEnforcement";
+import { recordUsageEvent } from "../usage";
 
 const isReservedPlatformPath = (path: string) =>
   path === "/api/v1" || path.startsWith("/api/v1/");
@@ -114,7 +117,7 @@ const redirectToDirectoryPath = (request: Request) => {
   return Response.redirect(url.toString(), 308);
 };
 
-const writeRuntimeAnalytics = (params: {
+const writeRuntimeAnalytics = async (params: {
   env: Env;
   request: Request;
   startedAt: number;
@@ -135,6 +138,31 @@ const writeRuntimeAnalytics = (params: {
     status: params.response.status,
     durationMs: Date.now() - params.startedAt
   });
+  const outcome = responseOutcome(params.response.status);
+  await recordUsageEvent(params.env, {
+    metric: "runtime.request",
+    repository: params.deployment.repository,
+    environment: params.deployment.environment,
+    orgSlug: params.deployment.orgSlug,
+    repoSlug: params.deployment.repoSlug,
+    outcome,
+    count: 1,
+    units: 1,
+    source: "w7s"
+  });
+  if (params.source.startsWith("static_") && params.response.status >= 200 && params.response.status < 300) {
+    await recordUsageEvent(params.env, {
+      metric: "static.r2_class_b",
+      repository: params.deployment.repository,
+      environment: params.deployment.environment,
+      orgSlug: params.deployment.orgSlug,
+      repoSlug: params.deployment.repoSlug,
+      outcome,
+      count: 1,
+      units: 1,
+      source: "w7s"
+    });
+  }
   return params.response;
 };
 
@@ -172,12 +200,29 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
     );
     if (!deployment) continue;
 
+    const suspended = await enforceAppNotSuspended(env, {
+      environment: deployment.environment,
+      orgSlug,
+      repoSlug: candidate.repoSlug,
+      request
+    });
+    if (suspended) return suspended;
+
+    const runtimeLimitResponse = await enforceUsageLimit(env, {
+      metric: "runtime.request",
+      environment: deployment.environment,
+      orgSlug: deployment.orgSlug,
+      repoSlug: deployment.repoSlug,
+      units: 1
+    });
+    if (runtimeLimitResponse) return runtimeLimitResponse;
+
     if (
       candidate.mount === "repo-prefix" &&
       deployment.targets.static &&
       shouldRedirectStaticRepoRoot(request, candidate.repoPath)
     ) {
-      return writeRuntimeAnalytics({
+      return await writeRuntimeAnalytics({
         env,
         request,
         startedAt,
@@ -200,7 +245,7 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
         scriptName: workerTarget.scriptName
       });
       if (isRedirectResponse(workerResponse)) {
-        return writeRuntimeAnalytics({
+        return await writeRuntimeAnalytics({
           env,
           request,
           startedAt,
@@ -220,7 +265,7 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
       mode: "exact"
     });
     if (exactStatic) {
-      return writeRuntimeAnalytics({
+      return await writeRuntimeAnalytics({
         env,
         request,
         startedAt,
@@ -241,7 +286,7 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
         scriptName: workerTarget.scriptName
       });
       if (!shouldFallbackFromWorkerToStatic(request, workerResponse)) {
-        return writeRuntimeAnalytics({
+        return await writeRuntimeAnalytics({
           env,
           request,
           startedAt,
@@ -261,7 +306,7 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
       mode: "fallback"
     });
     if (fallbackStatic) {
-      return writeRuntimeAnalytics({
+      return await writeRuntimeAnalytics({
         env,
         request,
         startedAt,
@@ -273,7 +318,7 @@ export const resolveRuntimeRequest = async (request: Request, env: Env) => {
     }
 
     if (workerTarget) {
-      return writeRuntimeAnalytics({
+      return await writeRuntimeAnalytics({
         env,
         request,
         startedAt,

@@ -6,6 +6,7 @@ import { enforceUsageLimit } from "../usageEnforcement";
 import { jsonError, jsonSuccess, parseBearerToken } from "../http";
 import { parseGitHubRepository, verifyGitHubRepoAccess } from "../deploy/githubAuth";
 import { readDeployArchive } from "../deploy/archive";
+import { validateDeployLimits } from "../deploy/deployLimits";
 import { detectWorkerEntrypoint, hasNativeWorkerRoot, publishIsolateWorker } from "../deploy/isolatePublisher";
 import { hasStaticSite, publishStaticSite } from "../deploy/staticPublisher";
 import { readAppManifest } from "../deploy/appManifest";
@@ -40,6 +41,7 @@ import {
   storeDeploymentRecord,
   type DeploymentRecord
 } from "../storage/deployments";
+import { enforceAppNotSuspended } from "../appLimits";
 
 type HonoContext = Context<{ Bindings: Env }>;
 
@@ -72,6 +74,21 @@ const publicDeploymentUrl = (
   if (repoSlug === orgSlug) return `https://${host}/`;
   return `https://${host}/${repoSlug}/`;
 };
+
+const scriptTagPart = (value: string) =>
+  sanitizeScriptPart(value).replace(/[^a-z0-9-]+/g, "-").slice(0, 48) || "unknown";
+
+const buildScriptTags = (params: {
+  environment: string;
+  orgSlug: string;
+  repoSlug: string;
+}) => [
+  "w7s",
+  `w7s-env-${scriptTagPart(params.environment)}`,
+  `w7s-owner-${scriptTagPart(params.orgSlug)}`,
+  `w7s-repo-${scriptTagPart(params.repoSlug)}`,
+  `w7s-app-${scriptTagPart(`${params.orgSlug}-${params.repoSlug}`)}`
+];
 
 export const handleDeploy = async (c: HonoContext) => {
   const token = parseBearerToken(c.req.raw);
@@ -125,6 +142,14 @@ export const handleDeploy = async (c: HonoContext) => {
   });
   if (limitResponse) return limitResponse;
 
+  const suspensionResponse = await enforceAppNotSuspended(c.env, {
+    environment,
+    orgSlug,
+    repoSlug,
+    request: c.req.raw
+  });
+  if (suspensionResponse) return suspensionResponse;
+
   let archive;
   let appManifest;
   let deployValues;
@@ -165,6 +190,18 @@ export const handleDeploy = async (c: HonoContext) => {
     return jsonError("Hyperdrive bindings require a native backend deployment.", 400);
   }
 
+  const deployLimitErrors = validateDeployLimits({
+    archive,
+    manifest: appManifest,
+    customDomains,
+    allowAssetOnly: hasNativeBackend
+  });
+  if (deployLimitErrors.length > 0) {
+    return jsonError("Deploy exceeds W7S free-tier shape limits.", 400, {
+      limits: deployLimitErrors
+    });
+  }
+
   const deployedAt = new Date().toISOString();
   const targets: DeploymentRecord["targets"] = {};
   let attachedCustomDomains: string[] = [];
@@ -185,6 +222,7 @@ export const handleDeploy = async (c: HonoContext) => {
       const scriptName = usesDurableObjects
         ? buildStableScriptName(orgSlug, repoSlug, environment)
         : buildDeploymentScriptName(orgSlug, repoSlug, environment, commitSha);
+      const scriptTags = buildScriptTags({ environment, orgSlug, repoSlug });
       const provisionedBindings = await provisionAppBindings({
         env: c.env,
         archive,
@@ -243,7 +281,8 @@ export const handleDeploy = async (c: HonoContext) => {
         scriptName,
         entrypoint,
         bindings: [...provisionedBindings.uploadBindings, ...rpcBindings, ...queueBindings, ...workflowBindings],
-        durableObjectMigrations: provisionedBindings.durableObjectMigrations
+        durableObjectMigrations: provisionedBindings.durableObjectMigrations,
+        tags: scriptTags
       });
       if (provisionedBindings.durableObjectMigrations) {
         await storeDurableObjectClassRecords({
@@ -272,6 +311,7 @@ export const handleDeploy = async (c: HonoContext) => {
         manifestKey: publishedStatic.manifestKey,
         assetPrefix: publishedStatic.manifest.assetPrefix,
         fileCount: Object.keys(publishedStatic.manifest.files).length,
+        totalSize: Object.values(publishedStatic.manifest.files).reduce((total, file) => total + file.size, 0),
         hasIndex: publishedStatic.manifest.hasIndex
       };
     }
@@ -341,6 +381,19 @@ export const handleDeploy = async (c: HonoContext) => {
     count: 1,
     units: 1
   });
+  if (targets.static?.fileCount) {
+    await recordUsageEvent(c.env, {
+      metric: "static.r2_class_a",
+      repository: repo.fullName,
+      environment,
+      orgSlug,
+      repoSlug,
+      outcome: "success",
+      count: targets.static.fileCount,
+      units: targets.static.fileCount,
+      source: "w7s"
+    });
+  }
 
   return jsonSuccess({
     deployment: {

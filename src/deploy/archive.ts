@@ -8,6 +8,8 @@ export type ArchiveEntry = {
 export type DeployArchive = {
   entries: ArchiveEntry[];
   files: Map<string, Uint8Array>;
+  compressedBytes: number;
+  uncompressedBytes: number;
 };
 
 const textDecoder = new TextDecoder();
@@ -85,7 +87,13 @@ export const readDeployArchive = async (request: Request): Promise<DeployArchive
 
   const entries = stripCommonRoot(rawEntries).filter((entry) => entry.path);
   const files = new Map(entries.map((entry) => [entry.path, entry.bytes]));
-  return { entries, files };
+  const uncompressedBytes = entries.reduce((total, entry) => total + entry.bytes.byteLength, 0);
+  return {
+    entries,
+    files,
+    compressedBytes: bytes.byteLength,
+    uncompressedBytes
+  };
 };
 
 export const readTextFile = (archive: DeployArchive, path: string) => {

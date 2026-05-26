@@ -1,5 +1,15 @@
 import type { Env } from "../env";
 
+const positiveInteger = (value: string | undefined, fallback: number) => {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback;
+};
+
+const dispatchLimits = (env: Env) => ({
+  cpuMs: positiveInteger(env.W7S_USER_WORKER_CPU_MS, 50),
+  subRequests: positiveInteger(env.W7S_USER_WORKER_SUBREQUESTS, 25)
+});
+
 export const dispatchWorker = async (params: {
   env: Env;
   request: Request;
@@ -14,7 +24,9 @@ export const dispatchWorker = async (params: {
   if (!params.env.DISPATCHER) {
     return new Response("DISPATCHER binding is not configured.", { status: 503 });
   }
-  const worker = params.env.DISPATCHER.get(params.scriptName);
+  const worker = params.env.DISPATCHER.get(params.scriptName, {}, {
+    limits: dispatchLimits(params.env)
+  });
   const originalUrl = new URL(params.request.url);
   const rewrittenUrl = new URL(params.request.url);
   if (params.urlHost) {

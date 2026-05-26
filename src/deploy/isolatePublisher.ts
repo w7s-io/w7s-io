@@ -40,6 +40,7 @@ export type IsolatePublishResult = {
   entrypoint: string;
   compatibilityDate: string;
   startupTimeMs: number | null;
+  tags?: string[];
 };
 
 const DEFAULT_DISPATCH_NAMESPACE = "w7s-isolate";
@@ -335,6 +336,7 @@ export const publishIsolateWorker = async (params: {
   entrypoint: string;
   bindings?: WorkerUploadBinding[];
   durableObjectMigrations?: DurableObjectMigrationPlan;
+  tags?: string[];
 }): Promise<IsolatePublishResult> => {
   const { apiToken, accountId } = requireCloudflareCredentials(params.env);
   const namespace =
@@ -370,6 +372,7 @@ export const publishIsolateWorker = async (params: {
       ? { compatibility_flags: workerConfig.compatibilityFlags }
       : {}),
     ...(durableObjectMigrations ? { migrations: durableObjectMigrations } : {}),
+    ...(params.tags && params.tags.length > 0 ? { tags: params.tags.slice(0, 8) } : {}),
     ...(params.bindings && params.bindings.length > 0 ? { bindings: params.bindings } : {})
   };
   const formData = new FormData();
@@ -396,6 +399,7 @@ export const publishIsolateWorker = async (params: {
     scriptName: params.scriptName,
     entrypoint,
     compatibilityDate,
-    startupTimeMs: typeof result?.startup_time_ms === "number" ? result.startup_time_ms : null
+    startupTimeMs: typeof result?.startup_time_ms === "number" ? result.startup_time_ms : null,
+    ...(params.tags && params.tags.length > 0 ? { tags: params.tags.slice(0, 8) } : {})
   };
 };

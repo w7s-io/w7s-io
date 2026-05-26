@@ -8,6 +8,7 @@ import { requireSlug } from "../names";
 import { hashBindingToken } from "../deploy/tokens";
 import { sendQueueMessage } from "../deploy/queueProvisioner";
 import { loadDeploymentRecord } from "../storage/deployments";
+import { enforceAppNotSuspended } from "../appLimits";
 
 type HonoContext = Context<{ Bindings: Env }>;
 
@@ -129,6 +130,21 @@ export const handleQueueSend = async (c: HonoContext) => {
   ) {
     return jsonError("Queue caller is not authorized for this target.", 403);
   }
+
+  const callerSuspended = await enforceAppNotSuspended(c.env, {
+    environment: caller.environment,
+    orgSlug: caller.orgSlug,
+    repoSlug: caller.repoSlug,
+    request: c.req.raw
+  });
+  if (callerSuspended) return callerSuspended;
+  const targetSuspended = await enforceAppNotSuspended(c.env, {
+    environment: caller.environment,
+    orgSlug: target.orgSlug,
+    repoSlug: target.repoSlug,
+    request: c.req.raw
+  });
+  if (targetSuspended) return targetSuspended;
 
   const limitResponse = await enforceUsageLimit(c.env, {
     metric: "queue.send",

@@ -5,6 +5,8 @@ import { jsonError, jsonSuccess, parseBearerToken } from "../http";
 import { requireSlug, resolveEnvironment } from "../names";
 import { loadUsageDailyRollup, usageDate } from "../usage";
 import { evaluateUsageLimits, loadEffectiveUsageLimitPolicies } from "../usageLimits";
+import { listCloudflareUsageHourlyRecords } from "../cloudflareUsage";
+import { loadAppLimitState } from "../appLimits";
 
 type HonoContext = Context<{ Bindings: Env }>;
 
@@ -91,6 +93,20 @@ export const handleUsageGet = async (c: HonoContext) => {
     repoSlug: target.repoSlug
   });
   const limits = evaluateUsageLimits(usage, effectivePolicies.policies);
+  const appLimitState = await loadAppLimitState(c.env, {
+    environment,
+    orgSlug: target.orgSlug,
+    repoSlug: target.repoSlug
+  });
+  const includeHourly = c.req.query("include")?.split(",").map((part) => part.trim()).includes("hourly");
+  const hourly = includeHourly
+    ? await listCloudflareUsageHourlyRecords(c.env, {
+        date,
+        environment,
+        orgSlug: target.orgSlug,
+        repoSlug: target.repoSlug
+      })
+    : undefined;
 
   return jsonSuccess({
     usage,
@@ -105,6 +121,8 @@ export const handleUsageGet = async (c: HonoContext) => {
       policy: effectivePolicies.policy,
       lookups: effectivePolicies.lookups
     },
+    ...(appLimitState ? { appLimitState } : {}),
+    ...(hourly ? { hourly } : {}),
     warnings: limits.warnings
   });
 };

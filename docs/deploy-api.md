@@ -108,6 +108,30 @@ dist/server/index.js
 dist/client/assets/...
 ```
 
+## Free-Tier Shape Caps
+
+W7S rejects deploys that are too large or declare too many resources before anything is published:
+
+```text
+archive zip bytes       25 MB
+uncompressed bytes      100 MB
+static files            1000
+static total bytes      100 MB
+static single file      10 MB
+KV bindings             3
+R2 bindings             3
+D1 bindings             2
+Durable Object classes  2
+queues                  2
+schedules               5
+workflows               5
+custom domains          3
+D1 migration files      50
+D1 migration SQL bytes  5 MB
+```
+
+Native Workers are dispatched with a custom CPU limit from `W7S_USER_WORKER_CPU_MS`, default `50`, and a subrequest limit from `W7S_USER_WORKER_SUBREQUESTS`, default `25`.
+
 When `dist/server/wrangler.json` contains `compatibility_flags`, W7S includes those flags in the uploaded Worker metadata. This supports framework builds that require flags such as `nodejs_compat`.
 
 Optional custom domain declaration:

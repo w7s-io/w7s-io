@@ -7,6 +7,7 @@ import { requireSlug, sanitizeScriptPart } from "../names";
 import { loadDeploymentRecord } from "../storage/deployments";
 import { recordUsageEvent } from "../usage";
 import { enforceUsageLimit } from "../usageEnforcement";
+import { enforceAppNotSuspended } from "../appLimits";
 
 type HonoContext = Context<{ Bindings: Env }>;
 
@@ -188,6 +189,20 @@ export const handleWorkflowCreate = async (c: HonoContext) => {
     const workflows = requireWorkflowBinding(c.env);
     const context = await requireAuthorizedContext(c);
     const payload = await readJsonBody(c.req.raw);
+    const callerSuspended = await enforceAppNotSuspended(c.env, {
+      environment: context.caller.environment,
+      orgSlug: context.caller.orgSlug,
+      repoSlug: context.caller.repoSlug,
+      request: c.req.raw
+    });
+    if (callerSuspended) return callerSuspended;
+    const targetSuspended = await enforceAppNotSuspended(c.env, {
+      environment: context.caller.environment,
+      orgSlug: context.target.orgSlug,
+      repoSlug: context.target.repoSlug,
+      request: c.req.raw
+    });
+    if (targetSuspended) return targetSuspended;
     const limitResponse = await enforceUsageLimit(c.env, {
       metric: "workflow.create",
       environment: context.caller.environment,

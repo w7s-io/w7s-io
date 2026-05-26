@@ -28,7 +28,7 @@ Start here:
 - empty org roots such as `https://sadasant.w7s.cloud/` show deploy-help HTML;
 - custom domains can be declared with `CNAME` when DNS is managed separately, with optional `_w7s.<zone>` TXT allowlists for ownership control.
 - optional Workers Analytics Engine writes provide core platform observability when `W7S_ANALYTICS_DATASET` is configured.
-- best-effort daily usage rollups and effective limit warnings are exposed through `GET /api/v1/usage/<owner>/<repo>`.
+- daily usage rollups, hourly Cloudflare usage sync, app suspension state, and effective limit warnings are exposed through `GET /api/v1/usage/<owner>/<repo>`.
 - effective limit policies are exposed through `GET /api/v1/limits/<owner>/<repo>`.
 
 The old workflow editor, `jsInterpreter`, plugin bridge, DB control, and telemetry stack are not part of this core.
