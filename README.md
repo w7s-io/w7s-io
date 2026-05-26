@@ -78,6 +78,14 @@ curl "https://w7s.cloud/api/v1/limits/<owner>/<repo>" \
 
 Limit policy overrides are W7S-owned KV records, not app-controlled `w7s.json` config.
 
+W7S operators can manage those records with:
+
+```sh
+npm run limits:get -- --owner w7s-io --repo example-workflows
+npm run limits:set -- --scope repo --owner w7s-io --repo example-workflows --metric workflow.create --daily-units 5000
+npm run limits:delete -- --scope repo --owner w7s-io --repo example-workflows --metric workflow.create
+```
+
 ## Repository Layout
 
 Native backend:

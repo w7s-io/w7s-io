@@ -177,6 +177,50 @@ Policy record shape:
 
 A number is shorthand for `dailyUnits`. `warningThreshold` must be greater than `0` and less than or equal to `1`. Unknown metrics are ignored.
 
+## Operator Script
+
+W7S operators should use the repo script instead of hand-editing KV JSON:
+
+```sh
+npm run limits:get -- --owner w7s-io --repo example-workflows
+```
+
+Set or update a scoped policy:
+
+```sh
+npm run limits:set -- \
+  --scope repo \
+  --owner w7s-io \
+  --repo example-workflows \
+  --metric workflow.create \
+  --daily-units 5000 \
+  --warning-threshold 0.7
+```
+
+Read a raw scope record:
+
+```sh
+npm run limits:get -- --scope repo --owner w7s-io --repo example-workflows
+```
+
+Delete one metric from a scope record:
+
+```sh
+npm run limits:delete -- \
+  --scope repo \
+  --owner w7s-io \
+  --repo example-workflows \
+  --metric workflow.create
+```
+
+Delete the whole scope record:
+
+```sh
+npm run limits:delete -- --scope repo --owner w7s-io --repo example-workflows
+```
+
+The script uses `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` or `ACCOUNT_ID`. If those are not set, it can read the generated `.wrangler/secrets.json` file created by `npm run prepare:cloudflare`.
+
 ## Limits Caveat
 
 KV rollups are read-modify-write counters. Concurrent writes can race, so this is not billing-grade accounting and should not be used for strict quota enforcement yet. It is sufficient for product visibility, support debugging, and planning the next accounting layer before AI, Vectorize, and AI Gateway are exposed broadly.

@@ -23,6 +23,7 @@ As of the latest docs update:
 - If `W7S_ANALYTICS_DATASET` is configured, the core writes Workers Analytics Engine datapoints for deploys, runtime requests, RPC, queues, schedules, and workflows.
 - The core stores best-effort per-app daily usage rollups in `DEPLOYMENTS_KV` and exposes them with soft limit warnings through `GET /api/v1/usage/<owner>/<repo>`.
 - Effective soft limit policies are exposed through `GET /api/v1/limits/<owner>/<repo>` and can be overridden only with W7S-owned KV policy records.
+- W7S operators can manage soft limit policy KV records with `npm run limits:get`, `npm run limits:set`, and `npm run limits:delete`.
 - Root `CNAME` files can attach app custom-domain routes when the W7S token can manage that Cloudflare zone.
 - Custom domains use soft TXT verification: the first claim works without TXT, `_w7s.<zone>` becomes an owner/repo allowlist when present, and hostname conflicts require TXT authorization.
 - Empty org roots such as `https://sadasant.w7s.cloud/` show deploy-help HTML instead of a plain 404.
