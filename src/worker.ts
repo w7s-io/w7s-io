@@ -3,11 +3,15 @@ import type { Env } from "./env";
 import { handleDeploy } from "./api/deploy";
 import { handleRpc } from "./api/rpc";
 import { handleQueueSend } from "./api/queues";
+import { handleWorkflowCreate, handleWorkflowStatus } from "./api/workflows";
 import { json } from "./http";
 import { handleQueueBatch } from "./runtime/queueDelivery";
 import { handleScheduled } from "./runtime/scheduleDelivery";
+import { W7SWorkflow } from "./runtime/workflowDelivery";
 import { resolveRuntimeRequest } from "./runtime/router";
 import { landingHtml } from "./static/landing";
+
+export { W7SWorkflow };
 
 export const app = new Hono<{ Bindings: Env }>();
 
@@ -26,6 +30,8 @@ app.get("/api/v1/health", health);
 app.post("/api/v1/deploy", handleDeploy);
 app.all("/api/v1/rpc/*", handleRpc);
 app.post("/api/v1/queues/*", handleQueueSend);
+app.post("/api/v1/workflows/*", handleWorkflowCreate);
+app.get("/api/v1/workflows/*", handleWorkflowStatus);
 
 app.all("*", async (c) => {
   const runtimeResponse = await resolveRuntimeRequest(c.req.raw, c.env);

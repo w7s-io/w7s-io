@@ -9,6 +9,7 @@ export interface Env {
   DEPLOYMENTS_KV: KVNamespace;
   STATIC_ASSETS?: R2Bucket;
   W7S_ANALYTICS?: AnalyticsEngineDataset;
+  W7S_WORKFLOWS?: Workflow<W7SWorkflowPayload>;
   CLOUDFLARE_API_TOKEN?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_DISPATCH_NAMESPACE?: string;
@@ -19,3 +20,23 @@ export interface Env {
   APP_DEPLOY_BRANCH?: string;
   APP_DEPLOYED_AT?: string;
 }
+
+export type W7SWorkflowPayload = {
+  version: 1;
+  createdAt: string;
+  payload: unknown;
+  caller: {
+    orgSlug: string;
+    repoSlug: string;
+    repository: string;
+    environment: string;
+  };
+  target: {
+    orgSlug: string;
+    repoSlug: string;
+    repository: string;
+    environment: string;
+    workflow: string;
+    path: string;
+  };
+};

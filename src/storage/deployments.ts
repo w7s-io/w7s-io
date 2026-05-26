@@ -33,6 +33,7 @@ export type DeploymentRecord = {
   bindings?: DeploymentBindings;
   rpc?: DeploymentRpc;
   queue?: DeploymentQueueConfig;
+  workflow?: DeploymentWorkflowConfig;
   schedules?: DeploymentSchedule[];
   targets: {
     worker?: {
@@ -64,11 +65,23 @@ export type DeploymentQueueConfig = {
   queues: DeploymentQueue[];
 };
 
+export type DeploymentWorkflowConfig = {
+  binding: string;
+  tokenHash: string;
+  allow: string[];
+  workflows: DeploymentWorkflow[];
+};
+
 export type DeploymentQueue = {
   name: string;
   queueName: string;
   queueId: string;
   consumer: string;
+};
+
+export type DeploymentWorkflow = {
+  name: string;
+  path: string;
 };
 
 export type DeploymentSchedule = {

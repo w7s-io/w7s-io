@@ -43,6 +43,7 @@ The token must be able to:
 - create/read/query D1 databases;
 - create/read Workers for Platforms dispatch namespaces;
 - publish scripts into the dispatch namespace.
+- deploy Cloudflare Workflows attached to the core Worker.
 
 DNS record permissions are not required by the current deploy workflow because wildcard DNS and app custom-domain DNS are manual.
 
@@ -54,6 +55,7 @@ W7S_DEPLOYMENTS_KV_NAME         default: w7s-io-deployments
 W7S_STATIC_ASSETS_BUCKET        default: w7s-io-static-assets
 W7S_DISPATCH_NAMESPACE          default: w7s-isolate
 W7S_ANALYTICS_DATASET           optional Analytics Engine dataset name
+W7S_WORKFLOW_NAME               default: w7s-workflows
 W7S_ATTACH_WILDCARD_ROUTE       default: false
 W7S_COMPATIBILITY_DATE          default: 2026-05-23
 ```
@@ -80,6 +82,7 @@ The generated config includes:
 - `DEPLOYMENTS_KV`;
 - `STATIC_ASSETS`;
 - `DISPATCHER`;
+- `W7S_WORKFLOWS`;
 - `W7S_ANALYTICS`, when `W7S_ANALYTICS_DATASET` is set;
 - runtime vars such as `W7S_BASE_DOMAIN`, `W7S_WORKER_NAME`, `APP_COMMIT_ID`, `APP_DEPLOY_BRANCH`, and `APP_DEPLOYED_AT`;
 - a per-minute core Cron Trigger used to dispatch app-declared schedules;
@@ -189,6 +192,7 @@ Worker: w7s-io
 Dispatch namespace: w7s-isolate
 KV namespace title: w7s-io-deployments
 R2 bucket: w7s-io-static-assets
+Workflow: w7s-workflows
 ```
 
 Native user Worker script names:
@@ -254,4 +258,27 @@ rpc
 queue_send
 queue_delivery
 schedule_delivery
+workflow_create
+workflow_delivery
 ```
+
+## Workflows
+
+The generated config always attaches one Cloudflare Workflow to the core Worker:
+
+```json
+{
+  "name": "w7s-workflows",
+  "binding": "W7S_WORKFLOWS",
+  "class_name": "W7SWorkflow"
+}
+```
+
+Use `W7S_WORKFLOW_NAME` to change the Cloudflare Workflow resource name. User apps do not receive direct Workflow bindings. Instead, every native backend receives:
+
+```text
+W7S_WORKFLOW
+W7S_WORKFLOW_TOKEN
+```
+
+`W7S_WORKFLOW` is a service binding to the W7S core Worker. The core verifies the caller token, creates a workflow instance through `W7S_WORKFLOWS`, and the `W7SWorkflow` class dispatches a durable step to the target app's declared workflow path.

@@ -7,7 +7,9 @@ export type AnalyticsEventName =
   | "rpc"
   | "queue_send"
   | "queue_delivery"
-  | "schedule_delivery";
+  | "schedule_delivery"
+  | "workflow_create"
+  | "workflow_delivery";
 
 export type AnalyticsOutcome = "success" | "error";
 

@@ -581,7 +581,7 @@ describe("deploy API", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json() as {
-      data?: { deployment?: { rpc?: Record<string, unknown>; queue?: Record<string, unknown> } };
+      data?: { deployment?: { rpc?: Record<string, unknown>; queue?: Record<string, unknown>; workflow?: Record<string, unknown> } };
     };
     const record = await loadDeploymentRecord(env, "production", "w7s-io", "demo");
     expect(record?.targets.worker?.entrypoint).toBe("backend/index.js");
@@ -596,6 +596,73 @@ describe("deploy API", () => {
       allow: [],
       queues: []
     });
+    expect(body.data?.deployment?.workflow).toEqual({
+      binding: "W7S_WORKFLOW",
+      allow: [],
+      workflows: []
+    });
+  });
+
+  it("stores declared workflows and uploads workflow runtime bindings", async () => {
+    const uploadedMetadata: Array<{
+      bindings?: Array<Record<string, string>>;
+    }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "w7s-io/demo" });
+        }
+        if (
+          url.includes("/workers/dispatch/namespaces/w7s-isolate/scripts/") &&
+          init?.method === "PUT"
+        ) {
+          const form = init.body as FormData;
+          const metadata = form.get("metadata") as Blob;
+          uploadedMetadata.push(JSON.parse(await metadata.text()));
+          return Response.json({ success: true, result: { startup_time_ms: 5 } });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv({
+      CLOUDFLARE_API_TOKEN: "cf-token",
+      CLOUDFLARE_ACCOUNT_ID: "acct-123"
+    });
+    const response = await app.fetch(
+      deployRequest({
+        "backend/index.js": "export default { fetch(){ return new Response('backend') } }",
+        "w7s.json": JSON.stringify({
+          workflows: [
+            {
+              name: "process-order",
+              path: "/_w7s/workflows/process-order"
+            }
+          ],
+          workflow: {
+            allow: ["guerrerocarlos/notepad"]
+          }
+        })
+      }),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const record = await loadDeploymentRecord(env, "production", "w7s-io", "demo");
+    expect(record?.workflow?.allow).toEqual(["guerrerocarlos/notepad"]);
+    expect(record?.workflow?.workflows).toEqual([
+      {
+        name: "process-order",
+        path: "/_w7s/workflows/process-order"
+      }
+    ]);
+    expect(uploadedMetadata[0]?.bindings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "service", name: "W7S_WORKFLOW", service: "w7s-io" }),
+        expect.objectContaining({ type: "secret_text", name: "W7S_WORKFLOW_TOKEN" })
+      ])
+    );
   });
 
   it("provisions declared queues and uploads queue runtime bindings", async () => {
@@ -1166,6 +1233,36 @@ describe("deploy API", () => {
     expect(await response.json()).toEqual(
       expect.objectContaining({
         error: "Hyperdrive bindings require a native backend deployment."
+      })
+    );
+  });
+
+  it("rejects workflows on static-only deployments", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "w7s-io/demo" });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv();
+    const response = await app.fetch(
+      deployRequest({
+        "dist/index.html": "<h1>Hello</h1>",
+        "w7s.json": JSON.stringify({
+          workflows: ["process-order"]
+        })
+      }),
+      env
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual(
+      expect.objectContaining({
+        error: "Workflows require a native backend deployment."
       })
     );
   });

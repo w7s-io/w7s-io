@@ -170,6 +170,38 @@ export class MemoryAnalyticsEngine {
   }
 }
 
+export class MemoryWorkflowBinding {
+  readonly created: Array<WorkflowInstanceCreateOptions<unknown>> = [];
+  readonly statuses = new Map<string, InstanceStatus>();
+
+  async create(options?: WorkflowInstanceCreateOptions<unknown>) {
+    const id = options?.id ?? crypto.randomUUID();
+    this.created.push({ ...options, id });
+    return this.instance(id);
+  }
+
+  async get(id: string) {
+    return this.instance(id);
+  }
+
+  async createBatch(batch: WorkflowInstanceCreateOptions<unknown>[]) {
+    return Promise.all(batch.map((options) => this.create(options)));
+  }
+
+  private instance(id: string): WorkflowInstance {
+    const binding = this;
+    return {
+      id,
+      pause: async () => undefined,
+      resume: async () => undefined,
+      terminate: async () => undefined,
+      restart: async () => undefined,
+      sendEvent: async () => undefined,
+      status: async () => binding.statuses.get(id) ?? { status: "queued" }
+    } as WorkflowInstance;
+  }
+}
+
 export const createTestEnv = (overrides: Partial<Env> = {}): Env => ({
   DEPLOYMENTS_KV: new MemoryKV() as unknown as KVNamespace,
   STATIC_ASSETS: new MemoryR2() as unknown as R2Bucket,

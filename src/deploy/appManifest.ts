@@ -43,6 +43,11 @@ export type ScheduleDeclaration = {
   path: string;
 };
 
+export type WorkflowDeclaration = {
+  name: string;
+  path: string;
+};
+
 export type AppManifest = {
   bindings: {
     kv: KvBindingDeclaration[];
@@ -53,9 +58,13 @@ export type AppManifest = {
   };
   queues: QueueDeclaration[];
   schedules: ScheduleDeclaration[];
+  workflows: WorkflowDeclaration[];
   vars: string[];
   secrets: string[];
   queue: {
+    allow: string[];
+  };
+  workflow: {
     allow: string[];
   };
   rpc: {
@@ -73,9 +82,13 @@ const emptyManifest = (): AppManifest => ({
   },
   queues: [],
   schedules: [],
+  workflows: [],
   vars: [],
   secrets: [],
   queue: {
+    allow: []
+  },
+  workflow: {
     allow: []
   },
   rpc: {
@@ -113,8 +126,20 @@ const ensureQueueName = (value: unknown, field: string) => {
   return normalized;
 };
 
+const ensureWorkflowName = (value: unknown, field: string) => ensureQueueName(value, field);
+
 const ensureConsumerPath = (value: unknown, field: string, queueName: string) => {
   if (value === undefined) return `/_w7s/queues/${queueName}`;
+  if (typeof value !== "string") throw new Error(`${field} must be a string.`);
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) {
+    throw new Error(`${field} must be an absolute path.`);
+  }
+  return trimmed;
+};
+
+const ensureWorkflowPath = (value: unknown, field: string, workflowName: string) => {
+  if (value === undefined) return `/_w7s/workflows/${workflowName}`;
   if (typeof value !== "string") throw new Error(`${field} must be a string.`);
   const trimmed = value.trim();
   if (!trimmed.startsWith("/") || trimmed.startsWith("//")) {
@@ -306,11 +331,45 @@ const parseSchedules = (value: unknown): ScheduleDeclaration[] => {
   });
 };
 
+const parseWorkflows = (value: unknown): WorkflowDeclaration[] => {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("workflows must be an array.");
+  const seen = new Set<string>();
+  return value.map((entry, index) => {
+    let declaration: WorkflowDeclaration;
+    if (typeof entry === "string") {
+      const name = ensureWorkflowName(entry, `workflows[${index}]`);
+      declaration = {
+        name,
+        path: `/_w7s/workflows/${name}`
+      };
+    } else {
+      const record = asRecord(entry, `workflows[${index}]`);
+      const name = ensureWorkflowName(record.name, `workflows[${index}].name`);
+      declaration = {
+        name,
+        path: ensureWorkflowPath(record.path ?? record.consumer, `workflows[${index}].path`, name)
+      };
+    }
+    if (seen.has(declaration.name)) throw new Error(`workflows[${index}] duplicates ${declaration.name}.`);
+    seen.add(declaration.name);
+    return declaration;
+  });
+};
+
 const parseQueue = (value: unknown) => {
   if (value === undefined) return { allow: [] };
   const record = asRecord(value, "queue");
   return {
     allow: parseGitHubAllowList(record.allow, "queue.allow")
+  };
+};
+
+const parseWorkflow = (value: unknown) => {
+  if (value === undefined) return { allow: [] };
+  const record = asRecord(value, "workflow");
+  return {
+    allow: parseGitHubAllowList(record.allow, "workflow.allow")
   };
 };
 
@@ -344,9 +403,11 @@ export const readAppManifest = (archive: DeployArchive) => {
     },
     queues: parseQueues(record.queues),
     schedules: parseSchedules(record.schedules),
+    workflows: parseWorkflows(record.workflows),
     vars: parseEnvNames(record.vars, "vars"),
     secrets: parseEnvNames(record.secrets, "secrets"),
     queue: parseQueue(record.queue),
+    workflow: parseWorkflow(record.workflow),
     rpc: parseRpc(record.rpc)
   } satisfies AppManifest;
 };

@@ -11,8 +11,8 @@ This repo contains the public W7S worker, deploy API, runtime router, and storag
 - deployments are authorized by the GitHub token's access to the source repo;
 - `worker/` or `backend/` apps publish to Workers for Platforms;
 - Cloudflare-style SSR output in `dist/server` plus assets in `dist/client` is supported;
-- `w7s.json` can declare per-app KV, R2, D1, Durable Objects, Hyperdrive, queues, schedules, vars, and secrets for native backends;
-- native backends receive internal `W7S_RPC` and `W7S_QUEUE` service bindings for backend-to-backend calls and queue sends;
+- `w7s.json` can declare per-app KV, R2, D1, Durable Objects, Hyperdrive, queues, schedules, workflows, vars, and secrets for native backends;
+- native backends receive internal `W7S_RPC`, `W7S_QUEUE`, and `W7S_WORKFLOW` service bindings for backend-to-backend calls, queue sends, and workflow starts;
 - static frontend assets publish to R2 and are served from `https://<org>.w7s.cloud/<repo>/*`.
 - same-name repos such as `github.com/<org>/<org>` can serve directly from `https://<org>.w7s.cloud/*`.
 - non-production branches serve from `https://<branch>--<org>.w7s.cloud/<repo>/*`.
@@ -124,9 +124,18 @@ Optional app manifest:
       "path": "/_w7s/schedules/sync"
     }
   ],
+  "workflows": [
+    {
+      "name": "process-order",
+      "path": "/_w7s/workflows/process-order"
+    }
+  ],
   "vars": ["GOOGLE_CLIENT_ID"],
   "secrets": ["GOOGLE_CLIENT_SECRET"],
   "queue": {
+    "allow": ["w7s-io", "guerrerocarlos/notepad"]
+  },
+  "workflow": {
     "allow": ["w7s-io", "guerrerocarlos/notepad"]
   },
   "rpc": {
@@ -135,7 +144,7 @@ Optional app manifest:
 }
 ```
 
-Managed storage, Durable Objects, queues, and schedules are scoped by repository and environment, so a production deploy and a feature-branch deploy receive separate durable resources. D1 migration files are applied once in sorted order and tracked in the app database.
+Managed storage, Durable Objects, queues, schedules, and workflows are scoped by repository and environment, so a production deploy and a feature-branch deploy receive separate durable resources. D1 migration files are applied once in sorted order and tracked in the app database.
 
 Durable Object apps must export the declared classes from the native Worker bundle. W7S uploads them as `durable_object_namespace` bindings and creates SQLite-backed classes automatically the first time they appear.
 
@@ -161,12 +170,31 @@ await env.W7S_QUEUE.fetch(
 );
 ```
 
+Native backends also receive `W7S_WORKFLOW` and `W7S_WORKFLOW_TOKEN`. Workflow instances are started with RPC-style internal URLs:
+
+```ts
+await env.W7S_WORKFLOW.fetch(
+  "https://w7s.internal/api/v1/workflows/w7s-io/example-worker/process-order",
+  {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${env.W7S_WORKFLOW_TOKEN}`,
+      "content-type": "application/json",
+      "x-w7s-workflow-caller": env.W7S_REPOSITORY,
+      "x-w7s-workflow-environment": env.W7S_ENVIRONMENT
+    },
+    body: JSON.stringify({ orderId: "123" })
+  }
+);
+```
+
 ## Required Cloudflare Bindings
 
 - `DISPATCHER`: Workers for Platforms dispatch namespace
 - `DEPLOYMENTS_KV`: deployment metadata and static manifests
 - `STATIC_ASSETS`: R2 bucket for deployed frontend assets
 - `W7S_ANALYTICS`: optional Workers Analytics Engine dataset for platform metrics
+- `W7S_WORKFLOWS`: Cloudflare Workflow binding used for app workflow instances
 - `CLOUDFLARE_API_TOKEN`: secret with dispatch namespace publish access
 - `CLOUDFLARE_ACCOUNT_ID`: Cloudflare account id
 
@@ -187,6 +215,7 @@ Optional repo variables:
 - `W7S_DISPATCH_NAMESPACE`, default `w7s-isolate`
 - `W7S_ATTACH_WILDCARD_ROUTE`, default `false`
 - `W7S_ANALYTICS_DATASET`, optional Analytics Engine dataset name
+- `W7S_WORKFLOW_NAME`, default `w7s-workflows`
 
 Set `W7S_ATTACH_WILDCARD_ROUTE=true` only when this worker should attach the `*.w7s.cloud/*` route. Cloudflare rejects the deploy if another worker already owns that route.
 

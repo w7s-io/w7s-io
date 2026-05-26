@@ -38,9 +38,13 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
   - Implements internal queue sends through RPC-style `w7s.internal` URLs.
   - Verifies caller tokens issued during deploy.
   - Sends messages to Cloudflare Queues owned by target deployments.
+- `src/api/workflows.ts`
+  - Implements internal workflow starts and status lookups through RPC-style `w7s.internal` URLs.
+  - Verifies caller tokens issued during deploy.
+  - Creates Cloudflare Workflow instances that dispatch to target app workflow consumer paths.
 - `src/analytics.ts`
   - Writes best-effort Workers Analytics Engine datapoints when `W7S_ANALYTICS` is bound.
-  - Keeps a stable low-cardinality schema for deploy, request, RPC, queue, and schedule events.
+  - Keeps a stable low-cardinality schema for deploy, request, RPC, queue, schedule, and workflow events.
 - `src/deploy/archive.ts`
   - Reads zip archives into normalized file maps.
   - Strips common GitHub archive roots while preserving W7S app roots.
@@ -63,12 +67,17 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
   - Adds `W7S_RPC`, `W7S_RPC_TOKEN`, and caller metadata bindings to native Workers.
 - `src/deploy/queueBindings.ts`
   - Adds `W7S_QUEUE` and `W7S_QUEUE_TOKEN` bindings to native Workers.
+- `src/deploy/workflowBindings.ts`
+  - Adds `W7S_WORKFLOW` and `W7S_WORKFLOW_TOKEN` bindings to native Workers.
 - `src/runtime/queueDelivery.ts`
   - Receives Cloudflare Queue batches in the W7S core Worker.
   - Dispatches queue batches to target app consumer routes.
 - `src/runtime/scheduleDelivery.ts`
   - Receives Cloudflare scheduled events in the W7S core Worker.
   - Evaluates deployed app schedules and dispatches due jobs to target app routes.
+- `src/runtime/workflowDelivery.ts`
+  - Implements the core `W7SWorkflow` Cloudflare WorkflowEntrypoint.
+  - Runs a durable step that dispatches each workflow instance to the target app route.
 - `src/deploy/staticPublisher.ts`
   - Publishes detected static frontend output files to R2.
   - Stores a static manifest in KV.
@@ -139,6 +148,20 @@ POST env.W7S_QUEUE.fetch("/api/v1/queues/<owner>/<repo>/<queue>")
 ```
 
 ```text
+POST env.W7S_WORKFLOW.fetch("/api/v1/workflows/<owner>/<repo>/<workflow>")
+  -> require caller bearer token from W7S_WORKFLOW_TOKEN
+  -> load caller deployment in x-w7s-workflow-environment
+  -> verify token hash from the caller deployment record
+  -> load target deployment in the same environment
+  -> require target w7s.json workflows declaration
+  -> allow same-owner starts by default
+  -> require target w7s.json workflow.allow for cross-owner starts
+  -> create a Cloudflare Workflow instance through the W7S core binding
+  -> W7SWorkflow dispatches a durable step to the target app workflow route
+  -> write workflow create and delivery analytics when configured
+```
+
+```text
 Cloudflare scheduled event
   -> W7S core runs once per minute
   -> scan deployed schedule mappings
@@ -163,4 +186,5 @@ Cloudflare scheduled event
 - Backend-to-backend RPC is routed through the core Worker service binding. It does not expose target Workers directly, and cross-owner calls are opt-in through the target app's `w7s.json`.
 - Queues are app-owned, environment-scoped Cloudflare Queues. Apps send through `W7S_QUEUE`; W7S core owns queue provisioning and delivery dispatch.
 - Schedules are environment-scoped path consumers. W7S core owns the Cloudflare cron trigger and dispatches due jobs to native Workers.
+- Workflows are app-declared, environment-scoped path consumers. W7S core owns the Cloudflare Workflow definition and starts instances on behalf of apps.
 - Analytics Engine is an optional W7S-core binding. It is for platform observability first; app-visible analytics bindings can be added later.

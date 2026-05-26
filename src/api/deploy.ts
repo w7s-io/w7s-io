@@ -19,6 +19,10 @@ import {
   buildQueueUploadBindings,
   W7S_QUEUE_BINDING
 } from "../deploy/queueBindings";
+import {
+  buildWorkflowUploadBindings,
+  W7S_WORKFLOW_BINDING
+} from "../deploy/workflowBindings";
 import { generateBindingToken, hashBindingToken } from "../deploy/tokens";
 import { provisionAppQueues } from "../deploy/queueProvisioner";
 import {
@@ -140,6 +144,9 @@ export const handleDeploy = async (c: HonoContext) => {
   if (!hasNativeBackend && appManifest.schedules.length > 0) {
     return jsonError("Schedules require a native backend deployment.", 400);
   }
+  if (!hasNativeBackend && appManifest.workflows.length > 0) {
+    return jsonError("Workflows require a native backend deployment.", 400);
+  }
   if (!hasNativeBackend && appManifest.bindings.durableObjects.length > 0) {
     return jsonError("Durable Objects require a native backend deployment.", 400);
   }
@@ -155,6 +162,7 @@ export const handleDeploy = async (c: HonoContext) => {
   let deploymentBindings: DeploymentRecord["bindings"];
   let deploymentRpc: DeploymentRecord["rpc"];
   let deploymentQueue: DeploymentRecord["queue"];
+  let deploymentWorkflow: DeploymentRecord["workflow"];
 
   try {
     if (hasNativeBackend) {
@@ -207,12 +215,23 @@ export const handleDeploy = async (c: HonoContext) => {
         allow: appManifest.queue.allow,
         queues
       };
+      const workflowToken = generateBindingToken();
+      const workflowBindings = buildWorkflowUploadBindings({
+        env: c.env,
+        token: workflowToken
+      });
+      deploymentWorkflow = {
+        binding: W7S_WORKFLOW_BINDING,
+        tokenHash: await hashBindingToken(workflowToken),
+        allow: appManifest.workflow.allow,
+        workflows: appManifest.workflows
+      };
       const published = await publishIsolateWorker({
         env: c.env,
         archive,
         scriptName,
         entrypoint,
-        bindings: [...provisionedBindings.uploadBindings, ...rpcBindings, ...queueBindings],
+        bindings: [...provisionedBindings.uploadBindings, ...rpcBindings, ...queueBindings, ...workflowBindings],
         durableObjectMigrations: provisionedBindings.durableObjectMigrations
       });
       if (provisionedBindings.durableObjectMigrations) {
@@ -274,6 +293,7 @@ export const handleDeploy = async (c: HonoContext) => {
     ...(deploymentBindings ? { bindings: deploymentBindings } : {}),
     ...(deploymentRpc ? { rpc: deploymentRpc } : {}),
     ...(deploymentQueue ? { queue: deploymentQueue } : {}),
+    ...(deploymentWorkflow ? { workflow: deploymentWorkflow } : {}),
     ...(appManifest.schedules.length > 0 ? { schedules: appManifest.schedules } : {}),
     targets
   };
@@ -311,6 +331,15 @@ export const handleDeploy = async (c: HonoContext) => {
               binding: record.queue.binding,
               allow: record.queue.allow,
               queues: record.queue.queues
+            }
+          }
+        : {}),
+      ...(record.workflow
+        ? {
+            workflow: {
+              binding: record.workflow.binding,
+              allow: record.workflow.allow,
+              workflows: record.workflow.workflows
             }
           }
         : {})

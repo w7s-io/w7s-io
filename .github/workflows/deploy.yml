@@ -26,6 +26,7 @@ jobs:
       W7S_STATIC_ASSETS_BUCKET: ${{ vars.W7S_STATIC_ASSETS_BUCKET || 'w7s-io-static-assets' }}
       W7S_DISPATCH_NAMESPACE: ${{ vars.W7S_DISPATCH_NAMESPACE || 'w7s-isolate' }}
       W7S_ANALYTICS_DATASET: ${{ vars.W7S_ANALYTICS_DATASET }}
+      W7S_WORKFLOW_NAME: ${{ vars.W7S_WORKFLOW_NAME || 'w7s-workflows' }}
       W7S_ATTACH_WILDCARD_ROUTE: ${{ vars.W7S_ATTACH_WILDCARD_ROUTE || 'false' }}
       W7S_COMPATIBILITY_DATE: ${{ vars.W7S_COMPATIBILITY_DATE || '2026-05-23' }}
 

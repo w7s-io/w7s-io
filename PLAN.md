@@ -9,8 +9,8 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
 - GitHub Actions deploy archives through `w7s-io/w7s-cloud@v1`.
 - Native backends deploy into a Workers for Platforms dispatch namespace.
 - Static assets deploy to R2 and route through the W7S core Worker.
-- `w7s.json` can declare KV, R2, D1, Durable Objects, Hyperdrive, queues, schedules, vars, secrets, RPC allowlists, and queue allowlists.
-- RPC and Queue sends use internal service bindings because W7S app Workers are dispatch-namespace scripts, not ordinary account-level Workers.
+- `w7s.json` can declare KV, R2, D1, Durable Objects, Hyperdrive, queues, schedules, workflows, vars, secrets, RPC allowlists, queue allowlists, and workflow allowlists.
+- RPC, Queue sends, and Workflow starts use internal service bindings because W7S app Workers are dispatch-namespace scripts, not ordinary account-level Workers.
 - W7S core can optionally write platform metrics to Workers Analytics Engine when `W7S_ANALYTICS_DATASET` is configured.
 
 ## Implementation Order
@@ -92,8 +92,23 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
    - App-visible analytics bindings can be added later.
 
 5. **Workflows**
+   - Status: implemented as a W7S-core bridge.
    - Goal: durable multi-step jobs with sleeps, retries, and long-running orchestration.
-   - Prefer a W7S-core bridge first, similar to queues, because app Workers are dispatch-namespace scripts.
+   - First phase uses a W7S-core bridge, similar to queues, because app Workers are dispatch-namespace scripts.
+   - Manifest:
+     ```json
+     {
+       "workflows": [
+         {
+           "name": "process-order",
+           "path": "/_w7s/workflows/process-order"
+         }
+       ]
+     }
+     ```
+   - Native backends receive `W7S_WORKFLOW` and `W7S_WORKFLOW_TOKEN`.
+   - Starts use `/api/v1/workflows/<owner>/<repo>/<workflow>`.
+   - W7S core creates a Cloudflare Workflow instance and dispatches a durable step to the target backend path.
    - Revisit direct app integration if Cloudflare exposes a direct WFP-compatible consumer model.
 
 6. **AI, Vectorize, and AI Gateway**
@@ -124,3 +139,4 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
 - Durable Object apps use stable script names; non-DO backends keep commit-specific script names.
 - Hyperdrive bindings are declared in `w7s.json`, uploaded as Worker metadata bindings, and covered by deploy tests.
 - Analytics Engine is optional in the generated Wrangler config and covered by deploy, runtime, RPC, queue, schedule, and helper tests.
+- Workflows are declared in `w7s.json`, exposed through `W7S_WORKFLOW`, backed by one W7S-core Cloudflare Workflow, and covered by deploy, API, and delivery tests.

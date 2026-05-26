@@ -7,6 +7,7 @@ const deploymentsKvName = process.env.W7S_DEPLOYMENTS_KV_NAME?.trim() || "w7s-io
 const staticBucketName = process.env.W7S_STATIC_ASSETS_BUCKET?.trim() || "w7s-io-static-assets";
 const dispatchNamespace = process.env.W7S_DISPATCH_NAMESPACE?.trim() || "w7s-isolate";
 const analyticsDataset = process.env.W7S_ANALYTICS_DATASET?.trim() || "";
+const workflowName = process.env.W7S_WORKFLOW_NAME?.trim() || "w7s-workflows";
 const scheduleCron = process.env.W7S_CORE_CRON?.trim() || "* * * * *";
 const attachWildcardRoute = /^(1|true|yes|on)$/i.test(
   process.env.W7S_ATTACH_WILDCARD_ROUTE?.trim() || ""
@@ -136,6 +137,13 @@ const config = {
   triggers: {
     crons: [scheduleCron]
   },
+  workflows: [
+    {
+      name: workflowName,
+      binding: "W7S_WORKFLOWS",
+      class_name: "W7SWorkflow"
+    }
+  ],
   vars: {
     W7S_BASE_DOMAIN: zoneName,
     W7S_WORKER_NAME: workerName,
@@ -204,6 +212,7 @@ console.log(
       staticBucketName,
       dispatchNamespace,
       analyticsDataset: analyticsDataset || null,
+      workflowName,
       scheduleCron,
       attachWildcardRoute,
       routeManagement: "post-deploy"
