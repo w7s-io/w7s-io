@@ -17,14 +17,16 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
 ## Current Focus
 
 1. **Observability APIs**
-   - Expose the existing W7S-core Analytics Engine datapoints through authenticated per-repo APIs.
-   - Treat these as platform event logs and aggregate analytics, not app `console.log` capture yet.
-   - First API:
+   - Expose W7S-core Analytics Engine datapoints through authenticated per-repo APIs.
+   - Capture user Worker `console.*`, uncaught exceptions, and non-OK outcomes through Cloudflare Tail Worker events.
+   - APIs:
      ```text
      GET /api/v1/analytics/<owner>/<repo>?hours=24&limit=50
+     GET /api/v1/logs/<owner>/<repo>?hours=1&limit=100
      ```
    - GitHub bearer tokens must have access to the target repo.
-   - The response should include event summaries, time buckets, and recent platform events.
+   - Analytics responses include event summaries, time buckets, and recent platform events.
+   - Log responses include recent console, exception, and outcome records from user Workers.
 
 2. **Durable Object storage attribution**
    - Cloudflare exposes DO request and duration metrics by Worker script name.
@@ -118,7 +120,8 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
      GET /api/v1/analytics/<owner>/<repo>?hours=24&limit=50
      ```
    - The API queries the configured Analytics Engine dataset and returns summaries, time buckets, and recent platform events.
-   - App-visible analytics bindings and user Worker `console.log` retrieval can be added later.
+   - App-visible analytics bindings can be added later.
+   - User Worker logs are handled separately through Tail Worker events and `GET /api/v1/logs/<owner>/<repo>`.
 
 5. **Workflows**
    - Status: implemented as a W7S-core bridge.

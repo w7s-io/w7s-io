@@ -20,6 +20,7 @@ This repo contains the public W7S worker, deploy API, runtime router, and storag
 - optional Workers Analytics Engine writes track deploy, request, RPC, queue, schedule, and workflow events for platform observability.
 - per-app daily usage rollups, hourly Cloudflare analytics sync, warning thresholds, app suspension, and hard daily limits are exposed through an authenticated usage API.
 - per-app platform analytics are exposed through an authenticated Analytics Engine query API when `W7S_ANALYTICS_DATASET` is configured.
+- user Worker `console.*` output and uncaught exceptions are captured through Tail Worker events and exposed through an authenticated logs API.
 
 ## Deploy API
 
@@ -232,6 +233,9 @@ await env.W7S_WORKFLOW.fetch(
 - `STATIC_ASSETS`: R2 bucket for deployed frontend assets
 - `W7S_ANALYTICS`: optional Workers Analytics Engine dataset for platform metrics
 - `W7S_WORKFLOWS`: Cloudflare Workflow binding used for app workflow instances
+- `W7S_LOG_RETENTION_SECONDS`: optional KV retention for user Worker log records, default `604800`
+- `W7S_LOG_TAIL_CONSUMER`: optional Tail Worker service name for user Worker logs, default `w7s-io`
+- `W7S_DISABLE_WORKER_LOGS`: set to `true` to skip adding Tail Worker consumers to uploaded user Workers
 - `W7S_USER_WORKER_CPU_MS`: dispatch custom CPU limit for user Workers, default `50`
 - `W7S_USER_WORKER_SUBREQUESTS`: dispatch subrequest limit for user Workers, default `25`
 - `CLOUDFLARE_API_TOKEN`: secret with dispatch namespace publish access

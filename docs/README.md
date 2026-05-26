@@ -29,6 +29,7 @@ Start here:
 - custom domains can be declared with `CNAME` when DNS is managed separately, with optional `_w7s.<zone>` TXT allowlists for ownership control.
 - optional Workers Analytics Engine writes provide core platform observability when `W7S_ANALYTICS_DATASET` is configured.
 - authenticated analytics reads expose those platform events through `/api/v1/analytics/<owner>/<repo>`.
+- authenticated log reads expose user Worker `console.*` output and uncaught exceptions through `/api/v1/logs/<owner>/<repo>`.
 - daily usage rollups, hourly Cloudflare usage sync, app suspension state, and effective limit warnings are exposed through `GET /api/v1/usage/<owner>/<repo>`.
 - effective limit policies are exposed through `GET /api/v1/limits/<owner>/<repo>`.
 

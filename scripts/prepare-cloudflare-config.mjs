@@ -6,7 +6,11 @@ const zoneName = process.env.W7S_ZONE_NAME?.trim() || "w7s.cloud";
 const deploymentsKvName = process.env.W7S_DEPLOYMENTS_KV_NAME?.trim() || "w7s-io-deployments";
 const staticBucketName = process.env.W7S_STATIC_ASSETS_BUCKET?.trim() || "w7s-io-static-assets";
 const dispatchNamespace = process.env.W7S_DISPATCH_NAMESPACE?.trim() || "w7s-isolate";
+const workerName = "w7s-io";
 const analyticsDataset = process.env.W7S_ANALYTICS_DATASET?.trim() || "";
+const logRetentionSeconds = process.env.W7S_LOG_RETENTION_SECONDS?.trim() || "604800";
+const logTailConsumer = process.env.W7S_LOG_TAIL_CONSUMER?.trim() || workerName;
+const disableWorkerLogs = process.env.W7S_DISABLE_WORKER_LOGS?.trim() || "";
 const workflowName = process.env.W7S_WORKFLOW_NAME?.trim() || "w7s-workflows";
 const userWorkerCpuMs = process.env.W7S_USER_WORKER_CPU_MS?.trim() || "50";
 const userWorkerSubrequests = process.env.W7S_USER_WORKER_SUBREQUESTS?.trim() || "25";
@@ -24,7 +28,6 @@ const appDeployBranch =
   process.env.GITHUB_REF_NAME?.trim() ||
   null;
 const appDeployedAt = process.env.W7S_DEPLOYED_AT?.trim() || null;
-const workerName = "w7s-io";
 
 if (!apiToken) {
   throw new Error("CLOUDFLARE_API_TOKEN is required.");
@@ -153,6 +156,9 @@ const config = {
     CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE: compatibilityDate,
     W7S_USER_WORKER_CPU_MS: userWorkerCpuMs,
     W7S_USER_WORKER_SUBREQUESTS: userWorkerSubrequests,
+    W7S_LOG_RETENTION_SECONDS: logRetentionSeconds,
+    W7S_LOG_TAIL_CONSUMER: logTailConsumer,
+    ...(disableWorkerLogs ? { W7S_DISABLE_WORKER_LOGS: disableWorkerLogs } : {}),
     ...(analyticsDataset ? { W7S_ANALYTICS_DATASET: analyticsDataset } : {}),
     ...(appCommitId ? { APP_COMMIT_ID: appCommitId } : {}),
     ...(appDeployBranch ? { APP_DEPLOY_BRANCH: appDeployBranch } : {}),
@@ -220,6 +226,9 @@ console.log(
       workflowName,
       userWorkerCpuMs,
       userWorkerSubrequests,
+      logRetentionSeconds,
+      logTailConsumer,
+      disableWorkerLogs: disableWorkerLogs || null,
       scheduleCron,
       attachWildcardRoute,
       routeManagement: "post-deploy"

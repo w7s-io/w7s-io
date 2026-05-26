@@ -29,12 +29,14 @@ This file tracks the main known gaps after the current deploy core, runtime rout
 
 - **User-facing logs**
   - W7S now exposes recent platform events from Analytics Engine through `GET /api/v1/analytics/<owner>/<repo>`.
-  - App Worker `console.log` / exception log retrieval is still not implemented.
-  - Needs a storage/query design that is cheap and does not leak cross-tenant data.
+  - W7S now exposes user Worker `console.*`, uncaught exceptions, and non-OK Worker outcomes through `GET /api/v1/logs/<owner>/<repo>`.
+  - Existing user Workers must be redeployed once before Cloudflare sends their tail events to W7S.
+  - Remaining work: UI, better search, export, and stronger storage if retention needs exceed the short KV window.
 
 - **Analytics query API/dashboard**
   - Internal Analytics Engine writes exist.
   - A first authenticated per-repo query API exists.
+  - A first authenticated per-repo logs API exists.
   - No UI/dashboard exists yet.
 
 - **Usage limits API**

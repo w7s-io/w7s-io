@@ -7,12 +7,14 @@ import { handleWorkflowCreate, handleWorkflowStatus } from "./api/workflows";
 import { handleUsageGet } from "./api/usage";
 import { handleLimitsGet } from "./api/limits";
 import { handleAnalyticsGet } from "./api/analytics";
+import { handleLogsGet } from "./api/logs";
 import { json } from "./http";
 import { handleQueueBatch } from "./runtime/queueDelivery";
 import { handleScheduled } from "./runtime/scheduleDelivery";
 import { W7SWorkflow } from "./runtime/workflowDelivery";
 import { resolveRuntimeRequest } from "./runtime/router";
 import { landingHtml } from "./static/landing";
+import { handleTailEvents } from "./logs";
 
 export { W7SWorkflow };
 
@@ -38,6 +40,7 @@ app.get("/api/v1/workflows/*", handleWorkflowStatus);
 app.get("/api/v1/usage/*", handleUsageGet);
 app.get("/api/v1/limits/*", handleLimitsGet);
 app.get("/api/v1/analytics/*", handleAnalyticsGet);
+app.get("/api/v1/logs/*", handleLogsGet);
 
 app.all("*", async (c) => {
   const runtimeResponse = await resolveRuntimeRequest(c.req.raw, c.env);
@@ -60,5 +63,6 @@ app.all("*", async (c) => {
 export default {
   fetch: app.fetch,
   queue: handleQueueBatch,
-  scheduled: handleScheduled
+  scheduled: handleScheduled,
+  tail: handleTailEvents
 };

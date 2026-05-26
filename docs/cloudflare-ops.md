@@ -234,9 +234,44 @@ App owners can read the core platform events for repositories they can access th
 GET /api/v1/analytics/<owner>/<repo>?hours=24&limit=50
 ```
 
-The endpoint uses the same GitHub bearer token authorization as deploys and usage reads. It returns event summaries, time buckets, and recent platform events from the configured Analytics Engine dataset. It does not expose app `console.log` output yet.
+The endpoint uses the same GitHub bearer token authorization as deploys and usage reads. It returns event summaries, time buckets, and recent platform events from the configured Analytics Engine dataset.
 
-Datapoint schema:
+## User Worker Logs
+
+W7S exposes user Worker console output and uncaught exceptions through Tail Worker events. The core Worker exports a `tail()` handler. Native user Worker uploads include this metadata unless `W7S_DISABLE_WORKER_LOGS` is set:
+
+```json
+{
+  "tail_consumers": [
+    {
+      "service": "w7s-io"
+    }
+  ]
+}
+```
+
+The Tail Worker handler maps `scriptName` to a W7S deployment through `worker_script:v1:<scriptName>` KV records written during deploy. Only mapped user Workers are persisted; core Worker tail noise is ignored.
+
+App owners can read logs for repositories they can access through:
+
+```text
+GET /api/v1/logs/<owner>/<repo>?hours=1&limit=100
+Authorization: Bearer <github-token>
+```
+
+Optional filters:
+
+```text
+environment  production by default
+from/to      ISO timestamps
+kind         console, exception, or outcome
+level        debug, info, log, warn, or error
+cursor       opaque pagination cursor
+```
+
+Records are stored in `DEPLOYMENTS_KV` under `app_log:v1:*` keys. Default retention is seven days via `W7S_LOG_RETENTION_SECONDS=604800`; the runtime caps configured retention at 30 days. Existing user Workers must be redeployed once after this feature ships so their upload metadata includes the Tail Worker consumer.
+
+Analytics datapoint schema:
 
 ```text
 index1  repository, or w7s-core

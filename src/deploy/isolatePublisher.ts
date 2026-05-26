@@ -45,6 +45,7 @@ export type IsolatePublishResult = {
 
 const DEFAULT_DISPATCH_NAMESPACE = "w7s-isolate";
 const DEFAULT_COMPATIBILITY_DATE = "2026-05-23";
+const DEFAULT_LOG_TAIL_CONSUMER = "w7s-io";
 const NATIVE_APP_ROOTS = ["worker", "backend", "dist/server"] as const;
 const ENTRYPOINT_CANDIDATES = [
   "worker/index.ts",
@@ -251,6 +252,18 @@ const readWorkerConfig = (archive: DeployArchive, entrypoint: string) => {
   }
 };
 
+const disabledFlag = (value: string | undefined) =>
+  /^(1|true|yes|on)$/i.test(value?.trim() ?? "");
+
+const resolveTailConsumers = (env: Env) => {
+  if (disabledFlag(env.W7S_DISABLE_WORKER_LOGS)) return [];
+  const service =
+    optionalCloudflareString(env.W7S_LOG_TAIL_CONSUMER) ??
+    optionalCloudflareString(env.W7S_WORKER_NAME) ??
+    DEFAULT_LOG_TAIL_CONSUMER;
+  return service ? [{ service }] : [];
+};
+
 const ensureDispatchNamespace = async (params: {
   apiToken: string;
   accountId: string;
@@ -364,6 +377,7 @@ export const publishIsolateWorker = async (params: {
     scriptName: params.scriptName,
     plan: params.durableObjectMigrations
   });
+  const tailConsumers = resolveTailConsumers(params.env);
 
   const metadata = {
     main_module: toCloudflareModuleName(entrypoint),
@@ -371,6 +385,7 @@ export const publishIsolateWorker = async (params: {
     ...(workerConfig.compatibilityFlags && workerConfig.compatibilityFlags.length > 0
       ? { compatibility_flags: workerConfig.compatibilityFlags }
       : {}),
+    ...(tailConsumers.length > 0 ? { tail_consumers: tailConsumers } : {}),
     ...(durableObjectMigrations ? { migrations: durableObjectMigrations } : {}),
     ...(params.tags && params.tags.length > 0 ? { tags: params.tags.slice(0, 8) } : {}),
     ...(params.bindings && params.bindings.length > 0 ? { bindings: params.bindings } : {})

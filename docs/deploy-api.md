@@ -324,6 +324,8 @@ The value is comma-separated. `guerrerocarlos` allows any repo under that owner.
 
 The native backend is published to Cloudflare Workers for Platforms.
 
+W7S also attaches the W7S core Worker as a Tail Worker consumer on uploaded native backends, unless worker logs are disabled by the platform operator. This is what powers `GET /api/v1/logs/<owner>/<repo>` for app `console.*` output and uncaught exceptions.
+
 Supported imports:
 
 - relative imports inside the same root, such as `./lib.js`;

@@ -26,6 +26,9 @@ export interface Env {
   W7S_USER_WORKER_CPU_MS?: string;
   W7S_USER_WORKER_SUBREQUESTS?: string;
   W7S_ANALYTICS_DATASET?: string;
+  W7S_LOG_RETENTION_SECONDS?: string;
+  W7S_LOG_TAIL_CONSUMER?: string;
+  W7S_DISABLE_WORKER_LOGS?: string;
   W7S_WORKER_NAME?: string;
   W7S_BASE_DOMAIN?: string;
   APP_COMMIT_ID?: string;

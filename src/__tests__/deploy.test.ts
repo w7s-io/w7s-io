@@ -709,6 +709,7 @@ describe("deploy API", () => {
     const uploadedMetadata: Array<{
       bindings?: Array<Record<string, string>>;
       tags?: string[];
+      tail_consumers?: Array<Record<string, string>>;
     }> = [];
     vi.stubGlobal(
       "fetch",
@@ -775,6 +776,9 @@ describe("deploy API", () => {
         "w7s-app-w7s-io-demo"
       ])
     );
+    expect(uploadedMetadata[0]?.tail_consumers).toEqual([
+      { service: "w7s-io" }
+    ]);
     expect(record?.targets.worker?.tags).toEqual(uploadedMetadata[0]?.tags);
   });
 

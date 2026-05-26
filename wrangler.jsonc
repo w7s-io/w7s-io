@@ -8,7 +8,9 @@
     "W7S_BASE_DOMAIN": "w7s.cloud",
     "W7S_WORKER_NAME": "w7s-io",
     "CLOUDFLARE_DISPATCH_NAMESPACE": "w7s-isolate",
-    "CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE": "2026-05-23"
+    "CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE": "2026-05-23",
+    "W7S_LOG_RETENTION_SECONDS": "604800",
+    "W7S_LOG_TAIL_CONSUMER": "w7s-io"
   },
   "dispatch_namespaces": [
     {

@@ -53,6 +53,11 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
 - `src/api/analytics.ts`
   - Authenticates GitHub repository access and reads per-repo platform analytics from Workers Analytics Engine.
   - Keeps a stable low-cardinality schema for deploy, request, RPC, queue, schedule, and workflow events.
+- `src/api/logs.ts`
+  - Authenticates GitHub repository access and reads recent user Worker console/exception logs from KV.
+- `src/logs.ts`
+  - Implements the W7S `tail()` handler.
+  - Maps Tail Worker script names back to deployed repositories and stores only mapped user Worker records.
 - `src/usage.ts`
   - Writes best-effort daily usage counters into `DEPLOYMENTS_KV`.
   - Tracks count, units, success, error, and last-seen time per metric.
@@ -69,6 +74,7 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
 - `src/deploy/isolatePublisher.ts`
   - Publishes `backend/` or `worker/` apps into a Workers for Platforms dispatch namespace.
   - Supports local relative JS/TS module graphs only.
+  - Adds a Tail Worker consumer to uploaded user Workers unless worker logs are disabled.
 - `src/deploy/appManifest.ts`
   - Reads optional `w7s.json` manifests from deploy archives.
   - Validates storage binding declarations and runtime value names.
@@ -232,6 +238,7 @@ GET /api/v1/limits/<owner>/<repo>
 - Schedules are environment-scoped path consumers. W7S core owns the Cloudflare cron trigger and dispatches due jobs to native Workers.
 - Workflows are app-declared, environment-scoped path consumers. W7S core owns the Cloudflare Workflow definition and starts instances on behalf of apps.
 - Analytics Engine is an optional W7S-core binding. It is for platform observability first; app-visible analytics bindings can be added later.
-- The analytics API exposes summaries, time buckets, and recent platform events. It does not capture app `console.log` output yet.
+- The analytics API exposes summaries, time buckets, and recent platform events.
+- The logs API exposes recent app `console.*` output, uncaught exceptions, and non-OK Worker outcomes captured through Tail Worker events.
 - Usage rollups are stored in `DEPLOYMENTS_KV` with read-modify-write updates. Direct Cloudflare resource usage is synced hourly from Cloudflare analytics. These are enough for free-tier protection, but not atomic billing-grade counters.
 - `checkUsageLimit(...)` reports whether a future request would exceed policy. Public runtime, deploy, RPC, queue-send, and workflow-start paths return HTTP `429`; internal queue, schedule, and workflow delivery paths skip dispatch when their delivery metric would exceed policy.

@@ -29,14 +29,19 @@ export class MemoryKV {
     this.values.delete(key);
   }
 
-  async list(options?: { prefix?: string }) {
+  async list(options?: { prefix?: string; limit?: number; cursor?: string }) {
     const prefix = options?.prefix ?? "";
+    const start = Number(options?.cursor ?? 0);
+    const limit = options?.limit ?? 1000;
+    const keys = [...this.values.keys()]
+      .filter((name) => name.startsWith(prefix))
+      .sort();
+    const sliced = keys.slice(start, start + limit);
+    const next = start + sliced.length;
     return {
-      keys: [...this.values.keys()]
-        .filter((name) => name.startsWith(prefix))
-        .map((name) => ({ name })),
-      list_complete: true,
-      cursor: ""
+      keys: sliced.map((name) => ({ name })),
+      list_complete: next >= keys.length,
+      cursor: next >= keys.length ? "" : String(next)
     };
   }
 

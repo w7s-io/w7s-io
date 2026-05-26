@@ -157,6 +157,18 @@ export type QueueMapping = {
   deployedAt: string;
 };
 
+export type WorkerScriptMapping = {
+  version: 1;
+  scriptName: string;
+  orgSlug: string;
+  repoSlug: string;
+  environment: string;
+  repository: string;
+  branch: string;
+  commitSha: string;
+  deployedAt: string;
+};
+
 export type ScheduleMapping = {
   version: 1;
   id: string;
@@ -195,6 +207,9 @@ export const customDomainKey = (hostname: string) =>
 export const queueMappingKey = (queueName: string) =>
   `queue_mapping:v1:${queueName.trim().toLowerCase()}`;
 
+export const workerScriptMappingKey = (scriptName: string) =>
+  `worker_script:v1:${sanitizeScriptPart(scriptName)}`;
+
 export const scheduleMappingId = (
   record: Pick<DeploymentRecord, "environment" | "orgSlug" | "repoSlug">,
   schedule: DeploymentSchedule
@@ -222,10 +237,28 @@ export const managedResourceKey = (
   `resource:v1:${sanitizeScriptPart(environment)}:${sanitizeScriptPart(orgSlug)}:${sanitizeScriptPart(repoSlug)}:${kind}:${sanitizeScriptPart(binding)}`;
 
 export const storeDeploymentRecord = async (env: Env, record: DeploymentRecord) => {
-  await env.DEPLOYMENTS_KV.put(
-    deploymentKey(record.environment, record.orgSlug, record.repoSlug),
-    JSON.stringify(record)
-  );
+  await Promise.all([
+    env.DEPLOYMENTS_KV.put(
+      deploymentKey(record.environment, record.orgSlug, record.repoSlug),
+      JSON.stringify(record)
+    ),
+    record.targets.worker
+      ? env.DEPLOYMENTS_KV.put(
+          workerScriptMappingKey(record.targets.worker.scriptName),
+          JSON.stringify({
+            version: 1,
+            scriptName: record.targets.worker.scriptName,
+            orgSlug: record.orgSlug,
+            repoSlug: record.repoSlug,
+            environment: record.environment,
+            repository: record.repository,
+            branch: record.branch,
+            commitSha: record.commitSha,
+            deployedAt: record.deployedAt
+          } satisfies WorkerScriptMapping)
+        )
+      : Promise.resolve()
+  ]);
 };
 
 export const loadDeploymentRecord = async (
@@ -278,6 +311,23 @@ export const listDeploymentRecords = async (env: Env) => {
     cursor = listed.list_complete ? undefined : listed.cursor;
   } while (cursor);
   return records;
+};
+
+export const loadWorkerScriptMapping = async (env: Env, scriptName: string) => {
+  const raw = await env.DEPLOYMENTS_KV.get(workerScriptMappingKey(scriptName), "json");
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as Partial<WorkerScriptMapping>;
+  if (
+    record.version !== 1 ||
+    typeof record.scriptName !== "string" ||
+    typeof record.orgSlug !== "string" ||
+    typeof record.repoSlug !== "string" ||
+    typeof record.environment !== "string" ||
+    typeof record.repository !== "string"
+  ) {
+    return null;
+  }
+  return record as WorkerScriptMapping;
 };
 
 export const storeCustomDomainMappings = async (
