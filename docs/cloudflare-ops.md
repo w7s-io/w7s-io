@@ -226,7 +226,7 @@ Set `W7S_ANALYTICS_DATASET` as a GitHub repo variable to add this binding to the
 }
 ```
 
-The core writes one Analytics Engine datapoint for successful deploys and for runtime request, RPC, queue send, queue delivery, and schedule delivery paths. Missing or failing analytics writes are ignored so observability cannot affect app traffic.
+The core writes one Analytics Engine datapoint for successful deploys and for runtime request, RPC, queue send, queue delivery, schedule delivery, workflow create, and workflow delivery paths. Missing or failing analytics writes are ignored so observability cannot affect app traffic.
 
 Datapoint schema:
 
@@ -261,6 +261,25 @@ schedule_delivery
 workflow_create
 workflow_delivery
 ```
+
+## Usage Rollups
+
+Usage rollups are always stored in `DEPLOYMENTS_KV`; they do not require Analytics Engine. The core writes best-effort daily counters under:
+
+```text
+usage_daily:v1:<date>:<environment>:<owner>:<repo>
+```
+
+The authenticated read API is:
+
+```text
+GET /api/v1/usage/<owner>/<repo>?date=YYYY-MM-DD
+Authorization: Bearer <github-token>
+```
+
+The token must have GitHub access to the target repository. Current metrics are `deploy`, `rpc.dispatch`, `queue.send`, `queue.delivery`, `schedule.delivery`, `workflow.create`, and `workflow.delivery`.
+
+These counters are approximate because KV updates are read-modify-write operations. Treat them as operational/product visibility, not strict billing or quota enforcement.
 
 ## Workflows
 

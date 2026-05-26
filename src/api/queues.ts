@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { writeAnalyticsEvent } from "../analytics";
 import type { Env } from "../env";
+import { recordUsageEvent } from "../usage";
 import { jsonError, jsonSuccess, parseBearerToken } from "../http";
 import { requireSlug } from "../names";
 import { hashBindingToken } from "../deploy/tokens";
@@ -165,6 +166,16 @@ export const handleQueueSend = async (c: HonoContext) => {
     status: 200,
     durationMs: Date.now() - startedAt,
     count: 1
+  });
+  await recordUsageEvent(c.env, {
+    metric: "queue.send",
+    repository: `${caller.orgSlug}/${caller.repoSlug}`,
+    environment: caller.environment,
+    orgSlug: caller.orgSlug,
+    repoSlug: caller.repoSlug,
+    outcome: "success",
+    count: 1,
+    units: 1
   });
 
   return jsonSuccess({

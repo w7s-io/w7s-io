@@ -1,5 +1,6 @@
 import { responseOutcome, writeAnalyticsEvent } from "../analytics";
 import type { Env } from "../env";
+import { recordUsageEvent } from "../usage";
 import {
   loadDeploymentRecord,
   loadQueueMapping
@@ -91,6 +92,16 @@ export const handleQueueBatch = async (
     status: response.status,
     durationMs: Date.now() - startedAt,
     count: messages.length
+  });
+  await recordUsageEvent(env, {
+    metric: "queue.delivery",
+    repository: mapping.repository,
+    environment: mapping.environment,
+    orgSlug: mapping.orgSlug,
+    repoSlug: mapping.repoSlug,
+    outcome: responseOutcome(response.status),
+    count: messages.length,
+    units: messages.length
   });
 
   if (response.status < 200 || response.status >= 300) {

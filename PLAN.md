@@ -12,6 +12,7 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
 - `w7s.json` can declare KV, R2, D1, Durable Objects, Hyperdrive, queues, schedules, workflows, vars, secrets, RPC allowlists, queue allowlists, and workflow allowlists.
 - RPC, Queue sends, and Workflow starts use internal service bindings because W7S app Workers are dispatch-namespace scripts, not ordinary account-level Workers.
 - W7S core can optionally write platform metrics to Workers Analytics Engine when `W7S_ANALYTICS_DATASET` is configured.
+- W7S core stores best-effort daily usage rollups in `DEPLOYMENTS_KV` and exposes them through `GET /api/v1/usage/<owner>/<repo>`.
 
 ## Implementation Order
 
@@ -111,11 +112,22 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
    - W7S core creates a Cloudflare Workflow instance and dispatches a durable step to the target backend path.
    - Revisit direct app integration if Cloudflare exposes a direct WFP-compatible consumer model.
 
-6. **AI, Vectorize, and AI Gateway**
-   - Goal: support AI apps, embeddings, semantic search, and controlled LLM usage.
-   - Add only after the usage/accounting story is clear.
+6. **Usage accounting and limits**
+   - Status: basic rollups implemented, strict limits still open.
+   - Goal: make platform usage visible before enabling costly primitives.
+   - Current API:
+     ```text
+     GET /api/v1/usage/<owner>/<repo>?date=YYYY-MM-DD
+     ```
+   - GitHub bearer tokens must have access to the target repo.
+   - Current rollups are KV read-modify-write counters for deploy, RPC, queue, schedule, and workflow usage.
+   - Next phase should add stronger counters and policy enforcement for hard limits.
 
-7. **Turnstile and Email Routing**
+7. **AI, Vectorize, and AI Gateway**
+   - Goal: support AI apps, embeddings, semantic search, and controlled LLM usage.
+   - Add only after usage/accounting can enforce safe platform limits.
+
+8. **Turnstile and Email Routing**
    - Lower priority app security and inbound email integrations.
    - Turnstile can expose managed site keys/secrets.
    - Email Routing likely needs a core bridge that dispatches inbound email events to app paths.
@@ -140,3 +152,4 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
 - Hyperdrive bindings are declared in `w7s.json`, uploaded as Worker metadata bindings, and covered by deploy tests.
 - Analytics Engine is optional in the generated Wrangler config and covered by deploy, runtime, RPC, queue, schedule, and helper tests.
 - Workflows are declared in `w7s.json`, exposed through `W7S_WORKFLOW`, backed by one W7S-core Cloudflare Workflow, and covered by deploy, API, and delivery tests.
+- Usage rollups are stored in `DEPLOYMENTS_KV`, exposed through an authenticated API, and covered by helper/API tests.

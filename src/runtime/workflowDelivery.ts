@@ -2,6 +2,7 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 import { responseOutcome, writeAnalyticsEvent } from "../analytics";
 import type { Env, W7SWorkflowPayload } from "../env";
 import { loadDeploymentRecord } from "../storage/deployments";
+import { recordUsageEvent } from "../usage";
 import { dispatchWorker } from "./dispatch";
 
 const MAX_RESPONSE_BODY_LENGTH = 65_536;
@@ -85,6 +86,16 @@ export class W7SWorkflow extends WorkflowEntrypoint<Env, W7SWorkflowPayload> {
           status: response.status,
           durationMs: Date.now() - startedAt,
           count: 1
+        });
+        await recordUsageEvent(this.env, {
+          metric: "workflow.delivery",
+          repository: payload.target.repository,
+          environment: payload.target.environment,
+          orgSlug: payload.target.orgSlug,
+          repoSlug: payload.target.repoSlug,
+          outcome: responseOutcome(response.status),
+          count: 1,
+          units: 1
         });
 
         if (response.status < 200 || response.status >= 300) {

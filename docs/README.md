@@ -8,8 +8,9 @@ Start here:
 2. [Deploy API](./deploy-api.md): `POST /api/v1/deploy`, archive expectations, auth, and response shape.
 3. [Runtime Routing](./runtime-routing.md): how `https://<org>.w7s.cloud/<repo>/*` and same-name org root apps are resolved.
 4. [Cloudflare Operations](./cloudflare-ops.md): bindings, GitHub Actions, wildcard cutover, DNS, and required permissions.
-5. [Development And Testing](./development-and-testing.md): local commands, tests, and safe change workflow.
-6. [Agent Handoff](./agent-handoff.md): current state, known limitations, and common next tasks.
+5. [Usage Accounting](./usage-accounting.md): per-app daily usage rollups and current limitations.
+6. [Development And Testing](./development-and-testing.md): local commands, tests, and safe change workflow.
+7. [Agent Handoff](./agent-handoff.md): current state, known limitations, and common next tasks.
 
 ## Current Model
 
@@ -27,5 +28,6 @@ Start here:
 - empty org roots such as `https://sadasant.w7s.cloud/` show deploy-help HTML;
 - custom domains can be declared with `CNAME` when DNS is managed separately, with optional `_w7s.<zone>` TXT allowlists for ownership control.
 - optional Workers Analytics Engine writes provide core platform observability when `W7S_ANALYTICS_DATASET` is configured.
+- best-effort daily usage rollups are stored in `DEPLOYMENTS_KV` and exposed through `GET /api/v1/usage/<owner>/<repo>`.
 
 The old workflow editor, `jsInterpreter`, plugin bridge, DB control, and telemetry stack are not part of this core.

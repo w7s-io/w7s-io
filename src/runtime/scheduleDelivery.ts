@@ -1,6 +1,7 @@
 import { responseOutcome, writeAnalyticsEvent } from "../analytics";
 import { isCronExpressionDue, scheduledMinuteIso } from "../cron";
 import type { Env } from "../env";
+import { recordUsageEvent } from "../usage";
 import {
   listScheduleMappings,
   loadDeploymentRecord,
@@ -82,6 +83,16 @@ const dispatchSchedule = async (params: {
     status: response.status,
     durationMs: Date.now() - startedAt,
     count: 1
+  });
+  await recordUsageEvent(params.env, {
+    metric: "schedule.delivery",
+    repository: params.mapping.repository,
+    environment: params.mapping.environment,
+    orgSlug: params.mapping.orgSlug,
+    repoSlug: params.mapping.repoSlug,
+    outcome: responseOutcome(response.status),
+    count: 1,
+    units: 1
   });
 
   if (response.status < 200 || response.status >= 300) {

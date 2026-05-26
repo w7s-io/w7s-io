@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { responseOutcome, writeAnalyticsEvent } from "../analytics";
 import type { Env } from "../env";
+import { recordUsageEvent } from "../usage";
 import { jsonError, parseBearerToken } from "../http";
 import { requireSlug } from "../names";
 import { hashRpcToken } from "../deploy/rpcBindings";
@@ -143,6 +144,16 @@ export const handleRpc = async (c: HonoContext) => {
     method: c.req.method,
     status: response.status,
     durationMs: Date.now() - startedAt
+  });
+  await recordUsageEvent(c.env, {
+    metric: "rpc.dispatch",
+    repository: `${caller.orgSlug}/${caller.repoSlug}`,
+    environment: caller.environment,
+    orgSlug: caller.orgSlug,
+    repoSlug: caller.repoSlug,
+    outcome: responseOutcome(response.status),
+    count: 1,
+    units: 1
   });
 
   return response;

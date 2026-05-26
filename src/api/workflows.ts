@@ -5,6 +5,7 @@ import type { Env, W7SWorkflowPayload } from "../env";
 import { jsonError, jsonSuccess, parseBearerToken } from "../http";
 import { requireSlug, sanitizeScriptPart } from "../names";
 import { loadDeploymentRecord } from "../storage/deployments";
+import { recordUsageEvent } from "../usage";
 
 type HonoContext = Context<{ Bindings: Env }>;
 
@@ -233,6 +234,16 @@ export const handleWorkflowCreate = async (c: HonoContext) => {
       status: 200,
       durationMs: Date.now() - startedAt,
       count: 1
+    });
+    await recordUsageEvent(c.env, {
+      metric: "workflow.create",
+      repository: instancePayload.caller.repository,
+      environment: context.caller.environment,
+      orgSlug: context.caller.orgSlug,
+      repoSlug: context.caller.repoSlug,
+      outcome: "success",
+      count: 1,
+      units: 1
     });
 
     return jsonSuccess({

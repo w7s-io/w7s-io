@@ -42,9 +42,15 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
   - Implements internal workflow starts and status lookups through RPC-style `w7s.internal` URLs.
   - Verifies caller tokens issued during deploy.
   - Creates Cloudflare Workflow instances that dispatch to target app workflow consumer paths.
+- `src/api/usage.ts`
+  - Implements authenticated reads for per-app daily usage rollups.
+  - Reuses GitHub repo access checks so only callers with repository access can read usage.
 - `src/analytics.ts`
   - Writes best-effort Workers Analytics Engine datapoints when `W7S_ANALYTICS` is bound.
   - Keeps a stable low-cardinality schema for deploy, request, RPC, queue, schedule, and workflow events.
+- `src/usage.ts`
+  - Writes best-effort daily usage counters into `DEPLOYMENTS_KV`.
+  - Tracks count, units, success, error, and last-seen time per metric.
 - `src/deploy/archive.ts`
   - Reads zip archives into normalized file maps.
   - Strips common GitHub archive roots while preserving W7S app roots.
@@ -108,6 +114,7 @@ POST /api/v1/deploy
   -> upload static files to R2
   -> store deployment record in KV
   -> write deploy analytics when configured
+  -> record deploy usage rollup
 ```
 
 ```text
@@ -131,6 +138,7 @@ GET/POST env.W7S_RPC.fetch("/api/v1/rpc/<owner>/<repo>/<path>")
   -> require target w7s.json rpc.allow for cross-owner calls
   -> dispatch to the target Worker with caller identity headers
   -> write RPC analytics when configured
+  -> record RPC usage rollup for the caller repo
 ```
 
 ```text
@@ -145,6 +153,7 @@ POST env.W7S_QUEUE.fetch("/api/v1/queues/<owner>/<repo>/<queue>")
   -> send a Cloudflare Queue message
   -> receive the batch in W7S core and dispatch to the target consumer route
   -> write queue send and delivery analytics when configured
+  -> record queue send usage for the caller and delivery usage for the target
 ```
 
 ```text
@@ -159,6 +168,7 @@ POST env.W7S_WORKFLOW.fetch("/api/v1/workflows/<owner>/<repo>/<workflow>")
   -> create a Cloudflare Workflow instance through the W7S core binding
   -> W7SWorkflow dispatches a durable step to the target app workflow route
   -> write workflow create and delivery analytics when configured
+  -> record workflow create usage for the caller and delivery usage for the target
 ```
 
 ```text
@@ -169,6 +179,15 @@ Cloudflare scheduled event
   -> acquire a short KV lock for schedule/time
   -> dispatch due jobs to native Worker schedule paths
   -> write schedule delivery analytics when configured
+  -> record schedule delivery usage for the target repo
+```
+
+```text
+GET /api/v1/usage/<owner>/<repo>?date=YYYY-MM-DD
+  -> require GitHub bearer token
+  -> verify token can access owner/repo through GitHub
+  -> load usage_daily:v1:<date>:<environment>:<owner>:<repo> from KV
+  -> return an empty rollup if no usage exists for the date
 ```
 
 ## Compatibility Choices
@@ -188,3 +207,4 @@ Cloudflare scheduled event
 - Schedules are environment-scoped path consumers. W7S core owns the Cloudflare cron trigger and dispatches due jobs to native Workers.
 - Workflows are app-declared, environment-scoped path consumers. W7S core owns the Cloudflare Workflow definition and starts instances on behalf of apps.
 - Analytics Engine is an optional W7S-core binding. It is for platform observability first; app-visible analytics bindings can be added later.
+- Usage rollups are stored in `DEPLOYMENTS_KV` with read-modify-write updates. They are enough for product visibility and quota planning, but not atomic billing-grade counters.
