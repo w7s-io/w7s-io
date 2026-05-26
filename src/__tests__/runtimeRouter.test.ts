@@ -218,13 +218,17 @@ describe("runtime router", () => {
     expect(body).toContain("<code>sadasant/sadasant</code>");
     expect(body).toContain("https://sadasant.w7s.cloud/");
     expect(body).toContain("same-name repo convention");
-    expect(body).toContain("on: push");
+    expect(body).toContain("push:");
+    expect(body).toContain("workflow_dispatch");
+    expect(body).toContain("schedule:");
+    expect(body).toContain("issues: write");
     expect(body).toContain("w7s-io/w7s-cloud@v1");
     expect(body.indexOf("<pre><code>")).toBeLessThan(body.indexOf("Add this GitHub Actions workflow"));
     expect(body).toContain('<strong class="workflow-action">w7s-io/w7s-cloud@v1</strong>');
     expect(body).toContain("token: ${{ github.token }}");
-    expect(body).not.toContain("workflow_dispatch");
-    expect(body).not.toContain("branches:");
+    expect(body).toContain("usage-check-only");
+    expect(body).toContain("github.event_name == 'schedule'");
+    expect(body).toContain("branches:");
     expect(body).not.toContain("install-command");
     expect(body).not.toContain("build-command");
     expect(body).not.toContain("example-fullstack-ts");
@@ -253,6 +257,7 @@ describe("runtime router", () => {
     expect(body).toContain("<code>sadasant/missing-repo</code>");
     expect(body).toContain("https://sadasant.w7s.cloud/missing-repo/");
     expect(body).toContain("w7s-io/w7s-cloud@v1");
+    expect(body).toContain("usage-check-only");
     expect(body).not.toContain("same-name repo convention");
   });
 
