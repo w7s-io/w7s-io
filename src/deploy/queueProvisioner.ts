@@ -173,7 +173,13 @@ const ensureQueueConsumer = async (params: {
       })
     }
   );
-  await parseCloudflareEnvelope<QueueConsumer>(createResponse);
+  try {
+    await parseCloudflareEnvelope<QueueConsumer>(createResponse);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.toLowerCase().includes("already has a consumer")) return;
+    throw error;
+  }
 };
 
 export const provisionAppQueues = async (params: {

@@ -882,6 +882,64 @@ describe("deploy API", () => {
     );
   });
 
+  it("treats existing Cloudflare Queue consumers as idempotent on redeploy", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "w7s-io/demo" });
+        }
+        if (url.includes("/queues?")) {
+          return Response.json({
+            success: true,
+            result: [
+              {
+                queue_id: "queue-1",
+                queue_name: "w7s-production-w7s-io-demo-queue-jobs"
+              }
+            ]
+          });
+        }
+        if (url.endsWith("/queues/queue-1/consumers") && init?.method !== "POST") {
+          return Response.json({ success: true, result: [] });
+        }
+        if (url.endsWith("/queues/queue-1/consumers") && init?.method === "POST") {
+          return Response.json(
+            {
+              success: false,
+              errors: [{ message: "Queue already has a consumer." }]
+            },
+            { status: 400 }
+          );
+        }
+        if (
+          url.includes("/workers/dispatch/namespaces/w7s-isolate/scripts/") &&
+          init?.method === "PUT"
+        ) {
+          return Response.json({ success: true, result: { startup_time_ms: 5 } });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv({
+      CLOUDFLARE_API_TOKEN: "cf-token",
+      CLOUDFLARE_ACCOUNT_ID: "acct-123"
+    });
+
+    const response = await app.fetch(
+      deployRequest({
+        "backend/index.js": "export default { fetch(){ return new Response('backend') } }",
+        "w7s.json": JSON.stringify({ queues: ["jobs"] })
+      }),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const record = await loadDeploymentRecord(env, "production", "w7s-io", "demo");
+    expect(record?.queue?.queues[0]?.queueId).toBe("queue-1");
+  });
+
   it("accepts Cloudflare dist/server deployments with dist/client assets", async () => {
     const uploadedMetadata: Array<{
       bindings?: Array<Record<string, string>>;
