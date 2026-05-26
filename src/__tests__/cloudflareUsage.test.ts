@@ -92,7 +92,34 @@ describe("Cloudflare usage collector", () => {
                     durableObjectsInvocationsAdaptiveGroups: [
                       {
                         sum: { requests: 6, wallTime: 150, errors: 0 },
-                        dimensions: { scriptName: "acme--app--production--abc123" }
+                        dimensions: {
+                          scriptName: "acme--app--production--abc123",
+                          namespaceId: "do-ns"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          });
+        }
+        if (body.query?.includes("durableObjectsPeriodicGroups")) {
+          return Response.json({
+            data: {
+              viewer: {
+                accounts: [
+                  {
+                    durableObjectsPeriodicGroups: [
+                      {
+                        sum: {
+                          rowsRead: 11,
+                          rowsWritten: 4,
+                          storageReadUnits: 9,
+                          storageWriteUnits: 5,
+                          storageDeletes: 2
+                        },
+                        dimensions: { namespaceId: "do-ns", objectId: "object-1" }
                       }
                     ]
                   }
@@ -250,7 +277,12 @@ describe("Cloudflare usage collector", () => {
         "r2.class_b": expect.objectContaining({ units: 3 }),
         "r2.storage_bytes": expect.objectContaining({ units: 1024 }),
         "durable_object.request": expect.objectContaining({ units: 6 }),
-        "durable_object.duration_ms": expect.objectContaining({ units: 150 })
+        "durable_object.duration_ms": expect.objectContaining({ units: 150 }),
+        "durable_object.rows_read": expect.objectContaining({ units: 11 }),
+        "durable_object.rows_written": expect.objectContaining({ units: 4 }),
+        "durable_object.storage_read_units": expect.objectContaining({ units: 9 }),
+        "durable_object.storage_write_units": expect.objectContaining({ units: 5 }),
+        "durable_object.storage_deletes": expect.objectContaining({ units: 2 })
       })
     );
     expect(daily?.cloudflareHours).toEqual(["2026-05-26T11"]);

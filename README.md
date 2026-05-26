@@ -19,6 +19,7 @@ This repo contains the public W7S worker, deploy API, runtime router, and storag
 - `CNAME` can declare custom domains for a deployment, with optional `_w7s.<zone>` TXT allowlists for ownership control.
 - optional Workers Analytics Engine writes track deploy, request, RPC, queue, schedule, and workflow events for platform observability.
 - per-app daily usage rollups, hourly Cloudflare analytics sync, warning thresholds, app suspension, and hard daily limits are exposed through an authenticated usage API.
+- per-app platform analytics are exposed through an authenticated Analytics Engine query API when `W7S_ANALYTICS_DATASET` is configured.
 
 ## Deploy API
 

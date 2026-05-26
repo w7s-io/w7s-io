@@ -153,6 +153,7 @@ const config = {
     CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE: compatibilityDate,
     W7S_USER_WORKER_CPU_MS: userWorkerCpuMs,
     W7S_USER_WORKER_SUBREQUESTS: userWorkerSubrequests,
+    ...(analyticsDataset ? { W7S_ANALYTICS_DATASET: analyticsDataset } : {}),
     ...(appCommitId ? { APP_COMMIT_ID: appCommitId } : {}),
     ...(appDeployBranch ? { APP_DEPLOY_BRANCH: appDeployBranch } : {}),
     ...(appDeployedAt ? { APP_DEPLOYED_AT: appDeployedAt } : {})

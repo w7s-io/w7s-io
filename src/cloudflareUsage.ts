@@ -28,7 +28,12 @@ const CLOUDFLARE_METRIC_SOURCES = new Set([
   "d1.write_queries",
   "d1.storage_bytes",
   "durable_object.request",
-  "durable_object.duration_ms"
+  "durable_object.duration_ms",
+  "durable_object.rows_read",
+  "durable_object.rows_written",
+  "durable_object.storage_read_units",
+  "durable_object.storage_write_units",
+  "durable_object.storage_deletes"
 ]);
 const GAUGE_METRICS = new Set([
   "worker.script",
@@ -59,6 +64,11 @@ type CollectorMetric = {
   units: number;
   count?: number;
   source?: UsageMetricSource;
+};
+
+type DurableObjectMetricResult = {
+  metrics: CollectorMetric[];
+  namespaceIds: string[];
 };
 
 const numberValue = (...values: unknown[]) => {
@@ -198,7 +208,7 @@ const queryDurableObjectMetrics = async (env: Env, params: {
   scriptName: string;
   start: string;
   end: string;
-}) => {
+}): Promise<DurableObjectMetricResult[]> => {
   const query = `
     query W7SDurableObjectUsage($accountTag: string!, $scriptName: string!, $start: Time, $end: Time) {
       viewer {
@@ -223,10 +233,64 @@ const queryDurableObjectMetrics = async (env: Env, params: {
   });
   const rows = accountNode(data)?.durableObjectsInvocationsAdaptiveGroups;
   const metrics = new Map<string, CollectorMetric>();
+  const namespaceIds = new Set<string>();
   for (const row of Array.isArray(rows) ? rows : []) {
-    const sum = (row as { sum?: Record<string, unknown> }).sum;
+    const record = row as { sum?: Record<string, unknown>; dimensions?: Record<string, unknown> };
+    const namespaceId = String(record.dimensions?.namespaceId ?? "").trim();
+    if (namespaceId) namespaceIds.add(namespaceId);
+    const sum = record.sum;
     addMetric(metrics, "durable_object.request", readNumber(sum, ["requests"]));
     addMetric(metrics, "durable_object.duration_ms", readNumber(sum, ["wallTime"]));
+  }
+  return [{
+    metrics: [...metrics.values()],
+    namespaceIds: [...namespaceIds]
+  }];
+};
+
+const queryDurableObjectStorageOperationMetrics = async (env: Env, params: {
+  accountId: string;
+  namespaceId: string;
+  start: string;
+  end: string;
+}) => {
+  const query = `
+    query W7SDurableObjectStorageOps($accountTag: string!, $namespaceId: string!, $start: Time, $end: Time) {
+      viewer {
+        accounts(filter: { accountTag: $accountTag }) {
+          durableObjectsPeriodicGroups(limit: 10000, filter: {
+            namespaceId: $namespaceId,
+            datetime_geq: $start,
+            datetime_leq: $end
+          }) {
+            sum {
+              rowsRead
+              rowsWritten
+              storageReadUnits
+              storageWriteUnits
+              storageDeletes
+            }
+            dimensions { namespaceId objectId datetime }
+          }
+        }
+      }
+    }
+  `;
+  const data = await graphqlRequest(env, query, {
+    accountTag: params.accountId,
+    namespaceId: params.namespaceId,
+    start: params.start,
+    end: params.end
+  });
+  const rows = accountNode(data)?.durableObjectsPeriodicGroups;
+  const metrics = new Map<string, CollectorMetric>();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const sum = (row as { sum?: Record<string, unknown> }).sum;
+    addMetric(metrics, "durable_object.rows_read", readNumber(sum, ["rowsRead"]));
+    addMetric(metrics, "durable_object.rows_written", readNumber(sum, ["rowsWritten"]));
+    addMetric(metrics, "durable_object.storage_read_units", readNumber(sum, ["storageReadUnits"]));
+    addMetric(metrics, "durable_object.storage_write_units", readNumber(sum, ["storageWriteUnits"]));
+    addMetric(metrics, "durable_object.storage_deletes", readNumber(sum, ["storageDeletes"]));
   }
   return [...metrics.values()];
 };
@@ -416,15 +480,15 @@ const metricRollups = (metrics: CollectorMetric[], at: Date) => {
   return output;
 };
 
-const safeCollect = async (
+const safeCollect = async <T>(
   label: string,
-  collect: () => Promise<CollectorMetric[]>
+  collect: () => Promise<T[]>
 ) => {
   try {
     return await collect();
   } catch (error) {
     console.warn(`W7S Cloudflare usage adapter failed for ${label}: ${error instanceof Error ? error.message : String(error)}`);
-    return [];
+    return [] as T[];
   }
 };
 
@@ -559,13 +623,28 @@ const collectDeploymentMetrics = async (env: Env, deployment: DeploymentRecord, 
     }
   }
   if (deployment.targets.worker?.scriptName && (deployment.bindings?.durableObjects?.length ?? 0) > 0) {
-    for (const metric of await safeCollect("durable_object", () => queryDurableObjectMetrics(env, {
+    const durableObjectResult = await safeCollect("durable_object", () => queryDurableObjectMetrics(env, {
       accountId: params.accountId,
       scriptName: deployment.targets.worker!.scriptName,
       start: params.start.toISOString(),
       end: params.end.toISOString()
-    }))) {
-      addMetric(metrics, metric.metric, metric.units, metric.source, metric.count);
+    }));
+    const namespaceIds = new Set<string>();
+    for (const result of durableObjectResult) {
+      for (const metric of result.metrics) {
+        addMetric(metrics, metric.metric, metric.units, metric.source, metric.count);
+      }
+      for (const namespaceId of result.namespaceIds) namespaceIds.add(namespaceId);
+    }
+    for (const namespaceId of namespaceIds) {
+      for (const metric of await safeCollect("durable_object_storage", () => queryDurableObjectStorageOperationMetrics(env, {
+        accountId: params.accountId,
+        namespaceId,
+        start: params.start.toISOString(),
+        end: params.end.toISOString()
+      }))) {
+        addMetric(metrics, metric.metric, metric.units, metric.source, metric.count);
+      }
     }
   }
   for (const kv of deployment.bindings?.kv ?? []) {

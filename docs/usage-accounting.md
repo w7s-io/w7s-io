@@ -140,6 +140,11 @@ d1.write_queries
 d1.storage_bytes
 durable_object.request
 durable_object.duration_ms
+durable_object.rows_read
+durable_object.rows_written
+durable_object.storage_read_units
+durable_object.storage_write_units
+durable_object.storage_deletes
 rpc.dispatch
 queue.send
 queue.delivery
@@ -177,6 +182,11 @@ d1.write_queries     1000
 d1.storage_bytes     52428800
 durable_object.request       5000
 durable_object.duration_ms   300000
+durable_object.rows_read     100000
+durable_object.rows_written  10000
+durable_object.storage_read_units  100000
+durable_object.storage_write_units 10000
+durable_object.storage_deletes     10000
 rpc.dispatch         10000
 queue.send           10000
 queue.delivery       10000
@@ -234,7 +244,7 @@ app_limit_state:v1:<environment>:<owner>:<repo>
 
 Suspended apps return HTTP `429` before static serving, Worker dispatch, deploys, RPC, queue sends, or workflow starts. Apps automatically resume at the next UTC day unless an operator writes a stricter state.
 
-Direct binding limits are delayed by the hourly sync. Immediate protection comes from deploy shape caps, runtime request limits, and Cloudflare dispatch custom CPU limits on user Workers. Static asset storage is capped by deploy shape limits; Durable Object storage is not per-app attributable in the current Cloudflare analytics schema and remains a tracked gap.
+Direct binding limits are delayed by the hourly sync. Immediate protection comes from deploy shape caps, runtime request limits, and Cloudflare dispatch custom CPU limits on user Workers. Static asset storage is capped by deploy shape limits. Durable Object storage operation units are attributed by namespace ID when W7S can discover namespace IDs from invocation analytics; stored bytes are not per-app attributable in the current Cloudflare analytics schema and remain a tracked gap.
 
 ## Policy Overrides
 

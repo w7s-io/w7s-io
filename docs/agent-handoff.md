@@ -21,6 +21,7 @@ As of the latest docs update:
 - Durable Objects are declared with `bindings.durableObjects` in `w7s.json`; W7S uploads the binding metadata and initial SQLite-backed class migrations.
 - Hyperdrive bindings are declared with `bindings.hyperdrive` in `w7s.json`; W7S uploads user-provided Hyperdrive config IDs as Worker bindings.
 - If `W7S_ANALYTICS_DATASET` is configured, the core writes Workers Analytics Engine datapoints for deploys, runtime requests, RPC, queues, schedules, and workflows.
+- `/api/v1/analytics/<owner>/<repo>` reads those Analytics Engine datapoints for authorized repo users.
 - The core stores per-app daily usage rollups in `DEPLOYMENTS_KV`, syncs direct Cloudflare resource usage hourly, and exposes both through `GET /api/v1/usage/<owner>/<repo>`.
 - Effective limit policies are exposed through `GET /api/v1/limits/<owner>/<repo>` and can be overridden only with W7S-owned KV policy records.
 - W7S operators can manage limit policy KV records with `npm run limits:get`, `npm run limits:set`, and `npm run limits:delete`.
@@ -52,7 +53,7 @@ The point of this repo is to keep the core deploy/routing plane small.
 - Managed storage is provisioned per repository/environment and reused across redeploys.
 - Durable Object apps use stable per-repository/environment script names so DO state survives redeploys. DO class renames, transfers, and deletes are not automated yet.
 - Hyperdrive config creation and credential rotation are not managed by W7S yet. Apps must provide existing Cloudflare Hyperdrive IDs.
-- Analytics Engine is currently core-internal only. User app analytics bindings are not exposed yet.
+- Analytics Engine is currently W7S-core platform event analytics. User app analytics bindings and app `console.log` retrieval are not exposed yet.
 - Usage rollups are approximate KV counters, and Cloudflare-polled direct binding metrics are delayed by the hourly collector. Limits are enforced for free-tier protection, but they are not atomic billing-grade accounting. There is no public policy write API yet.
 - Queues are provisioned per repository/environment and delivered through W7S core to app HTTP consumer routes.
 - Schedules are delivered through W7S core to app HTTP consumer routes. They currently use best-effort KV locks to avoid duplicate schedule/time dispatches.
@@ -64,7 +65,7 @@ The point of this repo is to keep the core deploy/routing plane small.
 - Queues currently use a low-level `env.W7S_QUEUE.fetch(...)` convention. There is no typed queue client package yet.
 - Workflows currently use a low-level `env.W7S_WORKFLOW.fetch(...)` convention. There is no typed workflow client package yet.
 - No rollback UI or deployment history API yet.
-- No user-facing logs yet.
+- The analytics API exposes recent platform events; user Worker `console.log`/exception logs are still not exposed yet.
 - Wildcard DNS is manual.
 
 ## Common Next Tasks

@@ -25,6 +25,7 @@ export interface Env {
   CLOUDFLARE_ISOLATE_COMPATIBILITY_DATE?: string;
   W7S_USER_WORKER_CPU_MS?: string;
   W7S_USER_WORKER_SUBREQUESTS?: string;
+  W7S_ANALYTICS_DATASET?: string;
   W7S_WORKER_NAME?: string;
   W7S_BASE_DOMAIN?: string;
   APP_COMMIT_ID?: string;

@@ -228,6 +228,14 @@ Set `W7S_ANALYTICS_DATASET` as a GitHub repo variable to add this binding to the
 
 The core writes one Analytics Engine datapoint for successful deploys and for runtime request, RPC, queue send, queue delivery, schedule delivery, workflow create, and workflow delivery paths. Missing or failing analytics writes are ignored so observability cannot affect app traffic.
 
+App owners can read the core platform events for repositories they can access through:
+
+```text
+GET /api/v1/analytics/<owner>/<repo>?hours=24&limit=50
+```
+
+The endpoint uses the same GitHub bearer token authorization as deploys and usage reads. It returns event summaries, time buckets, and recent platform events from the configured Analytics Engine dataset. It does not expose app `console.log` output yet.
+
 Datapoint schema:
 
 ```text
@@ -277,7 +285,7 @@ GET /api/v1/usage/<owner>/<repo>?date=YYYY-MM-DD
 Authorization: Bearer <github-token>
 ```
 
-The token must have GitHub access to the target repository. Current metrics include deploys, runtime requests, Cloudflare-polled Worker/R2/KV/D1/Durable Object signals, RPC dispatches, queues, schedules, and workflows.
+The token must have GitHub access to the target repository. Current metrics include deploys, runtime requests, Cloudflare-polled Worker/R2/KV/D1/Durable Object signals, RPC dispatches, queues, schedules, and workflows. Durable Object storage operation units are attributed by namespace ID when namespace IDs are discoverable from Durable Object invocation analytics. Durable Object stored bytes remain an attribution gap.
 
 Hourly Cloudflare usage records are stored under:
 

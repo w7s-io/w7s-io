@@ -476,4 +476,121 @@ describe("usage rollups", () => {
 
     expect(response.status).toBe(401);
   });
+
+  it("returns authenticated platform analytics from Analytics Engine", async () => {
+    const queries: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "https://api.github.com/repos/acme/app") {
+          return Response.json({ full_name: "acme/app" });
+        }
+        if (url === "https://api.cloudflare.com/client/v4/accounts/acct-123/analytics_engine/sql") {
+          const query = String(init?.body ?? "");
+          queries.push(query);
+          if (query.includes("GROUP BY event, outcome")) {
+            return Response.json({
+              data: [
+                {
+                  event: "runtime_request",
+                  outcome: "success",
+                  count: "12",
+                  samples: "12",
+                  avgDurationMs: "7.5"
+                }
+              ]
+            });
+          }
+          if (query.includes("GROUP BY bucket, event")) {
+            return Response.json({
+              data: [
+                {
+                  bucket: "2026-05-26 12:00:00",
+                  event: "runtime_request",
+                  count: "12"
+                }
+              ]
+            });
+          }
+          return Response.json({
+            data: [
+              {
+                timestamp: "2026-05-26 12:05:00",
+                event: "runtime_request",
+                outcome: "success",
+                source: "worker",
+                target: "",
+                method: "GET",
+                count: "1",
+                status: "200",
+                durationMs: "9"
+              }
+            ]
+          });
+        }
+        return new Response("not found", { status: 404 });
+      })
+    );
+
+    const response = await app.fetch(
+      new Request("https://w7s.cloud/api/v1/analytics/acme/app?hours=6&limit=10", {
+        headers: {
+          authorization: "Bearer github-token"
+        }
+      }),
+      createTestEnv({
+        CLOUDFLARE_API_TOKEN: "cf-token",
+        CLOUDFLARE_ACCOUNT_ID: "acct-123",
+        W7S_ANALYTICS_DATASET: "w7s_platform_events"
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(queries).toHaveLength(3);
+    expect(queries[0]).toContain("FROM w7s_platform_events");
+    expect(queries[0]).toContain("index1 = 'acme/app'");
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        status: "success",
+        data: {
+          analytics: expect.objectContaining({
+            configured: true,
+            dataset: "w7s_platform_events",
+            repository: "acme/app",
+            environment: "production",
+            summary: [
+              {
+                event: "runtime_request",
+                outcome: "success",
+                count: 12,
+                samples: 12,
+                avgDurationMs: 7.5
+              }
+            ],
+            timeseries: [
+              {
+                bucket: "2026-05-26 12:00:00",
+                event: "runtime_request",
+                count: 12
+              }
+            ],
+            events: [
+              {
+                timestamp: "2026-05-26 12:05:00",
+                event: "runtime_request",
+                outcome: "success",
+                source: "worker",
+                target: "",
+                method: "GET",
+                count: 1,
+                status: 200,
+                durationMs: 9
+              }
+            ]
+          })
+        }
+      })
+    );
+  });
 });

@@ -14,6 +14,29 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
 - W7S core can optionally write platform metrics to Workers Analytics Engine when `W7S_ANALYTICS_DATASET` is configured.
 - W7S core stores best-effort daily usage rollups in `DEPLOYMENTS_KV` and exposes them with effective limit warnings through `GET /api/v1/usage/<owner>/<repo>`.
 
+## Current Focus
+
+1. **Observability APIs**
+   - Expose the existing W7S-core Analytics Engine datapoints through authenticated per-repo APIs.
+   - Treat these as platform event logs and aggregate analytics, not app `console.log` capture yet.
+   - First API:
+     ```text
+     GET /api/v1/analytics/<owner>/<repo>?hours=24&limit=50
+     ```
+   - GitHub bearer tokens must have access to the target repo.
+   - The response should include event summaries, time buckets, and recent platform events.
+
+2. **Durable Object storage attribution**
+   - Cloudflare exposes DO request and duration metrics by Worker script name.
+   - Cloudflare exposes DO storage operation metrics by DO namespace ID.
+   - W7S can attribute DO storage operation units when the same hourly sync can discover namespace IDs from DO invocation analytics.
+   - DO stored bytes remain a gap because the current Cloudflare storage-bytes analytics dataset is account-level and not attributable by script or namespace.
+
+3. **Still next after observability**
+   - Deployment history/list/get, rollback, and delete/cleanup APIs.
+   - Stronger counter storage before exposing AI, Vectorize, AI Gateway, or container-like primitives.
+   - Typed client package for `W7S_RPC`, `W7S_QUEUE`, and `W7S_WORKFLOW`.
+
 ## Implementation Order
 
 1. **Cron schedules**
@@ -85,12 +108,17 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
    - Managed Hyperdrive creation can come later.
 
 4. **Analytics Engine**
-   - Status: implemented as optional W7S-internal writes.
+   - Status: implemented as optional W7S-internal writes plus an authenticated per-repo read API.
    - Goal: collect per-app deploy, request, RPC, queue, schedule, and platform usage metrics.
    - Set `W7S_ANALYTICS_DATASET` to add the core `W7S_ANALYTICS` binding.
    - Datapoints are written for deploy success, runtime requests, deploy-help showcases, RPC dispatches, queue sends, queue deliveries, and schedule deliveries.
    - Schema uses the repository as the Analytics Engine index, blobs for dimensions, and doubles for count/status/duration.
-   - App-visible analytics bindings can be added later.
+   - Read API:
+     ```text
+     GET /api/v1/analytics/<owner>/<repo>?hours=24&limit=50
+     ```
+   - The API queries the configured Analytics Engine dataset and returns summaries, time buckets, and recent platform events.
+   - App-visible analytics bindings and user Worker `console.log` retrieval can be added later.
 
 5. **Workflows**
    - Status: implemented as a W7S-core bridge.
@@ -122,12 +150,14 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
    - GitHub bearer tokens must have access to the target repo.
    - Current rollups are KV read-modify-write counters for deploy, runtime request, RPC, queue, schedule, and workflow usage.
    - Direct Cloudflare resource usage is synced hourly from Cloudflare analytics into `usage_cf_hourly:v1:*` records and merged into daily usage.
+   - Durable Object storage operation units are attributed by namespace ID when namespace IDs are discoverable from DO invocation analytics for the app's Worker script.
    - Public runtime, deploy, RPC, queue-send, and workflow-start paths return HTTP `429` when projected usage exceeds the effective daily limit.
    - Internal queue, schedule, and workflow delivery paths skip dispatch when their delivery metric would exceed policy.
    - Hourly Cloudflare sync stores `app_limit_state:v1:*` and suspends apps that exceed reliably attributed limits until the next UTC day.
    - Effective policy reads are available at `GET /api/v1/limits/<owner>/<repo>`.
    - W7S-owned KV overrides can target owner, owner/environment, repo, or repo/environment scopes.
    - `checkUsageLimit(...)` reports whether projected usage would exceed policy and feeds the hard enforcement helper.
+   - DO stored bytes are not enforced per app yet because Cloudflare's current stored-bytes analytics are not attributable by app namespace/script.
    - Next phase should upgrade the counter store beyond KV read-modify-write rollups before treating limits as billing-grade.
 
 7. **AI, Vectorize, and AI Gateway**

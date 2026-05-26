@@ -28,12 +28,14 @@ This file tracks the main known gaps after the current deploy core, runtime rout
   - Needs careful handling for dispatch namespace scripts, static manifests, custom-domain mappings, queue mappings, schedule mappings, and durable resources.
 
 - **User-facing logs**
-  - No per-app log retrieval yet.
+  - W7S now exposes recent platform events from Analytics Engine through `GET /api/v1/analytics/<owner>/<repo>`.
+  - App Worker `console.log` / exception log retrieval is still not implemented.
   - Needs a storage/query design that is cheap and does not leak cross-tenant data.
 
 - **Analytics query API/dashboard**
   - Internal Analytics Engine writes exist.
-  - No W7S API or UI exposes those metrics yet.
+  - A first authenticated per-repo query API exists.
+  - No UI/dashboard exists yet.
 
 - **Usage limits API**
   - Basic daily KV usage rollups now exist.
@@ -67,7 +69,9 @@ This file tracks the main known gaps after the current deploy core, runtime rout
 - **Durable Object lifecycle**
   - W7S creates initial SQLite-backed classes and keeps stable script names.
   - It does not automate class renames, transfers, or deletes.
-  - Durable Object request and duration metrics are synced by Worker script name, but storage usage is not enforced per app because the current Cloudflare storage analytics dataset is not attributable by script or namespace.
+  - Durable Object request and duration metrics are synced by Worker script name.
+  - Durable Object storage operation units are synced by namespace ID when W7S can discover namespace IDs from invocation analytics.
+  - Durable Object stored bytes are not enforced per app because the current Cloudflare stored-bytes analytics dataset is not attributable by script or namespace.
 
 - **App-visible Analytics Engine**
   - W7S core writes internal platform analytics.
@@ -88,4 +92,5 @@ This file tracks the main known gaps after the current deploy core, runtime rout
   - The usage API evaluates daily limits from default policy plus W7S-owned KV overrides and returns warning metadata.
   - `checkUsageLimit(...)` reports projected exceedance with `wouldBlock`; public handlers use it for blocking.
   - They are best-effort read-modify-write counters, so concurrent writes can be approximate.
+  - Durable Object operation attribution is stronger now, but stored bytes remain a known attribution gap.
   - Billing-grade accounting still needs a stronger storage path before AI/Vectorize/AI Gateway are exposed broadly.
