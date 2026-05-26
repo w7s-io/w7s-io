@@ -1,11 +1,20 @@
+import type { Env } from "./env";
+import { sanitizeScriptPart } from "./names";
 import type { UsageDailyRollup } from "./usage";
 
 export type UsageLimitStatus = "ok" | "warning" | "exceeded";
+export type UsageLimitPolicySource =
+  | "default"
+  | "owner"
+  | "owner_environment"
+  | "repo"
+  | "repo_environment";
 
 export type UsageLimitPolicy = {
   metric: string;
   dailyUnits: number;
   warningThreshold: number;
+  source?: UsageLimitPolicySource;
 };
 
 export type UsageLimitWarning = {
@@ -24,6 +33,7 @@ export type UsageLimitMetricEvaluation = {
   remaining: number;
   usageRatio: number;
   status: UsageLimitStatus;
+  source?: UsageLimitPolicySource;
 };
 
 export type UsageLimitEvaluation = {
@@ -35,14 +45,60 @@ export type UsageLimitEvaluation = {
 };
 
 export const DEFAULT_DAILY_USAGE_LIMITS: UsageLimitPolicy[] = [
-  { metric: "deploy", dailyUnits: 100, warningThreshold: 0.8 },
-  { metric: "rpc.dispatch", dailyUnits: 100_000, warningThreshold: 0.8 },
-  { metric: "queue.send", dailyUnits: 100_000, warningThreshold: 0.8 },
-  { metric: "queue.delivery", dailyUnits: 100_000, warningThreshold: 0.8 },
-  { metric: "schedule.delivery", dailyUnits: 10_000, warningThreshold: 0.8 },
-  { metric: "workflow.create", dailyUnits: 10_000, warningThreshold: 0.8 },
-  { metric: "workflow.delivery", dailyUnits: 10_000, warningThreshold: 0.8 }
+  { metric: "deploy", dailyUnits: 100, warningThreshold: 0.8, source: "default" },
+  { metric: "rpc.dispatch", dailyUnits: 100_000, warningThreshold: 0.8, source: "default" },
+  { metric: "queue.send", dailyUnits: 100_000, warningThreshold: 0.8, source: "default" },
+  { metric: "queue.delivery", dailyUnits: 100_000, warningThreshold: 0.8, source: "default" },
+  { metric: "schedule.delivery", dailyUnits: 10_000, warningThreshold: 0.8, source: "default" },
+  { metric: "workflow.create", dailyUnits: 10_000, warningThreshold: 0.8, source: "default" },
+  { metric: "workflow.delivery", dailyUnits: 10_000, warningThreshold: 0.8, source: "default" }
 ];
+
+export type UsageLimitPolicyRecord = {
+  version: 1;
+  metrics: Record<string, number | {
+    dailyUnits?: number;
+    warningThreshold?: number;
+  }>;
+  updatedAt?: string;
+};
+
+export type UsageLimitPolicyLookup = {
+  scope: UsageLimitPolicySource;
+  key: string | null;
+  found: boolean;
+  metrics: string[];
+};
+
+export type EffectiveUsageLimitPolicies = {
+  version: 1;
+  period: "daily";
+  mode: "warn";
+  environment: string;
+  orgSlug: string;
+  repoSlug: string;
+  policies: UsageLimitPolicy[];
+  policy: Record<string, UsageLimitPolicy>;
+  lookups: UsageLimitPolicyLookup[];
+};
+
+export const usageLimitPolicyKey = (params: {
+  scope: Exclude<UsageLimitPolicySource, "default">;
+  environment?: string;
+  orgSlug: string;
+  repoSlug?: string;
+}) => {
+  const environment = params.environment ? sanitizeScriptPart(params.environment) : null;
+  const org = sanitizeScriptPart(params.orgSlug);
+  const repo = params.repoSlug ? sanitizeScriptPart(params.repoSlug) : null;
+
+  if (params.scope === "owner") return `usage_limit_policy:v1:owner:${org}`;
+  if (params.scope === "owner_environment") {
+    return `usage_limit_policy:v1:owner_environment:${environment}:${org}`;
+  }
+  if (params.scope === "repo") return `usage_limit_policy:v1:repo:${org}:${repo}`;
+  return `usage_limit_policy:v1:repo_environment:${environment}:${org}:${repo}`;
+};
 
 const ratio = (used: number, limit: number) =>
   limit > 0 ? Number((used / limit).toFixed(4)) : 0;
@@ -60,6 +116,159 @@ const statusFor = (params: {
 const warningMessage = (evaluation: UsageLimitMetricEvaluation) => {
   const action = evaluation.status === "exceeded" ? "exceeded" : "is approaching";
   return `${evaluation.metric} ${action} the daily soft limit (${evaluation.used}/${evaluation.limit}).`;
+};
+
+const positiveInteger = (value: unknown) => {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return null;
+  return Math.floor(number);
+};
+
+const normalizedThreshold = (value: unknown) => {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0 || number > 1) return null;
+  return number;
+};
+
+const metricOrder = new Map(DEFAULT_DAILY_USAGE_LIMITS.map((policy, index) => [policy.metric, index]));
+const knownMetrics = new Set(DEFAULT_DAILY_USAGE_LIMITS.map((policy) => policy.metric));
+
+const readPolicyRecord = async (
+  env: Env,
+  key: string,
+  scope: UsageLimitPolicySource
+) => {
+  let raw: unknown;
+  try {
+    raw = await env.DEPLOYMENTS_KV.get(key, "json");
+  } catch {
+    raw = null;
+  }
+  if (!raw || typeof raw !== "object") {
+    return {
+      lookup: { scope, key, found: false, metrics: [] },
+      record: null
+    };
+  }
+  const record = raw as Partial<UsageLimitPolicyRecord>;
+  if (record.version !== 1 || !record.metrics || typeof record.metrics !== "object") {
+    return {
+      lookup: { scope, key, found: true, metrics: [] },
+      record: null
+    };
+  }
+  return {
+    lookup: {
+      scope,
+      key,
+      found: true,
+      metrics: Object.keys(record.metrics).filter((metric) => knownMetrics.has(metric))
+    },
+    record: record as UsageLimitPolicyRecord
+  };
+};
+
+const applyPolicyRecord = (
+  policies: Map<string, UsageLimitPolicy>,
+  record: UsageLimitPolicyRecord,
+  source: UsageLimitPolicySource
+) => {
+  for (const [metric, value] of Object.entries(record.metrics)) {
+    const current = policies.get(metric);
+    if (!current || !knownMetrics.has(metric)) continue;
+
+    const patch = typeof value === "number" ? { dailyUnits: value } : value;
+    if (!patch || typeof patch !== "object") continue;
+
+    const dailyUnits = positiveInteger(patch.dailyUnits);
+    const warningThreshold = normalizedThreshold(patch.warningThreshold);
+    if (dailyUnits === null && warningThreshold === null) continue;
+
+    policies.set(metric, {
+      ...current,
+      ...(dailyUnits !== null ? { dailyUnits } : {}),
+      ...(warningThreshold !== null ? { warningThreshold } : {}),
+      source
+    });
+  }
+};
+
+const policySort = (a: UsageLimitPolicy, b: UsageLimitPolicy) =>
+  (metricOrder.get(a.metric) ?? Number.MAX_SAFE_INTEGER) -
+  (metricOrder.get(b.metric) ?? Number.MAX_SAFE_INTEGER);
+
+export const loadEffectiveUsageLimitPolicies = async (
+  env: Env,
+  params: {
+    environment: string;
+    orgSlug: string;
+    repoSlug: string;
+  }
+): Promise<EffectiveUsageLimitPolicies> => {
+  const policies = new Map(
+    DEFAULT_DAILY_USAGE_LIMITS.map((policy) => [policy.metric, { ...policy }])
+  );
+  const keys: Array<{ scope: Exclude<UsageLimitPolicySource, "default">; key: string }> = [
+    {
+      scope: "owner",
+      key: usageLimitPolicyKey({
+        scope: "owner",
+        orgSlug: params.orgSlug
+      })
+    },
+    {
+      scope: "owner_environment",
+      key: usageLimitPolicyKey({
+        scope: "owner_environment",
+        environment: params.environment,
+        orgSlug: params.orgSlug
+      })
+    },
+    {
+      scope: "repo",
+      key: usageLimitPolicyKey({
+        scope: "repo",
+        orgSlug: params.orgSlug,
+        repoSlug: params.repoSlug
+      })
+    },
+    {
+      scope: "repo_environment",
+      key: usageLimitPolicyKey({
+        scope: "repo_environment",
+        environment: params.environment,
+        orgSlug: params.orgSlug,
+        repoSlug: params.repoSlug
+      })
+    }
+  ];
+  const lookups: UsageLimitPolicyLookup[] = [
+    {
+      scope: "default",
+      key: null,
+      found: true,
+      metrics: DEFAULT_DAILY_USAGE_LIMITS.map((policy) => policy.metric)
+    }
+  ];
+
+  for (const { scope, key } of keys) {
+    const { lookup, record } = await readPolicyRecord(env, key, scope);
+    lookups.push(lookup);
+    if (record) applyPolicyRecord(policies, record, scope);
+  }
+
+  const ordered = [...policies.values()].sort(policySort);
+  return {
+    version: 1,
+    period: "daily",
+    mode: "warn",
+    environment: params.environment,
+    orgSlug: params.orgSlug,
+    repoSlug: params.repoSlug,
+    policies: ordered,
+    policy: Object.fromEntries(ordered.map((policy) => [policy.metric, policy])),
+    lookups
+  };
 };
 
 export const evaluateUsageLimits = (
@@ -82,7 +291,8 @@ export const evaluateUsageLimits = (
         used,
         limit,
         warningThreshold: policy.warningThreshold
-      })
+      }),
+      source: policy.source
     };
     metrics[policy.metric] = evaluation;
 

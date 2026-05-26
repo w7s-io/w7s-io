@@ -24,6 +24,15 @@ x-w7s-environment: staging
 
 Without an override, usage reads default to `production`.
 
+Read the effective soft limit policy without usage counters:
+
+```sh
+curl "https://w7s.cloud/api/v1/limits/<owner>/<repo>" \
+  -H "Authorization: Bearer $GITHUB_TOKEN"
+```
+
+The bearer token must be able to access the same GitHub repository.
+
 ## Storage
 
 Rollups are stored in `DEPLOYMENTS_KV` under:
@@ -67,10 +76,28 @@ Example response:
           "limit": 10000,
           "remaining": 9996,
           "usageRatio": 0.0004,
-          "status": "ok"
+          "status": "ok",
+          "source": "default"
         }
       },
       "warnings": []
+    },
+    "policy": {
+      "version": 1,
+      "period": "daily",
+      "mode": "warn",
+      "environment": "production",
+      "orgSlug": "w7s-io",
+      "repoSlug": "example-workflows",
+      "policy": {
+        "workflow.create": {
+          "metric": "workflow.create",
+          "dailyUnits": 10000,
+          "warningThreshold": 0.8,
+          "source": "default"
+        }
+      },
+      "lookups": []
     },
     "warnings": []
   }
@@ -116,6 +143,39 @@ exceeded  above 100%
 ```
 
 The response duplicates non-`ok` entries in `warnings` so dashboards and CLIs can show a simple alert list without scanning every metric.
+
+## Policy Overrides
+
+Limit policies are platform-owned. Apps cannot raise or lower their own limits through `w7s.json`.
+
+W7S reads optional policy override records from `DEPLOYMENTS_KV` in this order:
+
+```text
+usage_limit_policy:v1:owner:<owner>
+usage_limit_policy:v1:owner_environment:<environment>:<owner>
+usage_limit_policy:v1:repo:<owner>:<repo>
+usage_limit_policy:v1:repo_environment:<environment>:<owner>:<repo>
+```
+
+Later records override earlier records. Repo/environment overrides are the most specific.
+
+Policy record shape:
+
+```json
+{
+  "version": 1,
+  "metrics": {
+    "workflow.create": {
+      "dailyUnits": 5000,
+      "warningThreshold": 0.7
+    },
+    "queue.send": 25000
+  },
+  "updatedAt": "2026-05-26T00:00:00.000Z"
+}
+```
+
+A number is shorthand for `dailyUnits`. `warningThreshold` must be greater than `0` and less than or equal to `1`. Unknown metrics are ignored.
 
 ## Limits Caveat
 

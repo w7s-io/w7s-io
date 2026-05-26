@@ -69,6 +69,15 @@ Optional environment override:
 
 Tracked metrics currently include `deploy`, `rpc.dispatch`, `queue.send`, `queue.delivery`, `schedule.delivery`, `workflow.create`, and `workflow.delivery`. The response includes daily soft limits and warnings for metrics that approach or exceed those limits. Rollups are best-effort KV counters, not billing-grade limits, and no traffic is blocked by these warnings yet.
 
+Effective soft limit policies are available separately:
+
+```sh
+curl "https://w7s.cloud/api/v1/limits/<owner>/<repo>" \
+  -H "Authorization: Bearer $GITHUB_TOKEN"
+```
+
+Limit policy overrides are W7S-owned KV records, not app-controlled `w7s.json` config.
+
 ## Repository Layout
 
 Native backend:

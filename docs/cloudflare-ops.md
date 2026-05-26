@@ -281,6 +281,37 @@ The token must have GitHub access to the target repository. Current metrics are 
 
 The response includes daily soft limits and a `warnings` list for metrics at or above 80% of the configured daily limit. The default mode is `warn`, so W7S only reports those warnings.
 
+Effective soft limit policies are also readable without usage counters:
+
+```text
+GET /api/v1/limits/<owner>/<repo>
+Authorization: Bearer <github-token>
+```
+
+Policy overrides are W7S-owned KV records, not app-controlled config:
+
+```text
+usage_limit_policy:v1:owner:<owner>
+usage_limit_policy:v1:owner_environment:<environment>:<owner>
+usage_limit_policy:v1:repo:<owner>:<repo>
+usage_limit_policy:v1:repo_environment:<environment>:<owner>:<repo>
+```
+
+Example override:
+
+```json
+{
+  "version": 1,
+  "metrics": {
+    "workflow.create": {
+      "dailyUnits": 5000,
+      "warningThreshold": 0.7
+    },
+    "queue.send": 25000
+  }
+}
+```
+
 These counters are approximate because KV updates are read-modify-write operations. Treat them as operational/product visibility, not strict billing or quota enforcement.
 
 ## Workflows

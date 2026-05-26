@@ -5,6 +5,7 @@ import { handleRpc } from "./api/rpc";
 import { handleQueueSend } from "./api/queues";
 import { handleWorkflowCreate, handleWorkflowStatus } from "./api/workflows";
 import { handleUsageGet } from "./api/usage";
+import { handleLimitsGet } from "./api/limits";
 import { json } from "./http";
 import { handleQueueBatch } from "./runtime/queueDelivery";
 import { handleScheduled } from "./runtime/scheduleDelivery";
@@ -34,6 +35,7 @@ app.post("/api/v1/queues/*", handleQueueSend);
 app.post("/api/v1/workflows/*", handleWorkflowCreate);
 app.get("/api/v1/workflows/*", handleWorkflowStatus);
 app.get("/api/v1/usage/*", handleUsageGet);
+app.get("/api/v1/limits/*", handleLimitsGet);
 
 app.all("*", async (c) => {
   const runtimeResponse = await resolveRuntimeRequest(c.req.raw, c.env);

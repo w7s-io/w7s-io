@@ -45,6 +45,9 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
 - `src/api/usage.ts`
   - Implements authenticated reads for per-app daily usage rollups.
   - Reuses GitHub repo access checks so only callers with repository access can read usage.
+- `src/api/limits.ts`
+  - Implements authenticated reads for effective per-app soft limit policies.
+  - Does not expose write access; overrides are W7S-owned KV records.
 - `src/analytics.ts`
   - Writes best-effort Workers Analytics Engine datapoints when `W7S_ANALYTICS` is bound.
   - Keeps a stable low-cardinality schema for deploy, request, RPC, queue, schedule, and workflow events.
@@ -53,6 +56,7 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
   - Tracks count, units, success, error, and last-seen time per metric.
 - `src/usageLimits.ts`
   - Evaluates daily soft usage limits from a usage rollup.
+  - Layers W7S-owned policy overrides from owner, owner/environment, repo, and repo/environment KV records.
   - Produces warning metadata only; it does not block requests.
 - `src/deploy/archive.ts`
   - Reads zip archives into normalized file maps.
@@ -191,7 +195,16 @@ GET /api/v1/usage/<owner>/<repo>?date=YYYY-MM-DD
   -> verify token can access owner/repo through GitHub
   -> load usage_daily:v1:<date>:<environment>:<owner>:<repo> from KV
   -> return an empty rollup if no usage exists for the date
+  -> load effective soft limit policy from default + W7S-owned KV overrides
   -> evaluate daily soft limits and include warning metadata
+```
+
+```text
+GET /api/v1/limits/<owner>/<repo>
+  -> require GitHub bearer token
+  -> verify token can access owner/repo through GitHub
+  -> load effective soft limit policy from default + W7S-owned KV overrides
+  -> return policies and lookup metadata
 ```
 
 ## Compatibility Choices
