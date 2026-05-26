@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { app } from "../worker";
 import { createTestEnv } from "./mocks";
 import { loadUsageDailyRollup, recordUsageEvent } from "../usage";
+import { evaluateUsageLimits } from "../usageLimits";
 
 describe("usage rollups", () => {
   afterEach(() => {
@@ -109,8 +110,72 @@ describe("usage rollups", () => {
                 error: 0
               })
             }
-          })
+          }),
+          limits: expect.objectContaining({
+            mode: "warn",
+            metrics: expect.objectContaining({
+              "workflow.create": expect.objectContaining({
+                used: 1,
+                limit: 10000,
+                status: "ok"
+              })
+            }),
+            warnings: []
+          }),
+          warnings: []
         }
+      })
+    );
+  });
+
+  it("evaluates soft limit warnings from usage units", () => {
+    const limits = evaluateUsageLimits({
+      metrics: {
+        "workflow.create": {
+          count: 9000,
+          units: 9000,
+          success: 9000,
+          error: 0,
+          lastAt: "2026-05-26T12:00:00.000Z"
+        },
+        "queue.delivery": {
+          count: 1,
+          units: 100001,
+          success: 1,
+          error: 0,
+          lastAt: "2026-05-26T12:00:00.000Z"
+        }
+      }
+    });
+
+    expect(limits).toEqual(
+      expect.objectContaining({
+        mode: "warn",
+        metrics: expect.objectContaining({
+          "workflow.create": expect.objectContaining({
+            used: 9000,
+            limit: 10000,
+            remaining: 1000,
+            usageRatio: 0.9,
+            status: "warning"
+          }),
+          "queue.delivery": expect.objectContaining({
+            used: 100001,
+            limit: 100000,
+            remaining: 0,
+            status: "exceeded"
+          })
+        }),
+        warnings: [
+          expect.objectContaining({
+            metric: "queue.delivery",
+            status: "exceeded"
+          }),
+          expect.objectContaining({
+            metric: "workflow.create",
+            status: "warning"
+          })
+        ]
       })
     );
   });

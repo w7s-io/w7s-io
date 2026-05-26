@@ -12,7 +12,7 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
 - `w7s.json` can declare KV, R2, D1, Durable Objects, Hyperdrive, queues, schedules, workflows, vars, secrets, RPC allowlists, queue allowlists, and workflow allowlists.
 - RPC, Queue sends, and Workflow starts use internal service bindings because W7S app Workers are dispatch-namespace scripts, not ordinary account-level Workers.
 - W7S core can optionally write platform metrics to Workers Analytics Engine when `W7S_ANALYTICS_DATASET` is configured.
-- W7S core stores best-effort daily usage rollups in `DEPLOYMENTS_KV` and exposes them through `GET /api/v1/usage/<owner>/<repo>`.
+- W7S core stores best-effort daily usage rollups in `DEPLOYMENTS_KV` and exposes them with soft limit warnings through `GET /api/v1/usage/<owner>/<repo>`.
 
 ## Implementation Order
 
@@ -113,7 +113,7 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
    - Revisit direct app integration if Cloudflare exposes a direct WFP-compatible consumer model.
 
 6. **Usage accounting and limits**
-   - Status: basic rollups implemented, strict limits still open.
+   - Status: basic rollups and soft warning limits implemented, strict limits still open.
    - Goal: make platform usage visible before enabling costly primitives.
    - Current API:
      ```text
@@ -121,6 +121,7 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
      ```
    - GitHub bearer tokens must have access to the target repo.
    - Current rollups are KV read-modify-write counters for deploy, RPC, queue, schedule, and workflow usage.
+   - Current limits are advisory warnings returned by the usage API; no request path is blocked.
    - Next phase should add stronger counters and policy enforcement for hard limits.
 
 7. **AI, Vectorize, and AI Gateway**

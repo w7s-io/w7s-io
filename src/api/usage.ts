@@ -4,6 +4,7 @@ import { parseGitHubRepository, verifyGitHubRepoAccess } from "../deploy/githubA
 import { jsonError, jsonSuccess, parseBearerToken } from "../http";
 import { requireSlug, resolveEnvironment } from "../names";
 import { loadUsageDailyRollup, usageDate } from "../usage";
+import { evaluateUsageLimits } from "../usageLimits";
 
 type HonoContext = Context<{ Bindings: Env }>;
 
@@ -74,16 +75,21 @@ export const handleUsageGet = async (c: HonoContext) => {
     repoSlug: target.repoSlug
   });
 
+  const usage = rollup ?? {
+    version: 1 as const,
+    date,
+    orgSlug: target.orgSlug,
+    repoSlug: target.repoSlug,
+    environment,
+    repository: `${target.orgSlug}/${target.repoSlug}`,
+    metrics: {},
+    updatedAt: null
+  };
+  const limits = evaluateUsageLimits(usage);
+
   return jsonSuccess({
-    usage: rollup ?? {
-      version: 1,
-      date,
-      orgSlug: target.orgSlug,
-      repoSlug: target.repoSlug,
-      environment,
-      repository: `${target.orgSlug}/${target.repoSlug}`,
-      metrics: {},
-      updatedAt: null
-    }
+    usage,
+    limits,
+    warnings: limits.warnings
   });
 };

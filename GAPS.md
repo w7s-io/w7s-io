@@ -37,7 +37,8 @@ This file tracks the main known gaps after the current deploy core, runtime rout
 
 - **Usage limits API**
   - Basic daily KV usage rollups now exist.
-  - No hard quota, rate-limit, billing-grade accounting, or per-feature policy API exists yet.
+  - Soft warning limits now exist in the usage API.
+  - No hard quota, rate-limit, billing-grade accounting, or customizable per-feature policy API exists yet.
 
 ## Developer Experience
 
@@ -79,5 +80,6 @@ This file tracks the main known gaps after the current deploy core, runtime rout
 
 - **Accounting and limits**
   - Daily KV usage rollups exist for deploy, RPC, queue, schedule, and workflow paths.
+  - The usage API evaluates daily soft limits and returns warning metadata.
   - They are best-effort read-modify-write counters, so concurrent writes can be approximate.
   - Hard limits and billing-grade accounting still need a stronger storage/enforcement path before AI/Vectorize/AI Gateway are exposed broadly.

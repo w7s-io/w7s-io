@@ -2,6 +2,8 @@
 
 W7S keeps best-effort daily usage rollups for each deployed repository and environment. The first version is intentionally simple: it stores aggregate counters in `DEPLOYMENTS_KV` and exposes them through a GitHub-authenticated API.
 
+The same response includes daily soft limits and warnings. These limits are visible policy scaffolding only; W7S does not block traffic with them yet.
+
 ## API
 
 Read one repo's usage for one day:
@@ -53,7 +55,24 @@ Example response:
         }
       },
       "updatedAt": "2026-05-26T12:00:00.000Z"
-    }
+    },
+    "limits": {
+      "version": 1,
+      "period": "daily",
+      "mode": "warn",
+      "metrics": {
+        "workflow.create": {
+          "metric": "workflow.create",
+          "used": 4,
+          "limit": 10000,
+          "remaining": 9996,
+          "usageRatio": 0.0004,
+          "status": "ok"
+        }
+      },
+      "warnings": []
+    },
+    "warnings": []
   }
 }
 ```
@@ -74,6 +93,30 @@ workflow.delivery
 
 `count` is the event count. `units` is usually the same value, except batch-like paths can record more than one unit per event, such as queue deliveries.
 
-## Limits
+## Soft Limits
+
+Current daily soft limits:
+
+```text
+deploy               100
+rpc.dispatch         100000
+queue.send           100000
+queue.delivery       100000
+schedule.delivery    10000
+workflow.create      10000
+workflow.delivery    10000
+```
+
+Each metric is marked:
+
+```text
+ok        below 80%
+warning   at or above 80%
+exceeded  above 100%
+```
+
+The response duplicates non-`ok` entries in `warnings` so dashboards and CLIs can show a simple alert list without scanning every metric.
+
+## Limits Caveat
 
 KV rollups are read-modify-write counters. Concurrent writes can race, so this is not billing-grade accounting and should not be used for strict quota enforcement yet. It is sufficient for product visibility, support debugging, and planning the next accounting layer before AI, Vectorize, and AI Gateway are exposed broadly.

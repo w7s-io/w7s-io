@@ -18,7 +18,7 @@ This repo contains the public W7S worker, deploy API, runtime router, and storag
 - non-production branches serve from `https://<branch>--<org>.w7s.cloud/<repo>/*`.
 - `CNAME` can declare custom domains for a deployment, with optional `_w7s.<zone>` TXT allowlists for ownership control.
 - optional Workers Analytics Engine writes track deploy, request, RPC, queue, schedule, and workflow events for platform observability.
-- best-effort per-app daily usage rollups are stored in KV and exposed through an authenticated usage API.
+- best-effort per-app daily usage rollups and soft limit warnings are exposed through an authenticated usage API.
 
 ## Deploy API
 
@@ -67,7 +67,7 @@ Optional environment override:
 - query: `?environment=staging`
 - header: `x-w7s-environment: staging`
 
-Tracked metrics currently include `deploy`, `rpc.dispatch`, `queue.send`, `queue.delivery`, `schedule.delivery`, `workflow.create`, and `workflow.delivery`. Rollups are best-effort KV counters, not billing-grade limits.
+Tracked metrics currently include `deploy`, `rpc.dispatch`, `queue.send`, `queue.delivery`, `schedule.delivery`, `workflow.create`, and `workflow.delivery`. The response includes daily soft limits and warnings for metrics that approach or exceed those limits. Rollups are best-effort KV counters, not billing-grade limits, and no traffic is blocked by these warnings yet.
 
 ## Repository Layout
 

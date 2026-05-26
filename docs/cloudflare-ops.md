@@ -279,6 +279,8 @@ Authorization: Bearer <github-token>
 
 The token must have GitHub access to the target repository. Current metrics are `deploy`, `rpc.dispatch`, `queue.send`, `queue.delivery`, `schedule.delivery`, `workflow.create`, and `workflow.delivery`.
 
+The response includes daily soft limits and a `warnings` list for metrics at or above 80% of the configured daily limit. The default mode is `warn`, so W7S only reports those warnings.
+
 These counters are approximate because KV updates are read-modify-write operations. Treat them as operational/product visibility, not strict billing or quota enforcement.
 
 ## Workflows
