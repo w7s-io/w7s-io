@@ -39,7 +39,7 @@ This file tracks the main known gaps after the current deploy core, runtime rout
   - Basic daily KV usage rollups now exist.
   - Soft warning limits now exist in the usage API.
   - Effective policy reads and W7S-owned KV overrides now exist.
-  - A report-only `checkUsageLimit(...)` hook now exists for future expensive primitives.
+  - Hard daily usage guards now protect deploys, RPC dispatches, queue sends, workflow starts, and internal delivery paths.
   - No hard quota, rate-limit, billing-grade accounting, or admin policy write API exists yet.
 
 ## Developer Experience
@@ -82,7 +82,7 @@ This file tracks the main known gaps after the current deploy core, runtime rout
 
 - **Accounting and limits**
   - Daily KV usage rollups exist for deploy, RPC, queue, schedule, and workflow paths.
-  - The usage API evaluates daily soft limits from default policy plus W7S-owned KV overrides and returns warning metadata.
+  - The usage API evaluates daily limits from default policy plus W7S-owned KV overrides and returns warning metadata.
   - `checkUsageLimit(...)` reports projected exceedance with `wouldBlock`, but does not enforce blocking.
   - They are best-effort read-modify-write counters, so concurrent writes can be approximate.
-  - Hard limits and billing-grade accounting still need a stronger storage/enforcement path before AI/Vectorize/AI Gateway are exposed broadly.
+  - Billing-grade accounting still needs a stronger storage path before AI/Vectorize/AI Gateway are exposed broadly.

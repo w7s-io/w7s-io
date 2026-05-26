@@ -117,11 +117,11 @@ describe("usage rollups", () => {
             }
           }),
           limits: expect.objectContaining({
-            mode: "warn",
+            mode: "enforce",
             metrics: expect.objectContaining({
               "workflow.create": expect.objectContaining({
                 used: 1,
-                limit: 10000,
+                limit: 1000,
                 status: "ok",
                 source: "default"
               })
@@ -131,7 +131,7 @@ describe("usage rollups", () => {
           policy: expect.objectContaining({
             policy: expect.objectContaining({
               "workflow.create": expect.objectContaining({
-                dailyUnits: 10000,
+                dailyUnits: 1000,
                 source: "default"
               })
             })
@@ -382,8 +382,8 @@ describe("usage rollups", () => {
       })
     ).resolves.toEqual(
       expect.objectContaining({
-        mode: "report",
-        enforcement: "off",
+        mode: "enforce",
+        enforcement: "hard",
         metric: "workflow.create",
         used: 8,
         requestedUnits: 3,
@@ -408,19 +408,19 @@ describe("usage rollups", () => {
     ).resolves.toBeNull();
   });
 
-  it("evaluates soft limit warnings from usage units", () => {
+  it("evaluates daily limit warnings from usage units", () => {
     const limits = evaluateUsageLimits({
       metrics: {
         "workflow.create": {
-          count: 9000,
-          units: 9000,
-          success: 9000,
+          count: 900,
+          units: 900,
+          success: 900,
           error: 0,
           lastAt: "2026-05-26T12:00:00.000Z"
         },
         "queue.delivery": {
           count: 1,
-          units: 100001,
+          units: 10001,
           success: 1,
           error: 0,
           lastAt: "2026-05-26T12:00:00.000Z"
@@ -430,18 +430,18 @@ describe("usage rollups", () => {
 
     expect(limits).toEqual(
       expect.objectContaining({
-        mode: "warn",
+        mode: "enforce",
         metrics: expect.objectContaining({
           "workflow.create": expect.objectContaining({
-            used: 9000,
-            limit: 10000,
-            remaining: 1000,
+            used: 900,
+            limit: 1000,
+            remaining: 100,
             usageRatio: 0.9,
             status: "warning"
           }),
           "queue.delivery": expect.objectContaining({
-            used: 100001,
-            limit: 100000,
+            used: 10001,
+            limit: 10000,
             remaining: 0,
             status: "exceeded"
           })

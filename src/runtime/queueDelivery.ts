@@ -6,6 +6,7 @@ import {
   loadQueueMapping
 } from "../storage/deployments";
 import { dispatchWorker } from "./dispatch";
+import { checkBlockedUsageLimit, usageLimitExceededMessage } from "../usageEnforcement";
 
 type QueueEnvelope = {
   version?: number;
@@ -54,6 +55,30 @@ export const handleQueueBatch = async (
       body: envelope ? envelope.body : message.body
     };
   });
+  const blocked = await checkBlockedUsageLimit(env, {
+    metric: "queue.delivery",
+    environment: mapping.environment,
+    orgSlug: mapping.orgSlug,
+    repoSlug: mapping.repoSlug,
+    units: messages.length
+  });
+  if (blocked) {
+    writeAnalyticsEvent(env, {
+      event: "queue_delivery",
+      repository: mapping.repository,
+      environment: mapping.environment,
+      orgSlug: mapping.orgSlug,
+      repoSlug: mapping.repoSlug,
+      outcome: "error",
+      source: mapping.queue,
+      method: "POST",
+      status: 429,
+      durationMs: Date.now() - startedAt,
+      count: messages.length
+    });
+    console.warn(usageLimitExceededMessage(blocked));
+    return;
+  }
   const request = new Request(`https://${mapping.orgSlug}.w7s.internal${mapping.consumer}`, {
     method: "POST",
     headers: {

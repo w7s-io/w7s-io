@@ -8,6 +8,8 @@ import {
   type DeploymentRecord
 } from "../storage/deployments";
 import { handleQueueBatch } from "../runtime/queueDelivery";
+import { recordUsageEvent } from "../usage";
+import { usageLimitPolicyKey } from "../usageLimits";
 
 const workerRecord = (params: {
   orgSlug: string;
@@ -146,6 +148,95 @@ describe("Queue API", () => {
       ],
       doubles: [1, 200, expect.any(Number)]
     });
+  });
+
+  it("rejects queue sends that exceed the caller daily limit", async () => {
+    const pushedMessages: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/queues/queue-1/messages")) {
+          pushedMessages.push(JSON.parse(String(init?.body)));
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv({
+      CLOUDFLARE_API_TOKEN: "cf-token",
+      CLOUDFLARE_ACCOUNT_ID: "acct-123"
+    });
+    const token = "queue-token";
+    await storeDeploymentRecord(
+      env,
+      workerRecord({
+        orgSlug: "acme",
+        repoSlug: "caller",
+        scriptName: "acme--caller",
+        tokenHash: await hashBindingToken(token)
+      })
+    );
+    await storeDeploymentRecord(
+      env,
+      workerRecord({
+        orgSlug: "acme",
+        repoSlug: "target",
+        scriptName: "acme--target",
+        queues: [
+          {
+            name: "jobs",
+            queueName: "w7s-production-acme-target-queue-jobs",
+            queueId: "queue-1",
+            consumer: "/_w7s/queues/jobs"
+          }
+        ],
+        tokenHash: await hashBindingToken("target-token")
+      })
+    );
+    await env.DEPLOYMENTS_KV.put(
+      usageLimitPolicyKey({
+        scope: "repo",
+        orgSlug: "acme",
+        repoSlug: "caller"
+      }),
+      JSON.stringify({
+        version: 1,
+        metrics: {
+          "queue.send": 1
+        }
+      })
+    );
+    await recordUsageEvent(env, {
+      metric: "queue.send",
+      repository: "acme/caller",
+      environment: "production",
+      orgSlug: "acme",
+      repoSlug: "caller",
+      outcome: "success",
+      units: 1
+    });
+
+    const response = await app.fetch(
+      new Request("https://w7s.cloud/api/v1/queues/acme/target/jobs", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          "x-w7s-queue-caller": "acme/caller",
+          "x-w7s-queue-environment": "production"
+        },
+        body: "{}"
+      }),
+      env
+    );
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        error: expect.stringContaining("Daily usage limit exceeded for queue.send")
+      })
+    );
+    expect(pushedMessages).toEqual([]);
   });
 
   it("rejects invalid queue caller tokens", async () => {

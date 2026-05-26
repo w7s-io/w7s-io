@@ -6,6 +6,7 @@ import { jsonError, jsonSuccess, parseBearerToken } from "../http";
 import { requireSlug, sanitizeScriptPart } from "../names";
 import { loadDeploymentRecord } from "../storage/deployments";
 import { recordUsageEvent } from "../usage";
+import { enforceUsageLimit } from "../usageEnforcement";
 
 type HonoContext = Context<{ Bindings: Env }>;
 
@@ -187,6 +188,14 @@ export const handleWorkflowCreate = async (c: HonoContext) => {
     const workflows = requireWorkflowBinding(c.env);
     const context = await requireAuthorizedContext(c);
     const payload = await readJsonBody(c.req.raw);
+    const limitResponse = await enforceUsageLimit(c.env, {
+      metric: "workflow.create",
+      environment: context.caller.environment,
+      orgSlug: context.caller.orgSlug,
+      repoSlug: context.caller.repoSlug,
+      units: 1
+    });
+    if (limitResponse) return limitResponse;
     const requestedId = c.req.header("x-w7s-workflow-instance-id")?.trim() || null;
     const createdAt = new Date().toISOString();
     const instanceId = buildInstanceId({

@@ -46,7 +46,7 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
   - Implements authenticated reads for per-app daily usage rollups.
   - Reuses GitHub repo access checks so only callers with repository access can read usage.
 - `src/api/limits.ts`
-  - Implements authenticated reads for effective per-app soft limit policies.
+  - Implements authenticated reads for effective per-app limit policies.
   - Does not expose write access; overrides are W7S-owned KV records.
 - `src/analytics.ts`
   - Writes best-effort Workers Analytics Engine datapoints when `W7S_ANALYTICS` is bound.
@@ -55,10 +55,12 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
   - Writes best-effort daily usage counters into `DEPLOYMENTS_KV`.
   - Tracks count, units, success, error, and last-seen time per metric.
 - `src/usageLimits.ts`
-  - Evaluates daily soft usage limits from a usage rollup.
+  - Evaluates daily usage limits from a usage rollup.
   - Layers W7S-owned policy overrides from owner, owner/environment, repo, and repo/environment KV records.
-  - Provides a report-only `checkUsageLimit(...)` helper for future enforcement hooks.
-  - Produces warning and would-block metadata only; it does not block requests.
+  - Provides `checkUsageLimit(...)` metadata for hard enforcement hooks.
+- `src/usageEnforcement.ts`
+  - Converts projected over-limit checks into HTTP `429` responses for public APIs.
+  - Lets internal delivery paths skip queue, schedule, or workflow dispatch once delivery limits are exceeded.
 - `src/deploy/archive.ts`
   - Reads zip archives into normalized file maps.
   - Strips common GitHub archive roots while preserving W7S app roots.
@@ -196,15 +198,15 @@ GET /api/v1/usage/<owner>/<repo>?date=YYYY-MM-DD
   -> verify token can access owner/repo through GitHub
   -> load usage_daily:v1:<date>:<environment>:<owner>:<repo> from KV
   -> return an empty rollup if no usage exists for the date
-  -> load effective soft limit policy from default + W7S-owned KV overrides
-  -> evaluate daily soft limits and include warning metadata
+  -> load effective limit policy from default + W7S-owned KV overrides
+  -> evaluate daily limits and include warning metadata
 ```
 
 ```text
 GET /api/v1/limits/<owner>/<repo>
   -> require GitHub bearer token
   -> verify token can access owner/repo through GitHub
-  -> load effective soft limit policy from default + W7S-owned KV overrides
+  -> load effective limit policy from default + W7S-owned KV overrides
   -> return policies and lookup metadata
 ```
 
@@ -225,5 +227,5 @@ GET /api/v1/limits/<owner>/<repo>
 - Schedules are environment-scoped path consumers. W7S core owns the Cloudflare cron trigger and dispatches due jobs to native Workers.
 - Workflows are app-declared, environment-scoped path consumers. W7S core owns the Cloudflare Workflow definition and starts instances on behalf of apps.
 - Analytics Engine is an optional W7S-core binding. It is for platform observability first; app-visible analytics bindings can be added later.
-- Usage rollups are stored in `DEPLOYMENTS_KV` with read-modify-write updates. They are enough for product visibility and quota planning, but not atomic billing-grade counters. Soft limit warnings are advisory and do not enforce traffic limits.
-- `checkUsageLimit(...)` reports whether a future request would exceed policy, but hard enforcement is intentionally not wired into deploy, RPC, queue, schedule, or workflow paths yet.
+- Usage rollups are stored in `DEPLOYMENTS_KV` with read-modify-write updates. They are enough for product visibility and abuse protection, but not atomic billing-grade counters.
+- `checkUsageLimit(...)` reports whether a future request would exceed policy. Public deploy, RPC, queue-send, and workflow-start paths return HTTP `429`; internal queue, schedule, and workflow delivery paths skip dispatch when their delivery metric would exceed policy.

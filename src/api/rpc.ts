@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { responseOutcome, writeAnalyticsEvent } from "../analytics";
 import type { Env } from "../env";
 import { recordUsageEvent } from "../usage";
+import { enforceUsageLimit } from "../usageEnforcement";
 import { jsonError, parseBearerToken } from "../http";
 import { requireSlug } from "../names";
 import { hashRpcToken } from "../deploy/rpcBindings";
@@ -109,6 +110,15 @@ export const handleRpc = async (c: HonoContext) => {
   ) {
     return jsonError("RPC caller is not authorized for this target.", 403);
   }
+
+  const limitResponse = await enforceUsageLimit(c.env, {
+    metric: "rpc.dispatch",
+    environment: caller.environment,
+    orgSlug: caller.orgSlug,
+    repoSlug: caller.repoSlug,
+    units: 1
+  });
+  if (limitResponse) return limitResponse;
 
   const response = await dispatchWorker({
     env: c.env,

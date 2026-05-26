@@ -3,6 +3,7 @@ import { responseOutcome, writeAnalyticsEvent } from "../analytics";
 import type { Env, W7SWorkflowPayload } from "../env";
 import { loadDeploymentRecord } from "../storage/deployments";
 import { recordUsageEvent } from "../usage";
+import { checkBlockedUsageLimit, usageLimitExceededMessage } from "../usageEnforcement";
 import { dispatchWorker } from "./dispatch";
 
 const MAX_RESPONSE_BODY_LENGTH = 65_536;
@@ -39,6 +40,41 @@ export class W7SWorkflow extends WorkflowEntrypoint<Env, W7SWorkflowPayload> {
         const workerTarget = deployment?.targets.worker;
         if (!deployment || !workerTarget) {
           throw new Error(`W7S workflow target deployment was not found for ${payload.target.repository}.`);
+        }
+
+        const blocked = await checkBlockedUsageLimit(this.env, {
+          metric: "workflow.delivery",
+          environment: payload.target.environment,
+          orgSlug: payload.target.orgSlug,
+          repoSlug: payload.target.repoSlug,
+          units: 1
+        });
+        if (blocked) {
+          writeAnalyticsEvent(this.env, {
+            event: "workflow_delivery",
+            repository: payload.target.repository,
+            environment: payload.target.environment,
+            orgSlug: payload.target.orgSlug,
+            repoSlug: payload.target.repoSlug,
+            outcome: "error",
+            source: payload.target.workflow,
+            target: payload.caller.repository,
+            method: "POST",
+            status: 429,
+            durationMs: Date.now() - startedAt,
+            count: 1
+          });
+          return {
+            status: 429,
+            contentType: "application/json; charset=utf-8",
+            body: JSON.stringify({
+              status: "error",
+              error: usageLimitExceededMessage(blocked),
+              details: {
+                usageLimit: blocked
+              }
+            }).slice(0, MAX_RESPONSE_BODY_LENGTH)
+          };
         }
 
         const request = new Request(`https://${payload.target.orgSlug}.w7s.internal${payload.target.path}`, {

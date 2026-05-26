@@ -21,10 +21,10 @@ As of the latest docs update:
 - Durable Objects are declared with `bindings.durableObjects` in `w7s.json`; W7S uploads the binding metadata and initial SQLite-backed class migrations.
 - Hyperdrive bindings are declared with `bindings.hyperdrive` in `w7s.json`; W7S uploads user-provided Hyperdrive config IDs as Worker bindings.
 - If `W7S_ANALYTICS_DATASET` is configured, the core writes Workers Analytics Engine datapoints for deploys, runtime requests, RPC, queues, schedules, and workflows.
-- The core stores best-effort per-app daily usage rollups in `DEPLOYMENTS_KV` and exposes them with soft limit warnings through `GET /api/v1/usage/<owner>/<repo>`.
-- Effective soft limit policies are exposed through `GET /api/v1/limits/<owner>/<repo>` and can be overridden only with W7S-owned KV policy records.
-- W7S operators can manage soft limit policy KV records with `npm run limits:get`, `npm run limits:set`, and `npm run limits:delete`.
-- `checkUsageLimit(...)` exists as a report-only helper. It returns `wouldBlock` metadata for future expensive primitives, but no current traffic path blocks on it.
+- The core stores best-effort per-app daily usage rollups in `DEPLOYMENTS_KV` and exposes them with limit warnings through `GET /api/v1/usage/<owner>/<repo>`.
+- Effective limit policies are exposed through `GET /api/v1/limits/<owner>/<repo>` and can be overridden only with W7S-owned KV policy records.
+- W7S operators can manage limit policy KV records with `npm run limits:get`, `npm run limits:set`, and `npm run limits:delete`.
+- `checkUsageLimit(...)` returns hard-enforcement metadata. Public deploy, RPC, queue-send, and workflow-start paths return HTTP `429` when the request would exceed the effective daily limit.
 - Root `CNAME` files can attach app custom-domain routes when the W7S token can manage that Cloudflare zone.
 - Custom domains use soft TXT verification: the first claim works without TXT, `_w7s.<zone>` becomes an owner/repo allowlist when present, and hostname conflicts require TXT authorization.
 - Empty org roots such as `https://sadasant.w7s.cloud/` show deploy-help HTML instead of a plain 404.
@@ -52,7 +52,7 @@ The point of this repo is to keep the core deploy/routing plane small.
 - Durable Object apps use stable per-repository/environment script names so DO state survives redeploys. DO class renames, transfers, and deletes are not automated yet.
 - Hyperdrive config creation and credential rotation are not managed by W7S yet. Apps must provide existing Cloudflare Hyperdrive IDs.
 - Analytics Engine is currently core-internal only. User app analytics bindings are not exposed yet.
-- Usage rollups are approximate KV counters. Soft limits and `checkUsageLimit(...)` are advisory only, not atomic billing-grade accounting or hard enforcement. There is no public policy write API yet.
+- Usage rollups are approximate KV counters. Limits are enforced for abuse protection, but they are not atomic billing-grade accounting. There is no public policy write API yet.
 - Queues are provisioned per repository/environment and delivered through W7S core to app HTTP consumer routes.
 - Schedules are delivered through W7S core to app HTTP consumer routes. They currently use best-effort KV locks to avoid duplicate schedule/time dispatches.
 - Workflows are delivered through W7S core to app HTTP consumer routes. The first implementation is a durable one-step dispatch with retries, not a user-defined multi-step WorkflowEntrypoint inside the app Worker.
@@ -77,7 +77,7 @@ Good near-term tasks:
 - add typed RPC/queue clients and first-party plugin conventions on top of `W7S_RPC` and `W7S_QUEUE`;
 - add structured deploy logs;
 - add Analytics Engine query APIs and dashboards;
-- add strict limit enforcement after the usage accounting storage model is upgraded beyond KV read-modify-write rollups;
+- upgrade usage accounting beyond KV read-modify-write rollups before treating limits as billing-grade;
 - add end-to-end tests that deploy a demo archive against a staging Worker.
 
 ## Important Repos

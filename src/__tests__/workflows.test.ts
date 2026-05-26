@@ -5,6 +5,8 @@ import { hashBindingToken } from "../deploy/tokens";
 import { storeDeploymentRecord, type DeploymentRecord } from "../storage/deployments";
 import { createTestEnv, MemoryAnalyticsEngine, MemoryWorkflowBinding } from "./mocks";
 import type { W7SWorkflowPayload } from "../env";
+import { recordUsageEvent } from "../usage";
+import { usageLimitPolicyKey } from "../usageLimits";
 
 const workerRecord = (params: {
   orgSlug: string;
@@ -128,6 +130,82 @@ describe("Workflow API", () => {
       ],
       doubles: [1, 200, expect.any(Number)]
     });
+  });
+
+  it("rejects workflow creates that exceed the caller daily limit", async () => {
+    const workflows = new MemoryWorkflowBinding();
+    const env = createTestEnv({
+      W7S_WORKFLOWS: workflows as unknown as Workflow<W7SWorkflowPayload>
+    });
+    const token = "workflow-token";
+    await storeDeploymentRecord(
+      env,
+      workerRecord({
+        orgSlug: "acme",
+        repoSlug: "caller",
+        scriptName: "acme--caller",
+        tokenHash: await hashBindingToken(token)
+      })
+    );
+    await storeDeploymentRecord(
+      env,
+      workerRecord({
+        orgSlug: "acme",
+        repoSlug: "target",
+        scriptName: "acme--target",
+        tokenHash: await hashBindingToken("target-token"),
+        workflows: [
+          {
+            name: "process-order",
+            path: "/_w7s/workflows/process-order"
+          }
+        ]
+      })
+    );
+    await env.DEPLOYMENTS_KV.put(
+      usageLimitPolicyKey({
+        scope: "repo",
+        orgSlug: "acme",
+        repoSlug: "caller"
+      }),
+      JSON.stringify({
+        version: 1,
+        metrics: {
+          "workflow.create": 1
+        }
+      })
+    );
+    await recordUsageEvent(env, {
+      metric: "workflow.create",
+      repository: "acme/caller",
+      environment: "production",
+      orgSlug: "acme",
+      repoSlug: "caller",
+      outcome: "success",
+      units: 1
+    });
+
+    const response = await app.fetch(
+      new Request("https://w7s.cloud/api/v1/workflows/acme/target/process-order", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          "x-w7s-workflow-caller": "acme/caller",
+          "x-w7s-workflow-environment": "production"
+        },
+        body: "{}"
+      }),
+      env
+    );
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        error: expect.stringContaining("Daily usage limit exceeded for workflow.create")
+      })
+    );
+    expect(workflows.created).toEqual([]);
   });
 
   it("returns workflow instance status", async () => {

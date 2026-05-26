@@ -3,6 +3,8 @@ import { app } from "../worker";
 import { createTestEnv, MemoryAnalyticsEngine } from "./mocks";
 import { hashRpcToken } from "../deploy/rpcBindings";
 import { storeDeploymentRecord, type DeploymentRecord } from "../storage/deployments";
+import { recordUsageEvent } from "../usage";
+import { usageLimitPolicyKey } from "../usageLimits";
 
 const workerRecord = (params: {
   orgSlug: string;
@@ -118,6 +120,79 @@ describe("RPC API", () => {
       ],
       doubles: [1, 200, expect.any(Number)]
     });
+  });
+
+  it("rejects RPC dispatches that exceed the caller daily limit", async () => {
+    const calls: string[] = [];
+    const env = createTestEnv({
+      DISPATCHER: {
+        get: (scriptName: string) => ({
+          fetch: async () => {
+            calls.push(scriptName);
+            return new Response("ok");
+          }
+        })
+      }
+    });
+    const token = "caller-token";
+    await storeDeploymentRecord(
+      env,
+      workerRecord({
+        orgSlug: "acme",
+        repoSlug: "caller",
+        scriptName: "acme--caller",
+        tokenHash: await hashRpcToken(token)
+      })
+    );
+    await storeDeploymentRecord(
+      env,
+      workerRecord({
+        orgSlug: "acme",
+        repoSlug: "target",
+        scriptName: "acme--target"
+      })
+    );
+    await env.DEPLOYMENTS_KV.put(
+      usageLimitPolicyKey({
+        scope: "repo",
+        orgSlug: "acme",
+        repoSlug: "caller"
+      }),
+      JSON.stringify({
+        version: 1,
+        metrics: {
+          "rpc.dispatch": 1
+        }
+      })
+    );
+    await recordUsageEvent(env, {
+      metric: "rpc.dispatch",
+      repository: "acme/caller",
+      environment: "production",
+      orgSlug: "acme",
+      repoSlug: "caller",
+      outcome: "success",
+      units: 1
+    });
+
+    const response = await app.fetch(
+      new Request("https://w7s.cloud/api/v1/rpc/acme/target/do-work", {
+        headers: {
+          authorization: `Bearer ${token}`,
+          "x-w7s-rpc-caller": "acme/caller",
+          "x-w7s-rpc-environment": "production"
+        }
+      }),
+      env
+    );
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        error: expect.stringContaining("Daily usage limit exceeded for rpc.dispatch")
+      })
+    );
+    expect(calls).toEqual([]);
   });
 
   it("rejects invalid caller tokens", async () => {

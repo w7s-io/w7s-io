@@ -39,15 +39,15 @@ export type UsageLimitMetricEvaluation = {
 export type UsageLimitEvaluation = {
   version: 1;
   period: "daily";
-  mode: "warn";
+  mode: "enforce";
   metrics: Record<string, UsageLimitMetricEvaluation>;
   warnings: UsageLimitWarning[];
 };
 
 export type UsageLimitCheck = {
   version: 1;
-  mode: "report";
-  enforcement: "off";
+  mode: "enforce";
+  enforcement: "hard";
   metric: string;
   date: string;
   environment: string;
@@ -68,13 +68,13 @@ export type UsageLimitCheck = {
 };
 
 export const DEFAULT_DAILY_USAGE_LIMITS: UsageLimitPolicy[] = [
-  { metric: "deploy", dailyUnits: 100, warningThreshold: 0.8, source: "default" },
-  { metric: "rpc.dispatch", dailyUnits: 100_000, warningThreshold: 0.8, source: "default" },
-  { metric: "queue.send", dailyUnits: 100_000, warningThreshold: 0.8, source: "default" },
-  { metric: "queue.delivery", dailyUnits: 100_000, warningThreshold: 0.8, source: "default" },
-  { metric: "schedule.delivery", dailyUnits: 10_000, warningThreshold: 0.8, source: "default" },
-  { metric: "workflow.create", dailyUnits: 10_000, warningThreshold: 0.8, source: "default" },
-  { metric: "workflow.delivery", dailyUnits: 10_000, warningThreshold: 0.8, source: "default" }
+  { metric: "deploy", dailyUnits: 50, warningThreshold: 0.8, source: "default" },
+  { metric: "rpc.dispatch", dailyUnits: 10_000, warningThreshold: 0.8, source: "default" },
+  { metric: "queue.send", dailyUnits: 10_000, warningThreshold: 0.8, source: "default" },
+  { metric: "queue.delivery", dailyUnits: 10_000, warningThreshold: 0.8, source: "default" },
+  { metric: "schedule.delivery", dailyUnits: 2_000, warningThreshold: 0.8, source: "default" },
+  { metric: "workflow.create", dailyUnits: 1_000, warningThreshold: 0.8, source: "default" },
+  { metric: "workflow.delivery", dailyUnits: 1_000, warningThreshold: 0.8, source: "default" }
 ];
 
 export type UsageLimitPolicyRecord = {
@@ -96,7 +96,7 @@ export type UsageLimitPolicyLookup = {
 export type EffectiveUsageLimitPolicies = {
   version: 1;
   period: "daily";
-  mode: "warn";
+  mode: "enforce";
   environment: string;
   orgSlug: string;
   repoSlug: string;
@@ -138,7 +138,7 @@ const statusFor = (params: {
 
 const warningMessage = (evaluation: UsageLimitMetricEvaluation) => {
   const action = evaluation.status === "exceeded" ? "exceeded" : "is approaching";
-  return `${evaluation.metric} ${action} the daily soft limit (${evaluation.used}/${evaluation.limit}).`;
+  return `${evaluation.metric} ${action} the daily limit (${evaluation.used}/${evaluation.limit}).`;
 };
 
 const positiveInteger = (value: unknown) => {
@@ -284,7 +284,7 @@ export const loadEffectiveUsageLimitPolicies = async (
   return {
     version: 1,
     period: "daily",
-    mode: "warn",
+    mode: "enforce",
     environment: params.environment,
     orgSlug: params.orgSlug,
     repoSlug: params.repoSlug,
@@ -334,7 +334,7 @@ export const evaluateUsageLimits = (
   return {
     version: 1,
     period: "daily",
-    mode: "warn",
+    mode: "enforce",
     metrics,
     warnings
   };
@@ -384,8 +384,8 @@ export const checkUsageLimit = async (
 
   return {
     version: 1,
-    mode: "report",
-    enforcement: "off",
+    mode: "enforce",
+    enforcement: "hard",
     metric,
     date,
     environment: params.environment,

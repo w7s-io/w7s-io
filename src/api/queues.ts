@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { writeAnalyticsEvent } from "../analytics";
 import type { Env } from "../env";
 import { recordUsageEvent } from "../usage";
+import { enforceUsageLimit } from "../usageEnforcement";
 import { jsonError, jsonSuccess, parseBearerToken } from "../http";
 import { requireSlug } from "../names";
 import { hashBindingToken } from "../deploy/tokens";
@@ -128,6 +129,15 @@ export const handleQueueSend = async (c: HonoContext) => {
   ) {
     return jsonError("Queue caller is not authorized for this target.", 403);
   }
+
+  const limitResponse = await enforceUsageLimit(c.env, {
+    metric: "queue.send",
+    environment: caller.environment,
+    orgSlug: caller.orgSlug,
+    repoSlug: caller.repoSlug,
+    units: 1
+  });
+  if (limitResponse) return limitResponse;
 
   const enqueuedAt = new Date().toISOString();
   const result = await sendQueueMessage({

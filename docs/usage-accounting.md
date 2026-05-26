@@ -2,7 +2,7 @@
 
 W7S keeps best-effort daily usage rollups for each deployed repository and environment. The first version is intentionally simple: it stores aggregate counters in `DEPLOYMENTS_KV` and exposes them through a GitHub-authenticated API.
 
-The same response includes daily soft limits and warnings. These limits are visible policy scaffolding only; W7S does not block traffic with them yet.
+The same response includes daily limits and warnings. W7S enforces those limits on deploys, RPC dispatches, queue sends, workflow starts, and internal queue/schedule/workflow deliveries.
 
 ## API
 
@@ -24,7 +24,7 @@ x-w7s-environment: staging
 
 Without an override, usage reads default to `production`.
 
-Read the effective soft limit policy without usage counters:
+Read the effective limit policy without usage counters:
 
 ```sh
 curl "https://w7s.cloud/api/v1/limits/<owner>/<repo>" \
@@ -68,14 +68,14 @@ Example response:
     "limits": {
       "version": 1,
       "period": "daily",
-      "mode": "warn",
+      "mode": "enforce",
       "metrics": {
         "workflow.create": {
           "metric": "workflow.create",
           "used": 4,
-          "limit": 10000,
-          "remaining": 9996,
-          "usageRatio": 0.0004,
+          "limit": 1000,
+          "remaining": 996,
+          "usageRatio": 0.004,
           "status": "ok",
           "source": "default"
         }
@@ -85,14 +85,14 @@ Example response:
     "policy": {
       "version": 1,
       "period": "daily",
-      "mode": "warn",
+      "mode": "enforce",
       "environment": "production",
       "orgSlug": "w7s-io",
       "repoSlug": "example-workflows",
       "policy": {
         "workflow.create": {
           "metric": "workflow.create",
-          "dailyUnits": 10000,
+          "dailyUnits": 1000,
           "warningThreshold": 0.8,
           "source": "default"
         }
@@ -120,18 +120,18 @@ workflow.delivery
 
 `count` is the event count. `units` is usually the same value, except batch-like paths can record more than one unit per event, such as queue deliveries.
 
-## Soft Limits
+## Daily Limits
 
-Current daily soft limits:
+Current default daily limits:
 
 ```text
-deploy               100
-rpc.dispatch         100000
-queue.send           100000
-queue.delivery       100000
-schedule.delivery    10000
-workflow.create      10000
-workflow.delivery    10000
+deploy               50
+rpc.dispatch         10000
+queue.send           10000
+queue.delivery       10000
+schedule.delivery    2000
+workflow.create      1000
+workflow.delivery    1000
 ```
 
 Each metric is marked:
@@ -142,18 +142,18 @@ warning   at or above 80%
 exceeded  above 100%
 ```
 
-The response duplicates non-`ok` entries in `warnings` so dashboards and CLIs can show a simple alert list without scanning every metric.
+The response duplicates non-`ok` entries in `warnings` so dashboards and CLIs can show a simple alert list without scanning every metric. Requests that would push a metric above its effective daily limit return HTTP `429`.
 
-## Enforcement Hook
+## Enforcement
 
-W7S also has a reusable `checkUsageLimit(...)` helper for future expensive primitives. It reads the effective policy, reads the current daily usage rollup, and projects whether a requested number of units would exceed the daily limit.
+W7S also has a reusable `checkUsageLimit(...)` helper for expensive primitives. It reads the effective policy, reads the current daily usage rollup, and projects whether a requested number of units would exceed the daily limit.
 
-The hook is intentionally report-only right now:
+The hook reports hard enforcement:
 
 ```json
 {
-  "mode": "report",
-  "enforcement": "off",
+  "mode": "enforce",
+  "enforcement": "hard",
   "metric": "workflow.create",
   "used": 8,
   "requestedUnits": 3,
@@ -165,7 +165,7 @@ The hook is intentionally report-only right now:
 }
 ```
 
-`wouldBlock: true` means the request would exceed policy if hard enforcement were enabled. No current request path blocks on this value yet.
+`wouldBlock: true` means the request exceeds policy. Public APIs return HTTP `429`; internal delivery paths skip dispatch once the effective daily delivery limit would be exceeded.
 
 ## Policy Overrides
 
@@ -246,4 +246,4 @@ The script uses `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` or `ACCOUNT_I
 
 ## Limits Caveat
 
-KV rollups are read-modify-write counters. Concurrent writes can race, so this is not billing-grade accounting and should not be used for strict quota enforcement yet. It is sufficient for product visibility, support debugging, and planning the next accounting layer before AI, Vectorize, and AI Gateway are exposed broadly.
+KV rollups are read-modify-write counters. Concurrent writes can race, so this is not billing-grade accounting. Enforcement is conservative platform abuse protection and can be replaced with a stronger counter store later.

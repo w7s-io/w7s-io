@@ -18,7 +18,7 @@ This repo contains the public W7S worker, deploy API, runtime router, and storag
 - non-production branches serve from `https://<branch>--<org>.w7s.cloud/<repo>/*`.
 - `CNAME` can declare custom domains for a deployment, with optional `_w7s.<zone>` TXT allowlists for ownership control.
 - optional Workers Analytics Engine writes track deploy, request, RPC, queue, schedule, and workflow events for platform observability.
-- best-effort per-app daily usage rollups and soft limit warnings are exposed through an authenticated usage API.
+- best-effort per-app daily usage rollups, warning thresholds, and hard daily limits are exposed through an authenticated usage API.
 
 ## Deploy API
 
@@ -67,9 +67,9 @@ Optional environment override:
 - query: `?environment=staging`
 - header: `x-w7s-environment: staging`
 
-Tracked metrics currently include `deploy`, `rpc.dispatch`, `queue.send`, `queue.delivery`, `schedule.delivery`, `workflow.create`, and `workflow.delivery`. The response includes daily soft limits and warnings for metrics that approach or exceed those limits. Rollups are best-effort KV counters, not billing-grade limits, and no traffic is blocked by these warnings yet.
+Tracked metrics currently include `deploy`, `rpc.dispatch`, `queue.send`, `queue.delivery`, `schedule.delivery`, `workflow.create`, and `workflow.delivery`. The response includes enforced daily limits and warnings for metrics that approach or exceed those limits. Rollups are best-effort KV counters, so enforcement is abuse protection rather than billing-grade accounting.
 
-Effective soft limit policies are available separately:
+Effective limit policies are available separately:
 
 ```sh
 curl "https://w7s.cloud/api/v1/limits/<owner>/<repo>" \
@@ -86,7 +86,7 @@ npm run limits:set -- --scope repo --owner w7s-io --repo example-workflows --met
 npm run limits:delete -- --scope repo --owner w7s-io --repo example-workflows --metric workflow.create
 ```
 
-Internally, `checkUsageLimit(...)` can report whether projected usage would exceed policy. It is report-only today and does not block existing traffic.
+Internally, `checkUsageLimit(...)` reports whether projected usage would exceed policy. Public deploy, RPC, queue-send, and workflow-start paths return HTTP `429` when the effective daily limit would be exceeded.
 
 ## Repository Layout
 

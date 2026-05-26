@@ -9,6 +9,8 @@ import {
   storeCustomDomainMappings,
   type DeploymentRecord
 } from "../storage/deployments";
+import { recordUsageEvent } from "../usage";
+import { usageLimitPolicyKey } from "../usageLimits";
 
 const zipBytes = (files: Record<string, string>) =>
   zipSync(
@@ -133,6 +135,67 @@ describe("deploy API", () => {
       ],
       doubles: [2, 200, 0]
     });
+  });
+
+  it("rejects deployments that exceed the daily deploy limit", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "w7s-io/demo" });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv();
+    await env.DEPLOYMENTS_KV.put(
+      usageLimitPolicyKey({
+        scope: "repo",
+        orgSlug: "w7s-io",
+        repoSlug: "demo"
+      }),
+      JSON.stringify({
+        version: 1,
+        metrics: {
+          deploy: 1
+        }
+      })
+    );
+    await recordUsageEvent(env, {
+      metric: "deploy",
+      repository: "w7s-io/demo",
+      environment: "production",
+      orgSlug: "w7s-io",
+      repoSlug: "demo",
+      outcome: "success",
+      units: 1
+    });
+
+    const response = await app.fetch(
+      deployRequest({
+        "frontend/dist/index.html": "<h1>Hello</h1>"
+      }),
+      env
+    );
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        status: "error",
+        error: expect.stringContaining("Daily usage limit exceeded for deploy"),
+        details: expect.objectContaining({
+          usageLimit: expect.objectContaining({
+            metric: "deploy",
+            used: 1,
+            requestedUnits: 1,
+            limit: 1,
+            wouldBlock: true
+          })
+        })
+      })
+    );
+    await expect(loadDeploymentRecord(env, "production", "w7s-io", "demo")).resolves.toBeNull();
   });
 
   it("publishes root dist static deployments", async () => {

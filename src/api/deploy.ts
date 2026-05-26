@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { writeAnalyticsEvent } from "../analytics";
 import type { Env } from "../env";
 import { recordUsageEvent } from "../usage";
+import { enforceUsageLimit } from "../usageEnforcement";
 import { jsonError, jsonSuccess, parseBearerToken } from "../http";
 import { parseGitHubRepository, verifyGitHubRepoAccess } from "../deploy/githubAuth";
 import { readDeployArchive } from "../deploy/archive";
@@ -114,6 +115,15 @@ export const handleDeploy = async (c: HonoContext) => {
   if (!allowed) {
     return jsonError("Bearer token is not authorized for this GitHub repository.", 401);
   }
+
+  const limitResponse = await enforceUsageLimit(c.env, {
+    metric: "deploy",
+    environment,
+    orgSlug,
+    repoSlug,
+    units: 1
+  });
+  if (limitResponse) return limitResponse;
 
   let archive;
   let appManifest;

@@ -2,6 +2,7 @@ import { responseOutcome, writeAnalyticsEvent } from "../analytics";
 import { isCronExpressionDue, scheduledMinuteIso } from "../cron";
 import type { Env } from "../env";
 import { recordUsageEvent } from "../usage";
+import { checkBlockedUsageLimit, usageLimitExceededMessage } from "../usageEnforcement";
 import {
   listScheduleMappings,
   loadDeploymentRecord,
@@ -41,6 +42,31 @@ const dispatchSchedule = async (params: {
   const workerTarget = deployment?.targets.worker;
   if (!deployment || !workerTarget) {
     throw new Error(`W7S schedule target deployment was not found for ${params.mapping.repository}.`);
+  }
+
+  const blocked = await checkBlockedUsageLimit(params.env, {
+    metric: "schedule.delivery",
+    environment: params.mapping.environment,
+    orgSlug: params.mapping.orgSlug,
+    repoSlug: params.mapping.repoSlug,
+    units: 1
+  });
+  if (blocked) {
+    writeAnalyticsEvent(params.env, {
+      event: "schedule_delivery",
+      repository: params.mapping.repository,
+      environment: params.mapping.environment,
+      orgSlug: params.mapping.orgSlug,
+      repoSlug: params.mapping.repoSlug,
+      outcome: "error",
+      source: params.mapping.cron,
+      method: "POST",
+      status: 429,
+      durationMs: Date.now() - startedAt,
+      count: 1
+    });
+    console.warn(usageLimitExceededMessage(blocked));
+    return;
   }
 
   const request = new Request(`https://${params.mapping.orgSlug}.w7s.internal${params.mapping.path}`, {
