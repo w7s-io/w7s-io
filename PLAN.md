@@ -113,7 +113,7 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
    - Revisit direct app integration if Cloudflare exposes a direct WFP-compatible consumer model.
 
 6. **Usage accounting and limits**
-   - Status: basic rollups, effective policy reads, and soft warning limits implemented; strict limits still open.
+   - Status: basic rollups, effective policy reads, soft warning limits, and a report-only enforcement hook implemented; strict limits still open.
    - Goal: make platform usage visible before enabling costly primitives.
    - Current API:
      ```text
@@ -124,6 +124,7 @@ W7S should expose useful Cloudflare platform features as small, repo-declared pr
    - Current limits are advisory warnings returned by the usage API; no request path is blocked.
    - Effective policy reads are available at `GET /api/v1/limits/<owner>/<repo>`.
    - W7S-owned KV overrides can target owner, owner/environment, repo, or repo/environment scopes.
+   - `checkUsageLimit(...)` reports whether projected usage would exceed policy, but no existing request path blocks yet.
    - Next phase should add stronger counters and policy enforcement for hard limits.
 
 7. **AI, Vectorize, and AI Gateway**

@@ -57,7 +57,8 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
 - `src/usageLimits.ts`
   - Evaluates daily soft usage limits from a usage rollup.
   - Layers W7S-owned policy overrides from owner, owner/environment, repo, and repo/environment KV records.
-  - Produces warning metadata only; it does not block requests.
+  - Provides a report-only `checkUsageLimit(...)` helper for future enforcement hooks.
+  - Produces warning and would-block metadata only; it does not block requests.
 - `src/deploy/archive.ts`
   - Reads zip archives into normalized file maps.
   - Strips common GitHub archive roots while preserving W7S app roots.
@@ -225,3 +226,4 @@ GET /api/v1/limits/<owner>/<repo>
 - Workflows are app-declared, environment-scoped path consumers. W7S core owns the Cloudflare Workflow definition and starts instances on behalf of apps.
 - Analytics Engine is an optional W7S-core binding. It is for platform observability first; app-visible analytics bindings can be added later.
 - Usage rollups are stored in `DEPLOYMENTS_KV` with read-modify-write updates. They are enough for product visibility and quota planning, but not atomic billing-grade counters. Soft limit warnings are advisory and do not enforce traffic limits.
+- `checkUsageLimit(...)` reports whether a future request would exceed policy, but hard enforcement is intentionally not wired into deploy, RPC, queue, schedule, or workflow paths yet.

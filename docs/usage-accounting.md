@@ -144,6 +144,29 @@ exceeded  above 100%
 
 The response duplicates non-`ok` entries in `warnings` so dashboards and CLIs can show a simple alert list without scanning every metric.
 
+## Enforcement Hook
+
+W7S also has a reusable `checkUsageLimit(...)` helper for future expensive primitives. It reads the effective policy, reads the current daily usage rollup, and projects whether a requested number of units would exceed the daily limit.
+
+The hook is intentionally report-only right now:
+
+```json
+{
+  "mode": "report",
+  "enforcement": "off",
+  "metric": "workflow.create",
+  "used": 8,
+  "requestedUnits": 3,
+  "projectedUnits": 11,
+  "limit": 10,
+  "status": "warning",
+  "projectedStatus": "exceeded",
+  "wouldBlock": true
+}
+```
+
+`wouldBlock: true` means the request would exceed policy if hard enforcement were enabled. No current request path blocks on this value yet.
+
 ## Policy Overrides
 
 Limit policies are platform-owned. Apps cannot raise or lower their own limits through `w7s.json`.

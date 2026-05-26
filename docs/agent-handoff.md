@@ -24,6 +24,7 @@ As of the latest docs update:
 - The core stores best-effort per-app daily usage rollups in `DEPLOYMENTS_KV` and exposes them with soft limit warnings through `GET /api/v1/usage/<owner>/<repo>`.
 - Effective soft limit policies are exposed through `GET /api/v1/limits/<owner>/<repo>` and can be overridden only with W7S-owned KV policy records.
 - W7S operators can manage soft limit policy KV records with `npm run limits:get`, `npm run limits:set`, and `npm run limits:delete`.
+- `checkUsageLimit(...)` exists as a report-only helper. It returns `wouldBlock` metadata for future expensive primitives, but no current traffic path blocks on it.
 - Root `CNAME` files can attach app custom-domain routes when the W7S token can manage that Cloudflare zone.
 - Custom domains use soft TXT verification: the first claim works without TXT, `_w7s.<zone>` becomes an owner/repo allowlist when present, and hostname conflicts require TXT authorization.
 - Empty org roots such as `https://sadasant.w7s.cloud/` show deploy-help HTML instead of a plain 404.
@@ -51,7 +52,7 @@ The point of this repo is to keep the core deploy/routing plane small.
 - Durable Object apps use stable per-repository/environment script names so DO state survives redeploys. DO class renames, transfers, and deletes are not automated yet.
 - Hyperdrive config creation and credential rotation are not managed by W7S yet. Apps must provide existing Cloudflare Hyperdrive IDs.
 - Analytics Engine is currently core-internal only. User app analytics bindings are not exposed yet.
-- Usage rollups are approximate KV counters. Soft limits are advisory warnings only, not atomic billing-grade accounting or hard enforcement. There is no public policy write API yet.
+- Usage rollups are approximate KV counters. Soft limits and `checkUsageLimit(...)` are advisory only, not atomic billing-grade accounting or hard enforcement. There is no public policy write API yet.
 - Queues are provisioned per repository/environment and delivered through W7S core to app HTTP consumer routes.
 - Schedules are delivered through W7S core to app HTTP consumer routes. They currently use best-effort KV locks to avoid duplicate schedule/time dispatches.
 - Workflows are delivered through W7S core to app HTTP consumer routes. The first implementation is a durable one-step dispatch with retries, not a user-defined multi-step WorkflowEntrypoint inside the app Worker.

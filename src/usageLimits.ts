@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import { sanitizeScriptPart } from "./names";
-import type { UsageDailyRollup } from "./usage";
+import { loadUsageDailyRollup, usageDate, type UsageDailyRollup } from "./usage";
 
 export type UsageLimitStatus = "ok" | "warning" | "exceeded";
 export type UsageLimitPolicySource =
@@ -42,6 +42,29 @@ export type UsageLimitEvaluation = {
   mode: "warn";
   metrics: Record<string, UsageLimitMetricEvaluation>;
   warnings: UsageLimitWarning[];
+};
+
+export type UsageLimitCheck = {
+  version: 1;
+  mode: "report";
+  enforcement: "off";
+  metric: string;
+  date: string;
+  environment: string;
+  orgSlug: string;
+  repoSlug: string;
+  used: number;
+  requestedUnits: number;
+  projectedUnits: number;
+  limit: number;
+  remaining: number;
+  usageRatio: number;
+  projectedUsageRatio: number;
+  status: UsageLimitStatus;
+  projectedStatus: UsageLimitStatus;
+  wouldBlock: boolean;
+  source?: UsageLimitPolicySource;
+  policy: UsageLimitPolicy;
 };
 
 export const DEFAULT_DAILY_USAGE_LIMITS: UsageLimitPolicy[] = [
@@ -314,5 +337,71 @@ export const evaluateUsageLimits = (
     mode: "warn",
     metrics,
     warnings
+  };
+};
+
+export const checkUsageLimit = async (
+  env: Env,
+  params: {
+    metric: string;
+    environment: string;
+    orgSlug: string;
+    repoSlug: string;
+    units?: number;
+    at?: Date;
+  }
+): Promise<UsageLimitCheck | null> => {
+  const metric = params.metric.trim().toLowerCase();
+  const requestedUnits = positiveInteger(params.units ?? 1) ?? 1;
+  const at = params.at ?? new Date();
+  const date = usageDate(at);
+  const policies = await loadEffectiveUsageLimitPolicies(env, {
+    environment: params.environment,
+    orgSlug: params.orgSlug,
+    repoSlug: params.repoSlug
+  });
+  const policy = policies.policy[metric];
+  if (!policy) return null;
+
+  const rollup = await loadUsageDailyRollup(env, {
+    date,
+    environment: params.environment,
+    orgSlug: params.orgSlug,
+    repoSlug: params.repoSlug
+  });
+  const used = rollup?.metrics[metric]?.units ?? 0;
+  const projectedUnits = used + requestedUnits;
+  const status = statusFor({
+    used,
+    limit: policy.dailyUnits,
+    warningThreshold: policy.warningThreshold
+  });
+  const projectedStatus = statusFor({
+    used: projectedUnits,
+    limit: policy.dailyUnits,
+    warningThreshold: policy.warningThreshold
+  });
+
+  return {
+    version: 1,
+    mode: "report",
+    enforcement: "off",
+    metric,
+    date,
+    environment: params.environment,
+    orgSlug: params.orgSlug,
+    repoSlug: params.repoSlug,
+    used,
+    requestedUnits,
+    projectedUnits,
+    limit: policy.dailyUnits,
+    remaining: Math.max(0, policy.dailyUnits - used),
+    usageRatio: ratio(used, policy.dailyUnits),
+    projectedUsageRatio: ratio(projectedUnits, policy.dailyUnits),
+    status,
+    projectedStatus,
+    wouldBlock: projectedUnits > policy.dailyUnits,
+    source: policy.source,
+    policy
   };
 };

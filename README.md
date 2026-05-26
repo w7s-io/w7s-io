@@ -86,6 +86,8 @@ npm run limits:set -- --scope repo --owner w7s-io --repo example-workflows --met
 npm run limits:delete -- --scope repo --owner w7s-io --repo example-workflows --metric workflow.create
 ```
 
+Internally, `checkUsageLimit(...)` can report whether projected usage would exceed policy. It is report-only today and does not block existing traffic.
+
 ## Repository Layout
 
 Native backend:

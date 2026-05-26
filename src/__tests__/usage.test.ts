@@ -3,6 +3,7 @@ import { app } from "../worker";
 import { createTestEnv } from "./mocks";
 import { loadUsageDailyRollup, recordUsageEvent } from "../usage";
 import {
+  checkUsageLimit,
   evaluateUsageLimits,
   loadEffectiveUsageLimitPolicies,
   usageLimitPolicyKey
@@ -338,6 +339,73 @@ describe("usage rollups", () => {
         })
       })
     );
+  });
+
+  it("reports whether a future usage event would exceed the effective policy", async () => {
+    const env = createTestEnv();
+    await env.DEPLOYMENTS_KV.put(
+      usageLimitPolicyKey({
+        scope: "repo",
+        orgSlug: "acme",
+        repoSlug: "app"
+      }),
+      JSON.stringify({
+        version: 1,
+        metrics: {
+          "workflow.create": {
+            dailyUnits: 10,
+            warningThreshold: 0.5
+          }
+        }
+      })
+    );
+    await recordUsageEvent(env, {
+      metric: "workflow.create",
+      repository: "acme/app",
+      environment: "production",
+      orgSlug: "acme",
+      repoSlug: "app",
+      outcome: "success",
+      count: 8,
+      units: 8,
+      at: new Date("2026-05-26T12:00:00.000Z")
+    });
+
+    await expect(
+      checkUsageLimit(env, {
+        metric: "workflow.create",
+        environment: "production",
+        orgSlug: "acme",
+        repoSlug: "app",
+        units: 3,
+        at: new Date("2026-05-26T12:30:00.000Z")
+      })
+    ).resolves.toEqual(
+      expect.objectContaining({
+        mode: "report",
+        enforcement: "off",
+        metric: "workflow.create",
+        used: 8,
+        requestedUnits: 3,
+        projectedUnits: 11,
+        limit: 10,
+        status: "warning",
+        projectedStatus: "exceeded",
+        wouldBlock: true,
+        source: "repo"
+      })
+    );
+  });
+
+  it("returns null when checking an unknown usage metric", async () => {
+    await expect(
+      checkUsageLimit(createTestEnv(), {
+        metric: "unknown.metric",
+        environment: "production",
+        orgSlug: "acme",
+        repoSlug: "app"
+      })
+    ).resolves.toBeNull();
   });
 
   it("evaluates soft limit warnings from usage units", () => {
