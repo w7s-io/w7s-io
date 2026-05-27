@@ -181,6 +181,111 @@ export type ScheduleMapping = {
   deployedAt: string;
 };
 
+type CacheEntry<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+const MAX_RUNTIME_CACHE_ENTRIES = 1024;
+const DEPLOYMENT_RECORD_CACHE_TTL_MS = 5_000;
+const CUSTOM_DOMAIN_CACHE_TTL_MS = 5_000;
+const STATIC_MANIFEST_CACHE_TTL_MS = 60_000;
+const EDGE_CACHE_URL_PREFIX = "https://w7s-runtime-metadata-cache.local/";
+
+const deploymentRecordCache = new Map<string, CacheEntry<DeploymentRecord | null>>();
+const customDomainCache = new Map<string, CacheEntry<CustomDomainMapping | null>>();
+const staticManifestCache = new Map<string, CacheEntry<StaticSiteManifest | null>>();
+
+const runtimeCacheScope = (env: Env) =>
+  env.W7S_RUNTIME_CACHE_SCOPE || env.W7S_WORKER_NAME || "default";
+
+const scopedRuntimeCacheKey = (env: Env, key: string) =>
+  `${runtimeCacheScope(env)}\0${key}`;
+
+const readRuntimeCache = <T>(
+  store: Map<string, CacheEntry<T>>,
+  key: string
+) => {
+  const entry = store.get(key);
+  if (!entry) return undefined;
+  if (entry.expiresAt <= Date.now()) {
+    store.delete(key);
+    return undefined;
+  }
+  return entry.value;
+};
+
+const writeRuntimeCache = <T>(
+  store: Map<string, CacheEntry<T>>,
+  key: string,
+  value: T,
+  ttlMs: number
+) => {
+  if (store.size >= MAX_RUNTIME_CACHE_ENTRIES && !store.has(key)) {
+    const oldestKey = store.keys().next().value;
+    if (oldestKey) store.delete(oldestKey);
+  }
+  store.set(key, {
+    value,
+    expiresAt: Date.now() + ttlMs
+  });
+};
+
+const deleteRuntimeCache = <T>(
+  store: Map<string, CacheEntry<T>>,
+  key: string
+) => {
+  store.delete(key);
+};
+
+const metadataEdgeCache = () => {
+  const maybeCaches = (globalThis as unknown as { caches?: { default?: Cache } }).caches;
+  return maybeCaches?.default ?? null;
+};
+
+const metadataEdgeCacheRequest = (key: string) =>
+  new Request(`${EDGE_CACHE_URL_PREFIX}${encodeURIComponent(key)}`);
+
+const readMetadataEdgeCache = async <T>(key: string) => {
+  const cache = metadataEdgeCache();
+  if (!cache) return undefined;
+  try {
+    const response = await cache.match(metadataEdgeCacheRequest(key));
+    if (!response) return undefined;
+    return await response.json() as T;
+  } catch {
+    return undefined;
+  }
+};
+
+const writeMetadataEdgeCache = async <T>(key: string, value: T, ttlMs: number) => {
+  const cache = metadataEdgeCache();
+  if (!cache) return;
+  try {
+    await cache.put(
+      metadataEdgeCacheRequest(key),
+      new Response(JSON.stringify(value), {
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": `public, max-age=${Math.max(1, Math.ceil(ttlMs / 1000))}`
+        }
+      })
+    );
+  } catch {
+    // Metadata edge caching is an optimization; KV remains the source of truth.
+  }
+};
+
+const deleteMetadataEdgeCache = async (key: string) => {
+  const cache = metadataEdgeCache();
+  if (!cache) return;
+  try {
+    await cache.delete(metadataEdgeCacheRequest(key));
+  } catch {
+    // Ignore cache deletion failures; short TTLs prevent long-lived stale routes.
+  }
+};
+
 const shortHash = (value: string) => {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index += 1) {
@@ -237,9 +342,11 @@ export const managedResourceKey = (
   `resource:v1:${sanitizeScriptPart(environment)}:${sanitizeScriptPart(orgSlug)}:${sanitizeScriptPart(repoSlug)}:${kind}:${sanitizeScriptPart(binding)}`;
 
 export const storeDeploymentRecord = async (env: Env, record: DeploymentRecord) => {
+  const key = deploymentKey(record.environment, record.orgSlug, record.repoSlug);
+  const cacheKey = scopedRuntimeCacheKey(env, key);
   await Promise.all([
     env.DEPLOYMENTS_KV.put(
-      deploymentKey(record.environment, record.orgSlug, record.repoSlug),
+      key,
       JSON.stringify(record)
     ),
     record.targets.worker
@@ -259,6 +366,13 @@ export const storeDeploymentRecord = async (env: Env, record: DeploymentRecord) 
         )
       : Promise.resolve()
   ]);
+  writeRuntimeCache(
+    deploymentRecordCache,
+    cacheKey,
+    record,
+    DEPLOYMENT_RECORD_CACHE_TTL_MS
+  );
+  await writeMetadataEdgeCache(key, record, DEPLOYMENT_RECORD_CACHE_TTL_MS);
 };
 
 export const loadDeploymentRecord = async (
@@ -267,14 +381,53 @@ export const loadDeploymentRecord = async (
   orgSlug: string,
   repoSlug: string
 ) => {
-  const raw = await env.DEPLOYMENTS_KV.get(
-    deploymentKey(environment, orgSlug, repoSlug),
-    "json"
-  );
-  if (!raw || typeof raw !== "object") return null;
+  const key = deploymentKey(environment, orgSlug, repoSlug);
+  const cacheKey = scopedRuntimeCacheKey(env, key);
+  const cached = readRuntimeCache(deploymentRecordCache, cacheKey);
+  if (cached !== undefined) return cached;
+
+  const edgeCached = await readMetadataEdgeCache<DeploymentRecord | null>(key);
+  if (edgeCached !== undefined) {
+    writeRuntimeCache(
+      deploymentRecordCache,
+      cacheKey,
+      edgeCached,
+      DEPLOYMENT_RECORD_CACHE_TTL_MS
+    );
+    return edgeCached;
+  }
+
+  const raw = await env.DEPLOYMENTS_KV.get(key, "json");
+  if (!raw || typeof raw !== "object") {
+    writeRuntimeCache(
+      deploymentRecordCache,
+      cacheKey,
+      null,
+      DEPLOYMENT_RECORD_CACHE_TTL_MS
+    );
+    await writeMetadataEdgeCache(key, null, DEPLOYMENT_RECORD_CACHE_TTL_MS);
+    return null;
+  }
   const record = raw as Partial<DeploymentRecord>;
-  if (record.version !== 1 || typeof record.orgSlug !== "string") return null;
-  return record as DeploymentRecord;
+  if (record.version !== 1 || typeof record.orgSlug !== "string") {
+    writeRuntimeCache(
+      deploymentRecordCache,
+      cacheKey,
+      null,
+      DEPLOYMENT_RECORD_CACHE_TTL_MS
+    );
+    await writeMetadataEdgeCache(key, null, DEPLOYMENT_RECORD_CACHE_TTL_MS);
+    return null;
+  }
+  const deployment = record as DeploymentRecord;
+  writeRuntimeCache(
+    deploymentRecordCache,
+    cacheKey,
+    deployment,
+    DEPLOYMENT_RECORD_CACHE_TTL_MS
+  );
+  await writeMetadataEdgeCache(key, deployment, DEPLOYMENT_RECORD_CACHE_TTL_MS);
+  return deployment;
 };
 
 export const loadDeploymentRecordWithCandidates = async (
@@ -336,20 +489,29 @@ export const storeCustomDomainMappings = async (
   hostnames: string[]
 ) => {
   await Promise.all(
-    hostnames.map((hostname) =>
-      env.DEPLOYMENTS_KV.put(
-        customDomainKey(hostname),
-        JSON.stringify({
-          version: 1,
-          hostname,
-          orgSlug: record.orgSlug,
-          repoSlug: record.repoSlug,
-          environment: record.environment,
-          repository: record.repository,
-          deployedAt: record.deployedAt
-        } satisfies CustomDomainMapping)
-      )
-    )
+    hostnames.map((hostname) => {
+      const key = customDomainKey(hostname);
+      const cacheKey = scopedRuntimeCacheKey(env, key);
+      const mapping = {
+        version: 1,
+        hostname,
+        orgSlug: record.orgSlug,
+        repoSlug: record.repoSlug,
+        environment: record.environment,
+        repository: record.repository,
+        deployedAt: record.deployedAt
+      } satisfies CustomDomainMapping;
+      writeRuntimeCache(
+        customDomainCache,
+        cacheKey,
+        mapping,
+        CUSTOM_DOMAIN_CACHE_TTL_MS
+      );
+      return Promise.all([
+        env.DEPLOYMENTS_KV.put(key, JSON.stringify(mapping)),
+        writeMetadataEdgeCache(key, mapping, CUSTOM_DOMAIN_CACHE_TTL_MS)
+      ]);
+    })
   );
 };
 
@@ -381,6 +543,8 @@ export const replaceCustomDomainMappings = async (
           return;
         }
         await env.DEPLOYMENTS_KV.delete(entry.name);
+        deleteRuntimeCache(customDomainCache, scopedRuntimeCacheKey(env, entry.name));
+        await deleteMetadataEdgeCache(entry.name);
       })
     );
     cursor = listed.list_complete ? undefined : listed.cursor;
@@ -390,11 +554,53 @@ export const replaceCustomDomainMappings = async (
 };
 
 export const loadCustomDomainMapping = async (env: Env, hostname: string) => {
-  const raw = await env.DEPLOYMENTS_KV.get(customDomainKey(hostname), "json");
-  if (!raw || typeof raw !== "object") return null;
+  const key = customDomainKey(hostname);
+  const cacheKey = scopedRuntimeCacheKey(env, key);
+  const cached = readRuntimeCache(customDomainCache, cacheKey);
+  if (cached !== undefined) return cached;
+
+  const edgeCached = await readMetadataEdgeCache<CustomDomainMapping | null>(key);
+  if (edgeCached !== undefined) {
+    writeRuntimeCache(
+      customDomainCache,
+      cacheKey,
+      edgeCached,
+      CUSTOM_DOMAIN_CACHE_TTL_MS
+    );
+    return edgeCached;
+  }
+
+  const raw = await env.DEPLOYMENTS_KV.get(key, "json");
+  if (!raw || typeof raw !== "object") {
+    writeRuntimeCache(
+      customDomainCache,
+      cacheKey,
+      null,
+      CUSTOM_DOMAIN_CACHE_TTL_MS
+    );
+    await writeMetadataEdgeCache(key, null, CUSTOM_DOMAIN_CACHE_TTL_MS);
+    return null;
+  }
   const mapping = raw as Partial<CustomDomainMapping>;
-  if (mapping.version !== 1 || typeof mapping.hostname !== "string") return null;
-  return mapping as CustomDomainMapping;
+  if (mapping.version !== 1 || typeof mapping.hostname !== "string") {
+    writeRuntimeCache(
+      customDomainCache,
+      cacheKey,
+      null,
+      CUSTOM_DOMAIN_CACHE_TTL_MS
+    );
+    await writeMetadataEdgeCache(key, null, CUSTOM_DOMAIN_CACHE_TTL_MS);
+    return null;
+  }
+  const customDomain = mapping as CustomDomainMapping;
+  writeRuntimeCache(
+    customDomainCache,
+    cacheKey,
+    customDomain,
+    CUSTOM_DOMAIN_CACHE_TTL_MS
+  );
+  await writeMetadataEdgeCache(key, customDomain, CUSTOM_DOMAIN_CACHE_TTL_MS);
+  return customDomain;
 };
 
 export const storeQueueMappings = async (
@@ -604,14 +810,63 @@ export const storeStaticSiteManifest = async (
     manifest.repoSlug,
     manifest.assetPrefix
   );
+  const cacheKey = scopedRuntimeCacheKey(env, key);
   await env.DEPLOYMENTS_KV.put(key, JSON.stringify(manifest));
+  writeRuntimeCache(
+    staticManifestCache,
+    cacheKey,
+    manifest,
+    STATIC_MANIFEST_CACHE_TTL_MS
+  );
+  await writeMetadataEdgeCache(key, manifest, STATIC_MANIFEST_CACHE_TTL_MS);
   return key;
 };
 
 export const loadStaticSiteManifest = async (env: Env, key: string) => {
+  const cacheKey = scopedRuntimeCacheKey(env, key);
+  const cached = readRuntimeCache(staticManifestCache, cacheKey);
+  if (cached !== undefined) return cached;
+
+  const edgeCached = await readMetadataEdgeCache<StaticSiteManifest | null>(key);
+  if (edgeCached !== undefined) {
+    writeRuntimeCache(
+      staticManifestCache,
+      cacheKey,
+      edgeCached,
+      STATIC_MANIFEST_CACHE_TTL_MS
+    );
+    return edgeCached;
+  }
+
   const raw = await env.DEPLOYMENTS_KV.get(key, "json");
-  if (!raw || typeof raw !== "object") return null;
+  if (!raw || typeof raw !== "object") {
+    writeRuntimeCache(
+      staticManifestCache,
+      cacheKey,
+      null,
+      STATIC_MANIFEST_CACHE_TTL_MS
+    );
+    await writeMetadataEdgeCache(key, null, STATIC_MANIFEST_CACHE_TTL_MS);
+    return null;
+  }
   const manifest = raw as Partial<StaticSiteManifest>;
-  if (manifest.version !== 1 || typeof manifest.assetPrefix !== "string") return null;
-  return manifest as StaticSiteManifest;
+  if (manifest.version !== 1 || typeof manifest.assetPrefix !== "string") {
+    writeRuntimeCache(
+      staticManifestCache,
+      cacheKey,
+      null,
+      STATIC_MANIFEST_CACHE_TTL_MS
+    );
+    await writeMetadataEdgeCache(key, null, STATIC_MANIFEST_CACHE_TTL_MS);
+    return null;
+  }
+  const staticManifest = manifest as StaticSiteManifest;
+  writeRuntimeCache(
+    staticManifestCache,
+    cacheKey,
+    staticManifest,
+    STATIC_MANIFEST_CACHE_TTL_MS
+  );
+  await writeMetadataEdgeCache(key, staticManifest, STATIC_MANIFEST_CACHE_TTL_MS);
+  return staticManifest;
 };

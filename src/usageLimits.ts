@@ -351,10 +351,12 @@ export const loadEffectiveUsageLimitPolicies = async (
     }
   ];
 
-  for (const { scope, key } of keys) {
-    const { lookup, record } = await readPolicyRecord(env, key, scope);
+  const records = await Promise.all(
+    keys.map(({ scope, key }) => readPolicyRecord(env, key, scope))
+  );
+  for (const { lookup, record } of records) {
     lookups.push(lookup);
-    if (record) applyPolicyRecord(policies, record, scope);
+    if (record) applyPolicyRecord(policies, record, lookup.scope);
   }
 
   const ordered = [...policies.values()].sort(policySort);
@@ -399,9 +401,11 @@ const loadEffectiveOwnerUsageLimitPolicies = async (
     }
   ];
 
-  for (const { scope, key } of keys) {
-    const { record } = await readPolicyRecord(env, key, scope);
-    if (record) applyPolicyRecord(policies, record, scope);
+  const records = await Promise.all(
+    keys.map(({ scope, key }) => readPolicyRecord(env, key, scope))
+  );
+  for (const { lookup, record } of records) {
+    if (record) applyPolicyRecord(policies, record, lookup.scope);
   }
   return Object.fromEntries([...policies.values()].sort(policySort).map((policy) => [policy.metric, policy]));
 };
@@ -433,9 +437,11 @@ const loadEffectiveGlobalUsageLimitPolicies = async (
     }
   ];
 
-  for (const { scope, key } of keys) {
-    const { record } = await readPolicyRecord(env, key, scope);
-    if (record) applyPolicyRecord(policies, record, scope);
+  const records = await Promise.all(
+    keys.map(({ scope, key }) => readPolicyRecord(env, key, scope))
+  );
+  for (const { lookup, record } of records) {
+    if (record) applyPolicyRecord(policies, record, lookup.scope);
   }
   return Object.fromEntries([...policies.values()].sort(policySort).map((policy) => [policy.metric, policy]));
 };
@@ -501,36 +507,44 @@ export const checkUsageLimit = async (
   const requestedUnits = positiveInteger(params.units ?? 1) ?? 1;
   const at = params.at ?? new Date();
   const date = usageDate(at);
-  const policies = await loadEffectiveUsageLimitPolicies(env, {
-    environment: params.environment,
-    orgSlug: params.orgSlug,
-    repoSlug: params.repoSlug
-  });
-  const ownerPolicies = await loadEffectiveOwnerUsageLimitPolicies(env, {
-    environment: params.environment,
-    orgSlug: params.orgSlug
-  });
-  const globalPolicies = await loadEffectiveGlobalUsageLimitPolicies(env, {
-    environment: params.environment
-  });
+  const [
+    policies,
+    ownerPolicies,
+    globalPolicies,
+    repoRollup,
+    ownerRollup,
+    globalRollup
+  ] = await Promise.all([
+    loadEffectiveUsageLimitPolicies(env, {
+      environment: params.environment,
+      orgSlug: params.orgSlug,
+      repoSlug: params.repoSlug
+    }),
+    loadEffectiveOwnerUsageLimitPolicies(env, {
+      environment: params.environment,
+      orgSlug: params.orgSlug
+    }),
+    loadEffectiveGlobalUsageLimitPolicies(env, {
+      environment: params.environment
+    }),
+    loadUsageDailyRollup(env, {
+      date,
+      environment: params.environment,
+      orgSlug: params.orgSlug,
+      repoSlug: params.repoSlug
+    }),
+    loadUsageOwnerDailyRollup(env, {
+      date,
+      environment: params.environment,
+      orgSlug: params.orgSlug
+    }),
+    loadUsageGlobalDailyRollup(env, {
+      date,
+      environment: params.environment
+    })
+  ]);
   const repoPolicy = policies.policy[metric];
   if (!repoPolicy && !ownerPolicies[metric] && !globalPolicies[metric]) return null;
-
-  const repoRollup = await loadUsageDailyRollup(env, {
-    date,
-    environment: params.environment,
-    orgSlug: params.orgSlug,
-    repoSlug: params.repoSlug
-  });
-  const ownerRollup = await loadUsageOwnerDailyRollup(env, {
-    date,
-    environment: params.environment,
-    orgSlug: params.orgSlug
-  });
-  const globalRollup = await loadUsageGlobalDailyRollup(env, {
-    date,
-    environment: params.environment
-  });
 
   const buildCheck = (
     scope: UsageLimitScope,

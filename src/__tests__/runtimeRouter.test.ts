@@ -121,7 +121,20 @@ describe("runtime router", () => {
 
   it("records and enforces runtime request limits", async () => {
     const env = createTestEnv();
-    await storeStaticDemoDeployment(env);
+    const record = await storeStaticDemoDeployment(env);
+    await storeDeploymentRecord(env, {
+      ...record,
+      targets: {
+        ...record.targets,
+        worker: {
+          namespace: "w7s-isolate",
+          scriptName: "w7s-io--demo--production",
+          entrypoint: "backend/index.js",
+          compatibilityDate: "2026-05-23",
+          startupTimeMs: null
+        }
+      }
+    });
     await env.DEPLOYMENTS_KV.put(
       usageLimitPolicyKey({
         scope: "repo",
@@ -153,8 +166,63 @@ describe("runtime router", () => {
       env
     );
 
-    expect(response.status).toBe(429);
-    await expect(response.json()).resolves.toEqual(
+    expect(response.status).toBe(200);
+
+    const blocked = await app.fetch(
+      new Request("https://w7s-io.w7s.cloud/demo/", {
+        headers: {
+          host: "w7s-io.w7s.cloud"
+        }
+      }),
+      env
+    );
+
+    expect(blocked.status).toBe(429);
+    await expect(blocked.json()).resolves.toEqual(
+      expect.objectContaining({
+        error: expect.stringContaining("runtime.request")
+      })
+    );
+  });
+
+  it("serves static-only requests while scheduling daily cap suspension", async () => {
+    const env = createTestEnv();
+    await storeStaticDemoDeployment(env);
+    await env.DEPLOYMENTS_KV.put(
+      usageLimitPolicyKey({
+        scope: "repo",
+        orgSlug: "w7s-io",
+        repoSlug: "demo"
+      }),
+      JSON.stringify({
+        version: 1,
+        metrics: {
+          "runtime.request": 1
+        }
+      })
+    );
+
+    const first = await app.fetch(
+      new Request("https://w7s-io.w7s.cloud/demo/", {
+        headers: {
+          host: "w7s-io.w7s.cloud"
+        }
+      }),
+      env
+    );
+    expect(first.status).toBe(200);
+
+    const second = await app.fetch(
+      new Request("https://w7s-io.w7s.cloud/demo/", {
+        headers: {
+          host: "w7s-io.w7s.cloud",
+          accept: "application/json"
+        }
+      }),
+      env
+    );
+    expect(second.status).toBe(429);
+    await expect(second.json()).resolves.toEqual(
       expect.objectContaining({
         error: expect.stringContaining("runtime.request")
       })

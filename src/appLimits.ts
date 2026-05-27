@@ -15,6 +15,98 @@ export type AppLimitState = {
   resumeAfter?: string;
 };
 
+type CacheEntry<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+const APP_LIMIT_STATE_CACHE_TTL_MS = 5_000;
+const APP_LIMIT_STATE_CACHE_MAX_ENTRIES = 1024;
+const EDGE_CACHE_URL_PREFIX = "https://w7s-app-limit-cache.local/";
+const appLimitStateCache = new Map<string, CacheEntry<AppLimitState | null>>();
+
+const appLimitCacheScope = (env: Env) =>
+  env.W7S_RUNTIME_CACHE_SCOPE || env.W7S_WORKER_NAME || "default";
+
+const scopedAppLimitCacheKey = (env: Env, key: string) =>
+  `${appLimitCacheScope(env)}\0${key}`;
+
+const readAppLimitMemoryCache = (key: string) => {
+  const entry = appLimitStateCache.get(key);
+  if (!entry) return undefined;
+  if (entry.expiresAt <= Date.now()) {
+    appLimitStateCache.delete(key);
+    return undefined;
+  }
+  return entry.value;
+};
+
+const writeAppLimitMemoryCache = (
+  key: string,
+  value: AppLimitState | null
+) => {
+  if (appLimitStateCache.size >= APP_LIMIT_STATE_CACHE_MAX_ENTRIES && !appLimitStateCache.has(key)) {
+    const oldestKey = appLimitStateCache.keys().next().value;
+    if (oldestKey) appLimitStateCache.delete(oldestKey);
+  }
+  appLimitStateCache.set(key, {
+    value,
+    expiresAt: Date.now() + APP_LIMIT_STATE_CACHE_TTL_MS
+  });
+};
+
+const deleteAppLimitMemoryCache = (key: string) => {
+  appLimitStateCache.delete(key);
+};
+
+const edgeCache = () => {
+  const maybeCaches = (globalThis as unknown as { caches?: { default?: Cache } }).caches;
+  return maybeCaches?.default ?? null;
+};
+
+const edgeCacheRequest = (key: string) =>
+  new Request(`${EDGE_CACHE_URL_PREFIX}${encodeURIComponent(key)}`);
+
+const readAppLimitEdgeCache = async (key: string) => {
+  const cache = edgeCache();
+  if (!cache) return undefined;
+  try {
+    const response = await cache.match(edgeCacheRequest(key));
+    if (!response) return undefined;
+    return await response.json() as AppLimitState | null;
+  } catch {
+    return undefined;
+  }
+};
+
+const writeAppLimitEdgeCache = async (key: string, value: AppLimitState | null) => {
+  const cache = edgeCache();
+  if (!cache) return;
+  try {
+    await cache.put(
+      edgeCacheRequest(key),
+      new Response(JSON.stringify(value), {
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": `public, max-age=${Math.ceil(APP_LIMIT_STATE_CACHE_TTL_MS / 1000)}`
+        }
+      })
+    );
+  } catch {
+    // App suspension state is backed by KV; edge caching is only a latency optimization.
+  }
+};
+
+const deleteAppLimitEdgeCache = async (key: string) => {
+  const cache = edgeCache();
+  if (!cache) return;
+  try {
+    await cache.delete(edgeCacheRequest(key));
+  } catch {
+    // Short TTLs keep stale suspension cache entries bounded.
+  }
+};
+
 export const secondsUntilNextUtcDay = (now = new Date()) => {
   const next = new Date(now);
   next.setUTCHours(24, 0, 0, 0);
@@ -49,24 +141,50 @@ export const loadAppLimitState = async (
   }
 ) => {
   const key = appLimitStateKey(params);
+  const cacheKey = scopedAppLimitCacheKey(env, key);
+  const cached = readAppLimitMemoryCache(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const edgeCached = await readAppLimitEdgeCache(key);
+  if (edgeCached !== undefined) {
+    writeAppLimitMemoryCache(cacheKey, edgeCached);
+    return edgeCached;
+  }
+
   const raw = await env.DEPLOYMENTS_KV.get(key, "json");
-  if (!raw || typeof raw !== "object") return null;
+  if (!raw || typeof raw !== "object") {
+    writeAppLimitMemoryCache(cacheKey, null);
+    await writeAppLimitEdgeCache(key, null);
+    return null;
+  }
   const state = raw as Partial<AppLimitState>;
-  if (state.version !== 1 || state.status !== "suspended") return null;
+  if (state.version !== 1 || state.status !== "suspended") {
+    writeAppLimitMemoryCache(cacheKey, null);
+    await writeAppLimitEdgeCache(key, null);
+    return null;
+  }
 
   const at = params.at ?? new Date();
   if (state.resumeAfter && new Date(state.resumeAfter).getTime() <= at.getTime()) {
     await env.DEPLOYMENTS_KV.delete(key);
+    deleteAppLimitMemoryCache(cacheKey);
+    await deleteAppLimitEdgeCache(key);
     return null;
   }
-  return state as AppLimitState;
+  const appLimitState = state as AppLimitState;
+  writeAppLimitMemoryCache(cacheKey, appLimitState);
+  await writeAppLimitEdgeCache(key, appLimitState);
+  return appLimitState;
 };
 
 export const storeAppLimitState = async (env: Env, state: AppLimitState) => {
-  await env.DEPLOYMENTS_KV.put(
-    appLimitStateKey(state),
-    JSON.stringify(state)
-  );
+  const key = appLimitStateKey(state);
+  const cacheKey = scopedAppLimitCacheKey(env, key);
+  await Promise.all([
+    env.DEPLOYMENTS_KV.put(key, JSON.stringify(state)),
+    writeAppLimitEdgeCache(key, state)
+  ]);
+  writeAppLimitMemoryCache(cacheKey, state);
 };
 
 export const suspendAppForLimits = async (
@@ -102,7 +220,13 @@ export const clearAppLimitState = async (
     repoSlug: string;
   }
 ) => {
-  await env.DEPLOYMENTS_KV.delete(appLimitStateKey(params));
+  const key = appLimitStateKey(params);
+  const cacheKey = scopedAppLimitCacheKey(env, key);
+  await Promise.all([
+    env.DEPLOYMENTS_KV.delete(key),
+    deleteAppLimitEdgeCache(key)
+  ]);
+  deleteAppLimitMemoryCache(cacheKey);
 };
 
 export const appSuspendedResponse = (

@@ -44,6 +44,7 @@ export interface Env {
   W7S_USAGE_RETENTION_DAYS?: string;
   W7S_WORKER_SCRIPT_RETENTION_DAYS?: string;
   W7S_WORKER_NAME?: string;
+  W7S_RUNTIME_CACHE_SCOPE?: string;
   W7S_BASE_DOMAIN?: string;
   APP_COMMIT_ID?: string;
   APP_DEPLOY_BRANCH?: string;

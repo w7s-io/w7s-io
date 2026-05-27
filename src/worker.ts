@@ -42,8 +42,16 @@ app.get("/api/v1/limits/*", handleLimitsGet);
 app.get("/api/v1/analytics/*", handleAnalyticsGet);
 app.get("/api/v1/logs/*", handleLogsGet);
 
+const optionalExecutionCtx = (c: Context<{ Bindings: Env }>) => {
+  try {
+    return c.executionCtx;
+  } catch {
+    return undefined;
+  }
+};
+
 app.all("*", async (c) => {
-  const runtimeResponse = await resolveRuntimeRequest(c.req.raw, c.env);
+  const runtimeResponse = await resolveRuntimeRequest(c.req.raw, c.env, optionalExecutionCtx(c));
   if (runtimeResponse) return runtimeResponse;
 
   if (c.req.method !== "GET" && c.req.method !== "HEAD") {

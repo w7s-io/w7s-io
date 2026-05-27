@@ -48,9 +48,11 @@ export const checkBlockedUsageLimit = async (
     at?: Date;
   }
 ) => {
-  const rateCheck = await checkRateLimit(env, params);
+  const [rateCheck, check] = await Promise.all([
+    checkRateLimit(env, params),
+    checkUsageLimit(env, params)
+  ]);
   if (rateCheck?.wouldBlock) return rateCheck;
-  const check = await checkUsageLimit(env, params);
   return check?.wouldBlock ? check : null;
 };
 
@@ -65,8 +67,10 @@ export const enforceUsageLimit = async (
     at?: Date;
   }
 ) => {
-  const rateCheck = await checkRateLimit(env, params);
+  const [rateCheck, blocked] = await Promise.all([
+    checkRateLimit(env, params),
+    checkUsageLimit(env, params)
+  ]);
   if (rateCheck?.wouldBlock) return rateLimitExceededResponse(rateCheck);
-  const blocked = await checkUsageLimit(env, params);
   return blocked?.wouldBlock ? usageLimitExceededResponse(blocked) : null;
 };

@@ -207,9 +207,12 @@ export class MemoryWorkflowBinding {
   }
 }
 
+let testEnvCounter = 0;
+
 export const createTestEnv = (overrides: Partial<Env> = {}): Env => ({
   DEPLOYMENTS_KV: new MemoryKV() as unknown as KVNamespace,
   STATIC_ASSETS: new MemoryR2() as unknown as R2Bucket,
   W7S_BASE_DOMAIN: "w7s.cloud",
+  W7S_RUNTIME_CACHE_SCOPE: `test-${testEnvCounter += 1}`,
   ...overrides
 });
