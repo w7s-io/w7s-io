@@ -31,10 +31,10 @@ describe("landing page", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
-    expect(body).not.toContain("<h1>");
-    expect(body).toContain("is powered by");
-    expect(body).toContain("https://w7s.io");
-    expect(body).toContain("https://community.w7s.io/docs/");
+    expect(body).toContain("<title>W7S Cloud</title>");
+    expect(body).toContain("<h1>The Cloud that <em>just works</em>.</h1>");
+    expect(body).toContain("GitHub Actions builds your app");
+    expect(body).toContain("https://www.w7s.io/docs/");
     expect(body).toContain("name: Deploy");
     expect(body).toContain("push:");
     expect(body).toContain("workflow_dispatch");

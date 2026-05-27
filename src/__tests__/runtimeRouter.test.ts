@@ -408,9 +408,9 @@ describe("runtime router", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
-    expect(body).not.toContain("<h1>");
-    expect(body).toContain("<h2>Status:</h2>");
-    expect(body).not.toContain("Deploy target");
+    expect(body).toContain("<h1>The Cloud that <em>just works</em>.</h1>");
+    expect(body).toContain("Deploy target");
+    expect(body).toContain("<h2>Nothing is deployed here yet.</h2>");
     expect(body).toContain("Nothing is deployed at <code>https://sadasant.w7s.cloud/</code> yet.");
     expect(body).toContain("https://github.com/sadasant/sadasant");
     expect(body).toContain("<code>sadasant/sadasant</code>");
@@ -447,9 +447,9 @@ describe("runtime router", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
-    expect(body).not.toContain("<h1>");
-    expect(body).toContain("<h2>Status:</h2>");
-    expect(body).not.toContain("Deploy target");
+    expect(body).toContain("<h1>The Cloud that <em>just works</em>.</h1>");
+    expect(body).toContain("Deploy target");
+    expect(body).toContain("<h2>Nothing is deployed here yet.</h2>");
     expect(body).toContain("Nothing is deployed at <code>https://sadasant.w7s.cloud/missing-repo/</code> yet.");
     expect(body).toContain("https://github.com/sadasant/missing-repo");
     expect(body).toContain("<code>sadasant/missing-repo</code>");
