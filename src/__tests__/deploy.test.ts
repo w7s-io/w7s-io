@@ -224,6 +224,48 @@ describe("deploy API", () => {
     expect(record?.targets.static?.hasIndex).toBe(true);
   });
 
+  it("publishes frontend build output and warns when an invalid backend folder is skipped", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "w7s-io/demo" });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv();
+    const response = await app.fetch(
+      deployRequest({
+        "backend/package.json": JSON.stringify({ scripts: { start: "node server.js" } }),
+        "frontend/build/index.html": "<h1>Hello</h1>",
+        "frontend/build/static/js/main.js": "console.log('ok')"
+      }),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      data?: {
+        deployment?: DeploymentRecord;
+        deploymentWarnings?: Array<{ code?: string; message?: string; target?: string }>;
+      };
+    };
+    const record = await loadDeploymentRecord(env, "production", "w7s-io", "demo");
+    expect(record?.targets.static?.fileCount).toBe(2);
+    expect(record?.targets.static?.hasIndex).toBe(true);
+    expect(record?.targets.worker).toBeUndefined();
+    expect(body.data?.deployment?.targets.static?.fileCount).toBe(2);
+    expect(body.data?.deploymentWarnings).toEqual([
+      expect.objectContaining({
+        code: "native_backend_skipped",
+        target: "backend",
+        message: expect.stringContaining("The frontend was published normally")
+      })
+    ]);
+  });
+
   it("rejects deployments that exceed free-tier shape caps", async () => {
     vi.stubGlobal(
       "fetch",

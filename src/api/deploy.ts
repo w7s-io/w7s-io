@@ -7,7 +7,14 @@ import { jsonError, jsonSuccess, parseBearerToken } from "../http";
 import { parseGitHubRepository, verifyGitHubRepoAccess } from "../deploy/githubAuth";
 import { readDeployArchive } from "../deploy/archive";
 import { validateDeployLimits } from "../deploy/deployLimits";
-import { detectWorkerEntrypoint, hasNativeWorkerRoot, publishIsolateWorker } from "../deploy/isolatePublisher";
+import {
+  detectNativeWorkerRoots,
+  detectWorkerEntrypoint,
+  ENTRYPOINT_CANDIDATES,
+  hasNativeWorkerRoot,
+  NATIVE_ENTRYPOINT_REQUIREMENT,
+  publishIsolateWorker
+} from "../deploy/isolatePublisher";
 import { hasStaticSite, publishStaticSite } from "../deploy/staticPublisher";
 import { readAppManifest } from "../deploy/appManifest";
 import { readDeployValues } from "../deploy/deployValues";
@@ -44,6 +51,13 @@ import {
 import { enforceAppNotSuspended } from "../appLimits";
 
 type HonoContext = Context<{ Bindings: Env }>;
+
+type DeployWarning = {
+  code: "native_backend_skipped";
+  target: string;
+  message: string;
+  requiredEntrypoints: string[];
+};
 
 const readHeader = (c: HonoContext, name: string) => c.req.header(name)?.trim() ?? "";
 
@@ -89,6 +103,22 @@ const buildScriptTags = (params: {
   `w7s-repo-${scriptTagPart(params.repoSlug)}`,
   `w7s-app-${scriptTagPart(`${params.orgSlug}-${params.repoSlug}`)}`
 ];
+
+const nativeEntrypointError = () =>
+  `Native backend deploy requires ${NATIVE_ENTRYPOINT_REQUIREMENT}.`;
+
+const nativeBackendSkippedWarning = (roots: string[]): DeployWarning => {
+  const target = roots.join(", ") || "native backend";
+  const label = roots.length > 0
+    ? roots.map((root) => `${root}/`).join(", ")
+    : "A native backend folder";
+  return {
+    code: "native_backend_skipped",
+    target,
+    message: `${label} was present, but W7S did not deploy a backend because no supported backend entrypoint was found. The frontend was published normally. Add ${NATIVE_ENTRYPOINT_REQUIREMENT} to deploy a backend.`,
+    requiredEntrypoints: [...ENTRYPOINT_CANDIDATES]
+  };
+};
 
 export const handleDeploy = async (c: HonoContext) => {
   const token = parseBearerToken(c.req.raw);
@@ -161,10 +191,14 @@ export const handleDeploy = async (c: HonoContext) => {
     return jsonError(error instanceof Error ? error.message : String(error), 400);
   }
 
-  const hasNativeBackend = hasNativeWorkerRoot(archive);
+  const nativeRoots = detectNativeWorkerRoots(archive);
+  const hasNativeRoot = hasNativeWorkerRoot(archive);
+  const nativeEntrypoint = hasNativeRoot ? detectWorkerEntrypoint(archive) : null;
+  const hasNativeBackend = Boolean(nativeEntrypoint);
   const hasStatic = hasStaticSite(archive, {
     allowAssetOnly: hasNativeBackend
   });
+  const deploymentWarnings: DeployWarning[] = [];
   let customDomains: string[];
   try {
     customDomains = readCustomDomains(archive);
@@ -172,7 +206,11 @@ export const handleDeploy = async (c: HonoContext) => {
     return jsonError(error instanceof Error ? error.message : String(error), 400);
   }
   if (!hasNativeBackend && !hasStatic) {
+    if (hasNativeRoot) return jsonError(nativeEntrypointError(), 400);
     return jsonError("Archive must contain worker/, backend/, dist/server/, or static frontend output.", 400);
+  }
+  if (hasNativeRoot && !hasNativeBackend && hasStatic) {
+    deploymentWarnings.push(nativeBackendSkippedWarning(nativeRoots));
   }
   if (!hasNativeBackend && appManifest.queues.length > 0) {
     return jsonError("Queues require a native backend deployment.", 400);
@@ -216,7 +254,7 @@ export const handleDeploy = async (c: HonoContext) => {
     if (hasNativeBackend) {
       const entrypoint = detectWorkerEntrypoint(archive);
       if (!entrypoint) {
-        return jsonError("Native backend deploy requires worker/index.js, worker/index.mjs, worker/index.ts, worker/index.mts, backend/index.js, backend/index.mjs, backend/index.ts, backend/index.mts, dist/server/index.js, or dist/server/index.mjs.", 400);
+        return jsonError(nativeEntrypointError(), 400);
       }
       const usesDurableObjects = appManifest.bindings.durableObjects.length > 0;
       const scriptName = usesDurableObjects
@@ -419,6 +457,7 @@ export const handleDeploy = async (c: HonoContext) => {
         : {})
     },
     url: publicDeploymentUrl(c.env, orgSlug, repoSlug, environment, attachedCustomDomains),
+    ...(deploymentWarnings.length > 0 ? { deploymentWarnings } : {}),
     ...(attachedCustomDomains.length > 0 ? { customDomains: attachedCustomDomains } : {}),
     ...(customDomainWarnings.length > 0 ? { customDomainWarnings } : {}),
     ...(blockedCustomDomains.length > 0 ? { blockedCustomDomains } : {})

@@ -93,6 +93,8 @@ Static frontend root:
 
 ```text
 frontend/dist/
+frontend/build/
+frontend/out/
 dist/client/
 dist/
 build/
@@ -100,6 +102,8 @@ out/
 ```
 
 Both native backend and static frontend can be present in the same archive.
+
+If a native folder such as `backend/` is present but does not contain one of the supported `index.*` entrypoints, W7S still deploys a valid static frontend and returns a `deploymentWarnings` entry explaining that the backend was skipped. If there is no deployable frontend, the same archive is rejected.
 
 Cloudflare/Vite SSR builds are supported with:
 
@@ -502,6 +506,25 @@ Example:
     },
     "url": "https://whereis.carlosguerrero.com/",
     "customDomains": ["whereis.carlosguerrero.com"],
+    "deploymentWarnings": [
+      {
+        "code": "native_backend_skipped",
+        "target": "backend",
+        "message": "backend/ was present, but W7S did not deploy a backend because no supported backend entrypoint was found. The frontend was published normally.",
+        "requiredEntrypoints": [
+          "worker/index.js",
+          "worker/index.mjs",
+          "worker/index.ts",
+          "worker/index.mts",
+          "backend/index.js",
+          "backend/index.mjs",
+          "backend/index.ts",
+          "backend/index.mts",
+          "dist/server/index.js",
+          "dist/server/index.mjs"
+        ]
+      }
+    ],
     "customDomainWarnings": [
       {
         "hostname": "whereis.carlosguerrero.com",
@@ -556,7 +579,9 @@ For same-name repos, the public URL is the org root. A deploy from `guerrerocarl
 - `400 Archive must contain worker/, backend/, dist/server/, or static frontend output`
   - Archive does not contain a deployable root.
 - `400 Native backend deploy requires ...`
-  - `backend/` or `worker/` exists but no supported `index.*` entrypoint exists.
+  - A native folder exists but no supported `index.*` entrypoint exists, and there is no deployable frontend to publish.
+- `200 success` with `deploymentWarnings`
+  - A deployable frontend was published, but a native folder such as `backend/` was skipped because it does not contain a supported `index.*` entrypoint.
 - `400 Durable Objects require a native backend deployment.`
   - `w7s.json` declares `bindings.durableObjects`, but the archive only contains static frontend output.
 - `400 Hyperdrive bindings require a native backend deployment.`

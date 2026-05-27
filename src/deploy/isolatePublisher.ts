@@ -46,8 +46,8 @@ export type IsolatePublishResult = {
 const DEFAULT_DISPATCH_NAMESPACE = "w7s-isolate";
 const DEFAULT_COMPATIBILITY_DATE = "2026-05-23";
 const DEFAULT_LOG_TAIL_CONSUMER = "w7s-io";
-const NATIVE_APP_ROOTS = ["worker", "backend", "dist/server"] as const;
-const ENTRYPOINT_CANDIDATES = [
+export const NATIVE_APP_ROOTS = ["worker", "backend", "dist/server"] as const;
+export const ENTRYPOINT_CANDIDATES = [
   "worker/index.ts",
   "worker/index.mts",
   "worker/index.js",
@@ -59,6 +59,8 @@ const ENTRYPOINT_CANDIDATES = [
   "dist/server/index.js",
   "dist/server/index.mjs"
 ];
+export const NATIVE_ENTRYPOINT_REQUIREMENT =
+  "worker/index.js, worker/index.mjs, worker/index.ts, worker/index.mts, backend/index.js, backend/index.mjs, backend/index.ts, backend/index.mts, dist/server/index.js, or dist/server/index.mjs";
 
 const babelStandalone =
   (BabelStandalone as unknown as { default?: BabelStandaloneApi }).default ??
@@ -93,10 +95,13 @@ const isRuntimeExternalImport = (request: string) => request.startsWith("node:")
 export const detectWorkerEntrypoint = (archive: DeployArchive) =>
   ENTRYPOINT_CANDIDATES.find((path) => archive.files.has(path)) ?? null;
 
-export const hasNativeWorkerRoot = (archive: DeployArchive) =>
-  NATIVE_APP_ROOTS.some((root) =>
+export const detectNativeWorkerRoots = (archive: DeployArchive) =>
+  NATIVE_APP_ROOTS.filter((root) =>
     archive.entries.some((entry) => entry.path.startsWith(`${root}/`))
   );
+
+export const hasNativeWorkerRoot = (archive: DeployArchive) =>
+  detectNativeWorkerRoots(archive).length > 0;
 
 const resolveNativeAppRoot = (path: string) => {
   const normalized = normalizeArchivePath(path);
@@ -356,7 +361,7 @@ export const publishIsolateWorker = async (params: {
     optionalCloudflareString(params.env.CLOUDFLARE_DISPATCH_NAMESPACE) ?? DEFAULT_DISPATCH_NAMESPACE;
   const entrypoint = normalizeArchivePath(params.entrypoint);
   if (!ENTRYPOINT_CANDIDATES.includes(entrypoint)) {
-    throw new Error("Native deploy requires worker/index.js, worker/index.mjs, worker/index.ts, worker/index.mts, backend/index.js, backend/index.mjs, backend/index.ts, backend/index.mts, dist/server/index.js, or dist/server/index.mjs.");
+    throw new Error(`Native deploy requires ${NATIVE_ENTRYPOINT_REQUIREMENT}.`);
   }
   const workerConfig = readWorkerConfig(params.archive, entrypoint);
   const compatibilityDate =

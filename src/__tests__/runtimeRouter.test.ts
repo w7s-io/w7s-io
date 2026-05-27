@@ -178,8 +178,7 @@ describe("runtime router", () => {
           remaining: 0,
           message: "d1.rows_read exceeded the daily limit."
         }
-      ],
-      at: new Date("2026-05-26T12:00:00.000Z")
+      ]
     });
 
     const response = await app.fetch(

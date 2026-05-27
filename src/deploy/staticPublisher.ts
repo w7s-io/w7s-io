@@ -16,6 +16,8 @@ type StaticSiteRoot = {
 
 const STATIC_SITE_ROOTS: StaticSiteRoot[] = [
   { label: "frontend/dist", prefix: "frontend/dist/", explicit: true },
+  { label: "frontend/build", prefix: "frontend/build/", explicit: true },
+  { label: "frontend/out", prefix: "frontend/out/", explicit: true },
   { label: "dist/client", prefix: "dist/client/", explicit: false, assetOnly: true },
   { label: "dist", prefix: "dist/", explicit: false },
   { label: "build", prefix: "build/", explicit: false },
