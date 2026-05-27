@@ -415,7 +415,12 @@ describe("runtime router", () => {
     expect(body).toContain("https://github.com/sadasant/sadasant");
     expect(body).toContain("<code>sadasant/sadasant</code>");
     expect(body).toContain("https://sadasant.w7s.cloud/");
+    expect(body).toContain("W7S uses one subdomain per GitHub owner");
+    expect(body).toContain("every other repo deploys under <code>/repo-name/</code>");
     expect(body).toContain("same-name repo convention");
+    expect(body).toContain("Every other repo owned by <code>sadasant</code> deploys on this same subdomain");
+    expect(body).toContain("<code>https://sadasant.w7s.cloud/repo-name/</code>");
+    expect(body).toContain("<code>sadasant/repo-name</code>");
     expect(body).toContain("push:");
     expect(body).toContain("workflow_dispatch");
     expect(body).toContain("schedule:");
@@ -454,6 +459,8 @@ describe("runtime router", () => {
     expect(body).toContain("https://github.com/sadasant/missing-repo");
     expect(body).toContain("<code>sadasant/missing-repo</code>");
     expect(body).toContain("https://sadasant.w7s.cloud/missing-repo/");
+    expect(body).toContain("W7S uses one subdomain per GitHub owner");
+    expect(body).toContain("every other repo deploys under <code>/repo-name/</code>");
     expect(body).toContain("w7s-io/w7s-cloud@v1");
     expect(body).toContain("usage-check-only");
     expect(body).not.toContain("same-name repo convention");

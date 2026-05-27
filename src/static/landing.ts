@@ -18,8 +18,16 @@ const escapeHtml = (value: string) =>
 const deployTargetHtml = (target?: DeployShowcaseTarget) => {
   if (!target) return "";
 
+  const [owner = "owner"] = target.repository.split("/");
+  const ownerBaseUrl = new URL(target.deployUrl);
+  ownerBaseUrl.pathname = "/";
+  ownerBaseUrl.search = "";
+  ownerBaseUrl.hash = "";
+  const ownerRootUrl = ownerBaseUrl.toString();
+  const exampleRepoUrl = new URL("/repo-name/", ownerRootUrl).toString();
+  const ownerRouteHint = `<p>W7S uses one subdomain per GitHub owner: <code>${escapeHtml(ownerBaseUrl.host)}</code>. The same-name repo uses the root path, and every other repo deploys under <code>/repo-name/</code> on that same subdomain.</p>`;
   const rootHint = target.isOwnerRoot
-    ? `<p>Owner roots use the same-name repo convention, so this root domain maps to <code>${escapeHtml(target.repository)}</code>.</p>`
+    ? `<p>Owner roots use the same-name repo convention, so this root domain maps to <code>${escapeHtml(target.repository)}</code>. Every other repo owned by <code>${escapeHtml(owner)}</code> deploys on this same subdomain under its repo path, such as <code>${escapeHtml(exampleRepoUrl)}</code> for <code>${escapeHtml(`${owner}/repo-name`)}</code>.</p>`
     : "";
 
   return `
@@ -27,6 +35,7 @@ const deployTargetHtml = (target?: DeployShowcaseTarget) => {
         <p class="eyebrow">Deploy target</p>
         <h2>Nothing is deployed here yet.</h2>
         <p>Nothing is deployed at <code>${escapeHtml(target.requestedUrl)}</code> yet.</p>
+        ${ownerRouteHint}
         <p>To deploy to this domain and path, use <a href="${escapeHtml(target.repositoryUrl)}"><code>${escapeHtml(target.repository)}</code></a>.</p>
         <p>After it deploys, W7S will serve it at <a href="${escapeHtml(target.deployUrl)}">${escapeHtml(target.deployUrl)}</a>.</p>
         ${rootHint}
