@@ -131,7 +131,7 @@ describe("usage rollups", () => {
   it("enforces short-window burst limits", async () => {
     const env = createTestEnv();
     const at = new Date("2026-05-26T12:00:00.000Z");
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 10; index += 1) {
       await checkRateLimit(env, {
         metric: "deploy",
         environment: "production",
@@ -154,9 +154,10 @@ describe("usage rollups", () => {
         enforcement: "rate",
         metric: "deploy",
         scope: "repo",
-        used: 5,
-        projectedUnits: 6,
-        limit: 5,
+        used: 10,
+        projectedUnits: 11,
+        limit: 10,
+        windowSeconds: 600,
         wouldBlock: true
       })
     );

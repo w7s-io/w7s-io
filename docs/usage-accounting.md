@@ -242,7 +242,7 @@ W7S also has short-window burst guards stored under `usage_rate:v1:*`. These are
 Current burst limits:
 
 ```text
-deploy            repo 5/hour      owner 25/hour      global 200/hour
+deploy            repo 10/10min    owner 50/10min     global 500/10min
 runtime.request   repo 300/min     owner 2000/min     global 10000/min
 rpc.dispatch      repo 120/min     owner 600/min      global 5000/min
 queue.send        repo 120/min     owner 600/min      global 5000/min

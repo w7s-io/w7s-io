@@ -31,9 +31,9 @@ type BurstLimitPolicy = {
 };
 
 const BURST_LIMITS: BurstLimitPolicy[] = [
-  { metric: "deploy", scope: "repo", windowSeconds: 3600, units: 5 },
-  { metric: "deploy", scope: "owner", windowSeconds: 3600, units: 25 },
-  { metric: "deploy", scope: "global", windowSeconds: 3600, units: 200 },
+  { metric: "deploy", scope: "repo", windowSeconds: 600, units: 10 },
+  { metric: "deploy", scope: "owner", windowSeconds: 600, units: 50 },
+  { metric: "deploy", scope: "global", windowSeconds: 600, units: 500 },
   { metric: "runtime.request", scope: "repo", windowSeconds: 60, units: 300 },
   { metric: "runtime.request", scope: "owner", windowSeconds: 60, units: 2_000 },
   { metric: "runtime.request", scope: "global", windowSeconds: 60, units: 10_000 },
