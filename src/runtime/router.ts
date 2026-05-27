@@ -203,6 +203,10 @@ const writeRuntimeAnalytics = async (params: {
     });
     if (check?.wouldBlock) {
       const message = costGuardExceededMessage(check);
+      const resumeAfter =
+        check.enforcement === "rate"
+          ? new Date(Date.now() + check.retryAfterSeconds * 1000)
+          : undefined;
       await suspendAppForLimits(params.env, {
         environment: params.deployment.environment,
         orgSlug: params.deployment.orgSlug,
@@ -217,7 +221,8 @@ const writeRuntimeAnalytics = async (params: {
             remaining: check.remaining,
             message
           }
-        ]
+        ],
+        resumeAfter
       });
     }
   })().catch((error) => {

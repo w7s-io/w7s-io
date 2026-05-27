@@ -247,11 +247,23 @@ runtime.request   repo 300/min     owner 2000/min     global 10000/min
 rpc.dispatch      repo 120/min     owner 600/min      global 5000/min
 queue.send        repo 120/min     owner 600/min      global 5000/min
 queue.delivery    repo 300/min     owner 1500/min     global 10000/min
-schedule.delivery repo 30/min      owner 200/min      global 2000/min
+schedule.delivery repo 120/min     owner 600/min      global 5000/min
 workflow.create   repo 60/min      owner 300/min      global 2000/min
 workflow.delivery repo 120/min     owner 600/min      global 5000/min
 log.write         repo 500/min     owner 2000/min     global 10000/min
 ```
+
+Burst checks first read all matching counters. If any scope would block the request, W7S returns the rate-limit result without incrementing any burst counter for the rejected attempt. If the daily cap already blocks the request, W7S does not touch burst counters either.
+
+Runtime request burst caps are enforced through app suspension because runtime accounting happens after the response. Daily cap suspensions last until the next UTC day. Burst cap suspensions use the rate-limit `retryAfterSeconds` window, so they clear when the short window resets.
+
+Internal review checklist for burst windows:
+
+- `deploy`: should allow normal rebuild and retry loops without waiting an hour; daily deploy caps handle sustained usage.
+- `runtime.request`: should stay low enough to stop traffic spikes before hourly Cloudflare analytics sync catches up.
+- `schedule.delivery`: should allow a repo with many cron entries to fire in the same minute.
+- `queue.delivery` and `workflow.delivery`: should be reviewed against real fan-out examples before raising.
+- `log.write`: should remain conservative; W7S drops whole tail batches when the app is over daily or burst limits and writes a core Worker warning with the dropped count.
 
 ## Hourly Cloudflare Sync
 

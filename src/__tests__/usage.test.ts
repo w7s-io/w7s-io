@@ -9,6 +9,7 @@ import {
   usageLimitPolicyKey
 } from "../usageLimits";
 import { checkRateLimit } from "../rateLimits";
+import { enforceUsageLimit } from "../usageEnforcement";
 
 describe("usage rollups", () => {
   afterEach(() => {
@@ -141,6 +142,26 @@ describe("usage rollups", () => {
       });
     }
 
+    const blocked = await checkRateLimit(env, {
+      metric: "deploy",
+      environment: "production",
+      orgSlug: "acme",
+      repoSlug: "app",
+      at
+    });
+    expect(blocked).toEqual(
+      expect.objectContaining({
+        enforcement: "rate",
+        metric: "deploy",
+        scope: "repo",
+        used: 10,
+        projectedUnits: 11,
+        limit: 10,
+        windowSeconds: 600,
+        wouldBlock: true
+      })
+    );
+
     await expect(
       checkRateLimit(env, {
         metric: "deploy",
@@ -151,14 +172,96 @@ describe("usage rollups", () => {
       })
     ).resolves.toEqual(
       expect.objectContaining({
-        enforcement: "rate",
-        metric: "deploy",
-        scope: "repo",
         used: 10,
         projectedUnits: 11,
-        limit: 10,
-        windowSeconds: 600,
         wouldBlock: true
+      })
+    );
+  });
+
+  it("allows schedule delivery bursts for repos with many cron entries", async () => {
+    const env = createTestEnv();
+    const at = new Date("2026-05-26T12:00:00.000Z");
+    for (let index = 0; index < 120; index += 1) {
+      const check = await checkRateLimit(env, {
+        metric: "schedule.delivery",
+        environment: "production",
+        orgSlug: "acme",
+        repoSlug: "scheduled",
+        at
+      });
+      expect(check?.wouldBlock).toBe(false);
+    }
+
+    await expect(
+      checkRateLimit(env, {
+        metric: "schedule.delivery",
+        environment: "production",
+        orgSlug: "acme",
+        repoSlug: "scheduled",
+        at
+      })
+    ).resolves.toEqual(
+      expect.objectContaining({
+        scope: "repo",
+        used: 120,
+        projectedUnits: 121,
+        limit: 120,
+        windowSeconds: 60,
+        wouldBlock: true
+      })
+    );
+  });
+
+  it("does not increment burst counters when daily limits already block", async () => {
+    const env = createTestEnv();
+    const at = new Date("2026-05-26T12:00:00.000Z");
+    await env.DEPLOYMENTS_KV.put(
+      usageLimitPolicyKey({
+        scope: "repo",
+        orgSlug: "acme",
+        repoSlug: "app"
+      }),
+      JSON.stringify({
+        version: 1,
+        metrics: {
+          deploy: 1
+        }
+      })
+    );
+    await recordUsageEvent(env, {
+      metric: "deploy",
+      repository: "acme/app",
+      environment: "production",
+      orgSlug: "acme",
+      repoSlug: "app",
+      units: 1,
+      at
+    });
+
+    const response = await enforceUsageLimit(env, {
+      metric: "deploy",
+      environment: "production",
+      orgSlug: "acme",
+      repoSlug: "app",
+      units: 1,
+      at
+    });
+    expect(response?.status).toBe(429);
+
+    await expect(
+      checkRateLimit(env, {
+        metric: "deploy",
+        environment: "production",
+        orgSlug: "acme",
+        repoSlug: "app",
+        at
+      })
+    ).resolves.toEqual(
+      expect.objectContaining({
+        used: 0,
+        projectedUnits: 1,
+        wouldBlock: false
       })
     );
   });

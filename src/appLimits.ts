@@ -107,6 +107,15 @@ const deleteAppLimitEdgeCache = async (key: string) => {
   }
 };
 
+const appLimitStateExpired = (state: AppLimitState, at: Date) =>
+  Boolean(state.resumeAfter && new Date(state.resumeAfter).getTime() <= at.getTime());
+
+const clearExpiredAppLimitState = async (env: Env, key: string, cacheKey: string) => {
+  await env.DEPLOYMENTS_KV.delete(key);
+  deleteAppLimitMemoryCache(cacheKey);
+  await deleteAppLimitEdgeCache(key);
+};
+
 export const secondsUntilNextUtcDay = (now = new Date()) => {
   const next = new Date(now);
   next.setUTCHours(24, 0, 0, 0);
@@ -142,11 +151,22 @@ export const loadAppLimitState = async (
 ) => {
   const key = appLimitStateKey(params);
   const cacheKey = scopedAppLimitCacheKey(env, key);
+  const at = params.at ?? new Date();
   const cached = readAppLimitMemoryCache(cacheKey);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) {
+    if (cached && appLimitStateExpired(cached, at)) {
+      await clearExpiredAppLimitState(env, key, cacheKey);
+      return null;
+    }
+    return cached;
+  }
 
   const edgeCached = await readAppLimitEdgeCache(key);
   if (edgeCached !== undefined) {
+    if (edgeCached && appLimitStateExpired(edgeCached, at)) {
+      await clearExpiredAppLimitState(env, key, cacheKey);
+      return null;
+    }
     writeAppLimitMemoryCache(cacheKey, edgeCached);
     return edgeCached;
   }
@@ -164,14 +184,11 @@ export const loadAppLimitState = async (
     return null;
   }
 
-  const at = params.at ?? new Date();
-  if (state.resumeAfter && new Date(state.resumeAfter).getTime() <= at.getTime()) {
-    await env.DEPLOYMENTS_KV.delete(key);
-    deleteAppLimitMemoryCache(cacheKey);
-    await deleteAppLimitEdgeCache(key);
+  const appLimitState = state as AppLimitState;
+  if (appLimitStateExpired(appLimitState, at)) {
+    await clearExpiredAppLimitState(env, key, cacheKey);
     return null;
   }
-  const appLimitState = state as AppLimitState;
   writeAppLimitMemoryCache(cacheKey, appLimitState);
   await writeAppLimitEdgeCache(key, appLimitState);
   return appLimitState;
@@ -196,9 +213,11 @@ export const suspendAppForLimits = async (
     reason: string;
     metrics: UsageLimitWarning[];
     at?: Date;
+    resumeAfter?: Date;
   }
 ) => {
   const at = params.at ?? new Date();
+  const resumeAfter = params.resumeAfter ?? new Date(nextUtcDayIso(at));
   await storeAppLimitState(env, {
     version: 1,
     status: "suspended",
@@ -208,7 +227,7 @@ export const suspendAppForLimits = async (
     reason: params.reason,
     metrics: params.metrics,
     updatedAt: at.toISOString(),
-    resumeAfter: nextUtcDayIso(at)
+    resumeAfter: resumeAfter.toISOString()
   });
 };
 

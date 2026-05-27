@@ -7,7 +7,7 @@ import {
   storeStaticSiteManifest
 } from "../storage/deployments";
 import type { DeploymentRecord, StaticSiteManifest } from "../storage/deployments";
-import { suspendAppForLimits } from "../appLimits";
+import { loadAppLimitState, suspendAppForLimits } from "../appLimits";
 import { recordUsageEvent } from "../usage";
 import { usageLimitPolicyKey } from "../usageLimits";
 
@@ -270,6 +270,48 @@ describe("runtime router", () => {
         })
       })
     );
+  });
+
+  it("expires retry-window app suspensions without waiting for UTC reset", async () => {
+    const env = createTestEnv();
+    await suspendAppForLimits(env, {
+      environment: "production",
+      orgSlug: "w7s-io",
+      repoSlug: "demo",
+      reason: "Short-window usage limit exceeded for runtime.request.",
+      resumeAfter: new Date("2026-05-26T12:05:00.000Z"),
+      metrics: [
+        {
+          metric: "runtime.request",
+          status: "exceeded",
+          used: 300,
+          limit: 300,
+          remaining: 0,
+          message: "Short-window usage limit exceeded for runtime.request."
+        }
+      ],
+      at: new Date("2026-05-26T12:00:00.000Z")
+    });
+
+    await expect(
+      loadAppLimitState(env, {
+        environment: "production",
+        orgSlug: "w7s-io",
+        repoSlug: "demo",
+        at: new Date("2026-05-26T12:04:59.000Z")
+      })
+    ).resolves.toEqual(expect.objectContaining({
+      status: "suspended",
+      resumeAfter: "2026-05-26T12:05:00.000Z"
+    }));
+    await expect(
+      loadAppLimitState(env, {
+        environment: "production",
+        orgSlug: "w7s-io",
+        repoSlug: "demo",
+        at: new Date("2026-05-26T12:05:00.000Z")
+      })
+    ).resolves.toBeNull();
   });
 
   it("redirects static repo root routes to a directory path", async () => {

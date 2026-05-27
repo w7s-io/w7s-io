@@ -30,6 +30,13 @@ type BurstLimitPolicy = {
   units: number;
 };
 
+type RateLimitCounterRead = {
+  check: RateLimitCheck;
+  key: string;
+  projectedUnits: number;
+  retryAfterSeconds: number;
+};
+
 const BURST_LIMITS: BurstLimitPolicy[] = [
   { metric: "deploy", scope: "repo", windowSeconds: 600, units: 10 },
   { metric: "deploy", scope: "owner", windowSeconds: 600, units: 50 },
@@ -46,9 +53,9 @@ const BURST_LIMITS: BurstLimitPolicy[] = [
   { metric: "queue.delivery", scope: "repo", windowSeconds: 60, units: 300 },
   { metric: "queue.delivery", scope: "owner", windowSeconds: 60, units: 1_500 },
   { metric: "queue.delivery", scope: "global", windowSeconds: 60, units: 10_000 },
-  { metric: "schedule.delivery", scope: "repo", windowSeconds: 60, units: 30 },
-  { metric: "schedule.delivery", scope: "owner", windowSeconds: 60, units: 200 },
-  { metric: "schedule.delivery", scope: "global", windowSeconds: 60, units: 2_000 },
+  { metric: "schedule.delivery", scope: "repo", windowSeconds: 60, units: 120 },
+  { metric: "schedule.delivery", scope: "owner", windowSeconds: 60, units: 600 },
+  { metric: "schedule.delivery", scope: "global", windowSeconds: 60, units: 5_000 },
   { metric: "workflow.create", scope: "repo", windowSeconds: 60, units: 60 },
   { metric: "workflow.create", scope: "owner", windowSeconds: 60, units: 300 },
   { metric: "workflow.create", scope: "global", windowSeconds: 60, units: 2_000 },
@@ -124,7 +131,7 @@ export const checkRateLimit = async (
   const at = params.at ?? new Date();
   const requestedUnits = positiveInteger(params.units, 1);
   const checks = await Promise.all(
-    policies.map(async (policy): Promise<RateLimitCheck> => {
+    policies.map(async (policy): Promise<RateLimitCounterRead> => {
       const startMs = windowStartMs(at, policy.windowSeconds);
       const windowStart = new Date(startMs).toISOString();
       const retryAfterSeconds = Math.max(
@@ -142,31 +149,42 @@ export const checkRateLimit = async (
       });
       const used = await readCounter(env, key);
       const projectedUnits = used + requestedUnits;
-      await env.DEPLOYMENTS_KV.put(key, String(projectedUnits), {
-        expirationTtl: Math.max(policy.windowSeconds * 2, retryAfterSeconds)
-      });
       return {
-        version: 1,
-        mode: "enforce",
-        enforcement: "rate",
-        metric,
-        scope: policy.scope,
-        environment: params.environment,
-        orgSlug: params.orgSlug,
-        repoSlug: params.repoSlug,
-        windowSeconds: policy.windowSeconds,
-        windowStart,
-        used,
-        requestedUnits,
+        key,
         projectedUnits,
-        limit: policy.units,
-        remaining: Math.max(0, policy.units - used),
         retryAfterSeconds,
-        wouldBlock: projectedUnits > policy.units
+        check: {
+          version: 1,
+          mode: "enforce",
+          enforcement: "rate",
+          metric,
+          scope: policy.scope,
+          environment: params.environment,
+          orgSlug: params.orgSlug,
+          repoSlug: params.repoSlug,
+          windowSeconds: policy.windowSeconds,
+          windowStart,
+          used,
+          requestedUnits,
+          projectedUnits,
+          limit: policy.units,
+          remaining: Math.max(0, policy.units - used),
+          retryAfterSeconds,
+          wouldBlock: projectedUnits > policy.units
+        }
       };
     })
   );
-  return checks.find((check) => check.wouldBlock) ?? checks[0] ?? null;
+  const blocked = checks.find(({ check }) => check.wouldBlock)?.check ?? null;
+  if (blocked) return blocked;
+  await Promise.all(
+    checks.map(({ key, projectedUnits, retryAfterSeconds, check }) =>
+      env.DEPLOYMENTS_KV.put(key, String(projectedUnits), {
+        expirationTtl: Math.max(check.windowSeconds * 2, retryAfterSeconds)
+      })
+    )
+  );
+  return checks[0]?.check ?? null;
 };
 
 export const rateLimitExceededMessage = (check: RateLimitCheck) =>

@@ -326,7 +326,9 @@ export const persistTailEvents = async (events: unknown[], env: Env) => {
       units: group.length
     });
     if (blocked) {
-      console.warn(costGuardExceededMessage(blocked));
+      console.warn(
+        `W7S dropped ${group.length} log record(s) for ${first.repository}: ${costGuardExceededMessage(blocked)}`
+      );
       continue;
     }
     allowedRecords.push(...group);
