@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { WorkflowStep } from "cloudflare:workers";
 import { app, W7SWorkflow } from "../worker";
 import { hashBindingToken } from "../deploy/tokens";
-import { storeDeploymentRecord, type DeploymentRecord } from "../storage/deployments";
+import { deploymentKey, storeDeploymentRecord, type DeploymentRecord } from "../storage/deployments";
 import { createTestEnv, MemoryAnalyticsEngine, MemoryWorkflowBinding } from "./mocks";
 import type { W7SWorkflowPayload } from "../env";
 import { recordUsageEvent } from "../usage";
@@ -88,8 +88,6 @@ describe("Workflow API", () => {
         headers: {
           authorization: `Bearer ${token}`,
           "content-type": "application/json",
-          "x-w7s-workflow-caller": "acme/caller",
-          "x-w7s-workflow-environment": "production",
           "x-w7s-workflow-instance-id": "order-123"
         },
         body: JSON.stringify({ orderId: "123" })
@@ -190,9 +188,7 @@ describe("Workflow API", () => {
         method: "POST",
         headers: {
           authorization: `Bearer ${token}`,
-          "content-type": "application/json",
-          "x-w7s-workflow-caller": "acme/caller",
-          "x-w7s-workflow-environment": "production"
+          "content-type": "application/json"
         },
         body: "{}"
       }),
@@ -246,8 +242,6 @@ describe("Workflow API", () => {
         headers: {
           authorization: `Bearer ${token}`,
           "content-type": "application/json",
-          "x-w7s-workflow-caller": "acme/caller",
-          "x-w7s-workflow-environment": "production",
           "x-w7s-workflow-instance-id": id
         },
         body: "{}"
@@ -303,9 +297,7 @@ describe("Workflow API", () => {
     const response = await app.fetch(
       new Request("https://w7s.cloud/api/v1/workflows/acme/target/process-order/production-acme-target-process-order-order-123", {
         headers: {
-          authorization: `Bearer ${token}`,
-          "x-w7s-workflow-caller": "acme/caller",
-          "x-w7s-workflow-environment": "production"
+          authorization: `Bearer ${token}`
         }
       }),
       env
@@ -325,6 +317,55 @@ describe("Workflow API", () => {
         })
       })
     );
+  });
+
+  it("supports legacy caller headers when the token mapping is missing", async () => {
+    const workflows = new MemoryWorkflowBinding();
+    const env = createTestEnv({
+      W7S_WORKFLOWS: workflows as unknown as Workflow<W7SWorkflowPayload>
+    });
+    const token = "legacy-token";
+    const callerRecord = workerRecord({
+      orgSlug: "acme",
+      repoSlug: "caller",
+      scriptName: "acme--caller",
+      tokenHash: await hashBindingToken(token)
+    });
+    await env.DEPLOYMENTS_KV.put(
+      deploymentKey("production", "acme", "caller"),
+      JSON.stringify(callerRecord)
+    );
+    await storeDeploymentRecord(
+      env,
+      workerRecord({
+        orgSlug: "acme",
+        repoSlug: "target",
+        scriptName: "acme--target",
+        tokenHash: await hashBindingToken("target-token"),
+        workflows: [
+          {
+            name: "process-order",
+            path: "/_w7s/workflows/process-order"
+          }
+        ]
+      })
+    );
+
+    const response = await app.fetch(
+      new Request("https://w7s.cloud/api/v1/workflows/acme/target/process-order", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          "x-w7s-workflow-caller": "acme/caller",
+          "x-w7s-workflow-environment": "production"
+        },
+        body: "{}"
+      }),
+      env
+    );
+
+    expect(response.status).toBe(200);
   });
 });
 

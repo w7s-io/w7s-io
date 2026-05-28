@@ -401,15 +401,13 @@ const response = await env.W7S_RPC.fetch(
   "https://w7s.internal/api/v1/rpc/guerrerocarlos/auth/session",
   {
     headers: {
-      authorization: `Bearer ${env.W7S_RPC_TOKEN}`,
-      "x-w7s-rpc-caller": env.W7S_REPOSITORY,
-      "x-w7s-rpc-environment": env.W7S_ENVIRONMENT
+      authorization: `Bearer ${env.W7S_RPC_TOKEN}`
     }
   }
 );
 ```
 
-The target path is `/api/v1/rpc/<owner>/<repo>/<path>`. W7S verifies the caller token, loads the target deployment from the same environment, and dispatches directly through the Workers for Platforms namespace. Public request auth headers are stripped before dispatch.
+The target path is `/api/v1/rpc/<owner>/<repo>/<path>`. W7S verifies the caller token, resolves the caller deployment, loads the target deployment from the same environment, and dispatches directly to the target backend. Public request auth headers are stripped before dispatch.
 
 The target Worker receives caller identity headers:
 
@@ -437,16 +435,14 @@ await env.W7S_QUEUE.fetch(
     method: "POST",
     headers: {
       authorization: `Bearer ${env.W7S_QUEUE_TOKEN}`,
-      "content-type": "application/json",
-      "x-w7s-queue-caller": env.W7S_REPOSITORY,
-      "x-w7s-queue-environment": env.W7S_ENVIRONMENT
+      "content-type": "application/json"
     },
     body: JSON.stringify({ type: "work", id: "123" })
   }
 );
 ```
 
-The target path is `/api/v1/queues/<owner>/<repo>/<queue>`. W7S verifies the caller token, loads the target deployment from the same environment, verifies that the target declares the queue, and sends the message to Cloudflare Queues.
+The target path is `/api/v1/queues/<owner>/<repo>/<queue>`. W7S verifies the caller token, resolves the caller deployment, loads the target deployment from the same environment, verifies that the target declares the queue, and sends the message to the managed queue.
 
 W7S core receives Cloudflare Queue batches and dispatches them to the target app's consumer route:
 

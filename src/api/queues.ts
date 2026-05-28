@@ -7,10 +7,15 @@ import { jsonError, jsonSuccess, parseBearerToken } from "../http";
 import { requireSlug } from "../names";
 import { hashBindingToken } from "../deploy/tokens";
 import { sendQueueMessage } from "../deploy/queueProvisioner";
-import { loadDeploymentRecord } from "../storage/deployments";
+import { loadBindingTokenMapping, loadDeploymentRecord } from "../storage/deployments";
 import { enforceAppNotSuspended } from "../appLimits";
 
 type HonoContext = Context<{ Bindings: Env }>;
+type QueueCaller = {
+  orgSlug: string;
+  repoSlug: string;
+  environment: string;
+};
 
 const QUEUE_PREFIX = "/api/v1/queues/";
 const DEFAULT_MAX_QUEUE_MESSAGE_BYTES = 64 * 1024;
@@ -40,7 +45,7 @@ const parseTarget = (request: Request) => {
   };
 };
 
-const parseCaller = (c: HonoContext) => {
+const parseHeaderCaller = (c: HonoContext): QueueCaller => {
   const caller = c.req.header("x-w7s-queue-caller")?.trim() ?? "";
   const [owner, repo, extra] = caller.split("/");
   if (!owner || !repo || extra) {
@@ -51,6 +56,45 @@ const parseCaller = (c: HonoContext) => {
     repoSlug: requireSlug(repo, "queue caller repo"),
     environment: requireSlug(c.req.header("x-w7s-queue-environment") ?? "", "queue caller environment")
   };
+};
+
+const resolveCallerFromToken = async (
+  c: HonoContext,
+  tokenHash: string
+): Promise<QueueCaller | Response> => {
+  const mapping = await loadBindingTokenMapping(c.env, "queue", tokenHash);
+  const caller = mapping
+    ? {
+        orgSlug: mapping.orgSlug,
+        repoSlug: mapping.repoSlug,
+        environment: mapping.environment
+      }
+    : (() => {
+        try {
+          return parseHeaderCaller(c);
+        } catch {
+          return null;
+        }
+      })();
+
+  if (!caller) {
+    return jsonError("Invalid queue bearer token. Redeploy the caller app to refresh W7S queue credentials.", 401);
+  }
+
+  const callerDeployment = await loadDeploymentRecord(
+    c.env,
+    caller.environment,
+    caller.orgSlug,
+    caller.repoSlug
+  );
+  if (!callerDeployment?.queue?.tokenHash) {
+    return jsonError("Queues are not enabled for the caller deployment. Redeploy the caller app.", 401);
+  }
+  if (callerDeployment.queue.tokenHash !== tokenHash) {
+    return jsonError("Invalid queue bearer token.", 401);
+  }
+
+  return caller;
 };
 
 const isAuthorizedCaller = (params: {
@@ -103,12 +147,10 @@ export const handleQueueSend = async (c: HonoContext) => {
   const token = parseBearerToken(c.req.raw);
   if (!token) return jsonError("Missing queue bearer token.", 401);
 
-  let caller: ReturnType<typeof parseCaller>;
   let target: ReturnType<typeof parseTarget>;
   let body: unknown;
   let delaySeconds: number | undefined;
   try {
-    caller = parseCaller(c);
     target = parseTarget(c.req.raw);
     body = await readJsonBody(c.req.raw, c.env);
     delaySeconds = readDelaySeconds(c);
@@ -119,18 +161,10 @@ export const handleQueueSend = async (c: HonoContext) => {
     );
   }
 
-  const callerDeployment = await loadDeploymentRecord(
-    c.env,
-    caller.environment,
-    caller.orgSlug,
-    caller.repoSlug
-  );
-  if (!callerDeployment?.queue?.tokenHash) {
-    return jsonError("Queues are not enabled for the caller deployment. Redeploy the caller app.", 401);
-  }
-  if (await hashBindingToken(token) !== callerDeployment.queue.tokenHash) {
-    return jsonError("Invalid queue bearer token.", 401);
-  }
+  const tokenHash = await hashBindingToken(token);
+  const resolvedCaller = await resolveCallerFromToken(c, tokenHash);
+  if (resolvedCaller instanceof Response) return resolvedCaller;
+  const caller = resolvedCaller;
 
   const targetDeployment = await loadDeploymentRecord(
     c.env,

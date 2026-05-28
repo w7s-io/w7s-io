@@ -3,6 +3,7 @@ import { app } from "../worker";
 import { createTestEnv, MemoryAnalyticsEngine } from "./mocks";
 import { hashBindingToken } from "../deploy/tokens";
 import {
+  deploymentKey,
   storeDeploymentRecord,
   storeQueueMappings,
   type DeploymentRecord
@@ -106,9 +107,7 @@ describe("Queue API", () => {
         method: "POST",
         headers: {
           authorization: `Bearer ${token}`,
-          "content-type": "application/json",
-          "x-w7s-queue-caller": "acme/caller",
-          "x-w7s-queue-environment": "production"
+          "content-type": "application/json"
         },
         body: JSON.stringify({ type: "work", id: "123" })
       }),
@@ -221,9 +220,7 @@ describe("Queue API", () => {
         method: "POST",
         headers: {
           authorization: `Bearer ${token}`,
-          "content-type": "application/json",
-          "x-w7s-queue-caller": "acme/caller",
-          "x-w7s-queue-environment": "production"
+          "content-type": "application/json"
         },
         body: "{}"
       }),
@@ -256,9 +253,7 @@ describe("Queue API", () => {
         method: "POST",
         headers: {
           authorization: "Bearer wrong-token",
-          "content-type": "application/json",
-          "x-w7s-queue-caller": "acme/caller",
-          "x-w7s-queue-environment": "production"
+          "content-type": "application/json"
         },
         body: "{}"
       }),
@@ -310,9 +305,7 @@ describe("Queue API", () => {
         method: "POST",
         headers: {
           authorization: `Bearer ${token}`,
-          "content-type": "application/json",
-          "x-w7s-queue-caller": "acme/caller",
-          "x-w7s-queue-environment": "production"
+          "content-type": "application/json"
         },
         body: "{}"
       });
@@ -341,6 +334,61 @@ describe("Queue API", () => {
 
     const allowed = await app.fetch(request(), env);
     expect(allowed.status).toBe(200);
+  });
+
+  it("supports legacy caller headers when the token mapping is missing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ success: true, result: {} }))
+    );
+    const env = createTestEnv({
+      CLOUDFLARE_API_TOKEN: "cf-token",
+      CLOUDFLARE_ACCOUNT_ID: "acct-123"
+    });
+    const token = "legacy-token";
+    const callerRecord = workerRecord({
+      orgSlug: "acme",
+      repoSlug: "caller",
+      scriptName: "acme--caller",
+      tokenHash: await hashBindingToken(token)
+    });
+    await env.DEPLOYMENTS_KV.put(
+      deploymentKey("production", "acme", "caller"),
+      JSON.stringify(callerRecord)
+    );
+    await storeDeploymentRecord(
+      env,
+      workerRecord({
+        orgSlug: "acme",
+        repoSlug: "target",
+        scriptName: "acme--target",
+        tokenHash: await hashBindingToken("target-token"),
+        queues: [
+          {
+            name: "jobs",
+            queueName: "w7s-production-acme-target-queue-jobs",
+            queueId: "queue-1",
+            consumer: "/_w7s/queues/jobs"
+          }
+        ]
+      })
+    );
+
+    const response = await app.fetch(
+      new Request("https://w7s.cloud/api/v1/queues/acme/target/jobs", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          "x-w7s-queue-caller": "acme/caller",
+          "x-w7s-queue-environment": "production"
+        },
+        body: "{}"
+      }),
+      env
+    );
+
+    expect(response.status).toBe(200);
   });
 });
 

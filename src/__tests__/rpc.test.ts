@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { app } from "../worker";
 import { createTestEnv, MemoryAnalyticsEngine } from "./mocks";
 import { hashRpcToken } from "../deploy/rpcBindings";
-import { storeDeploymentRecord, type DeploymentRecord } from "../storage/deployments";
+import { deploymentKey, storeDeploymentRecord, type DeploymentRecord } from "../storage/deployments";
 import { recordUsageEvent } from "../usage";
 import { usageLimitPolicyKey } from "../usageLimits";
 
@@ -86,9 +86,7 @@ describe("RPC API", () => {
       new Request("https://w7s.cloud/api/v1/rpc/acme/target/do-work?ok=1", {
         method: "POST",
         headers: {
-          authorization: `Bearer ${token}`,
-          "x-w7s-rpc-caller": "acme/caller",
-          "x-w7s-rpc-environment": "production"
+          authorization: `Bearer ${token}`
         },
         body: "payload"
       }),
@@ -178,9 +176,7 @@ describe("RPC API", () => {
     const response = await app.fetch(
       new Request("https://w7s.cloud/api/v1/rpc/acme/target/do-work", {
         headers: {
-          authorization: `Bearer ${token}`,
-          "x-w7s-rpc-caller": "acme/caller",
-          "x-w7s-rpc-environment": "production"
+          authorization: `Bearer ${token}`
         }
       }),
       env
@@ -210,9 +206,7 @@ describe("RPC API", () => {
     const response = await app.fetch(
       new Request("https://w7s.cloud/api/v1/rpc/acme/target/", {
         headers: {
-          authorization: "Bearer wrong-token",
-          "x-w7s-rpc-caller": "acme/caller",
-          "x-w7s-rpc-environment": "production"
+          authorization: "Bearer wrong-token"
         }
       }),
       env
@@ -252,9 +246,7 @@ describe("RPC API", () => {
     const denied = await app.fetch(
       new Request("https://w7s.cloud/api/v1/rpc/tools/target/", {
         headers: {
-          authorization: `Bearer ${token}`,
-          "x-w7s-rpc-caller": "acme/caller",
-          "x-w7s-rpc-environment": "production"
+          authorization: `Bearer ${token}`
         }
       }),
       env
@@ -275,6 +267,45 @@ describe("RPC API", () => {
     const allowed = await app.fetch(
       new Request("https://w7s.cloud/api/v1/rpc/tools/target/", {
         headers: {
+          authorization: `Bearer ${token}`
+        }
+      }),
+      env
+    );
+    expect(allowed.status).toBe(200);
+  });
+
+  it("supports legacy caller headers when the token mapping is missing", async () => {
+    const env = createTestEnv({
+      DISPATCHER: {
+        get: () => ({
+          fetch: async () => new Response("ok")
+        })
+      }
+    });
+    const token = "legacy-token";
+    const callerRecord = workerRecord({
+      orgSlug: "acme",
+      repoSlug: "caller",
+      scriptName: "acme--caller",
+      tokenHash: await hashRpcToken(token)
+    });
+    await env.DEPLOYMENTS_KV.put(
+      deploymentKey("production", "acme", "caller"),
+      JSON.stringify(callerRecord)
+    );
+    await storeDeploymentRecord(
+      env,
+      workerRecord({
+        orgSlug: "acme",
+        repoSlug: "target",
+        scriptName: "acme--target"
+      })
+    );
+
+    const response = await app.fetch(
+      new Request("https://w7s.cloud/api/v1/rpc/acme/target/", {
+        headers: {
           authorization: `Bearer ${token}`,
           "x-w7s-rpc-caller": "acme/caller",
           "x-w7s-rpc-environment": "production"
@@ -282,6 +313,7 @@ describe("RPC API", () => {
       }),
       env
     );
-    expect(allowed.status).toBe(200);
+
+    expect(response.status).toBe(200);
   });
 });

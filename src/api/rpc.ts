@@ -6,11 +6,16 @@ import { enforceUsageLimit } from "../usageEnforcement";
 import { jsonError, parseBearerToken } from "../http";
 import { requireSlug } from "../names";
 import { hashRpcToken } from "../deploy/rpcBindings";
-import { loadDeploymentRecord } from "../storage/deployments";
+import { loadBindingTokenMapping, loadDeploymentRecord } from "../storage/deployments";
 import { dispatchWorker } from "../runtime/dispatch";
 import { enforceAppNotSuspended } from "../appLimits";
 
 type HonoContext = Context<{ Bindings: Env }>;
+type RpcCaller = {
+  orgSlug: string;
+  repoSlug: string;
+  environment: string;
+};
 
 const RPC_PREFIX = "/api/v1/rpc/";
 
@@ -38,7 +43,7 @@ const parseTarget = (request: Request) => {
   };
 };
 
-const parseCaller = (c: HonoContext) => {
+const parseHeaderCaller = (c: HonoContext): RpcCaller => {
   const caller = c.req.header("x-w7s-rpc-caller")?.trim() ?? "";
   const [owner, repo, extra] = caller.split("/");
   if (!owner || !repo || extra) {
@@ -49,6 +54,45 @@ const parseCaller = (c: HonoContext) => {
     repoSlug: requireSlug(repo, "RPC caller repo"),
     environment: requireSlug(c.req.header("x-w7s-rpc-environment") ?? "", "RPC caller environment")
   };
+};
+
+const resolveCallerFromToken = async (
+  c: HonoContext,
+  tokenHash: string
+): Promise<RpcCaller | Response> => {
+  const mapping = await loadBindingTokenMapping(c.env, "rpc", tokenHash);
+  const caller = mapping
+    ? {
+        orgSlug: mapping.orgSlug,
+        repoSlug: mapping.repoSlug,
+        environment: mapping.environment
+      }
+    : (() => {
+        try {
+          return parseHeaderCaller(c);
+        } catch {
+          return null;
+        }
+      })();
+
+  if (!caller) {
+    return jsonError("Invalid RPC bearer token. Redeploy the caller app to refresh W7S RPC credentials.", 401);
+  }
+
+  const callerDeployment = await loadDeploymentRecord(
+    c.env,
+    caller.environment,
+    caller.orgSlug,
+    caller.repoSlug
+  );
+  if (!callerDeployment?.rpc?.tokenHash) {
+    return jsonError("RPC is not enabled for the caller deployment. Redeploy the caller app.", 401);
+  }
+  if (callerDeployment.rpc.tokenHash !== tokenHash) {
+    return jsonError("Invalid RPC bearer token.", 401);
+  }
+
+  return caller;
 };
 
 const isAuthorizedCaller = (params: {
@@ -67,27 +111,17 @@ export const handleRpc = async (c: HonoContext) => {
   const token = parseBearerToken(c.req.raw);
   if (!token) return jsonError("Missing RPC bearer token.", 401);
 
-  let caller: ReturnType<typeof parseCaller>;
   let target: ReturnType<typeof parseTarget>;
   try {
-    caller = parseCaller(c);
     target = parseTarget(c.req.raw);
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : String(error), 400);
   }
 
-  const callerDeployment = await loadDeploymentRecord(
-    c.env,
-    caller.environment,
-    caller.orgSlug,
-    caller.repoSlug
-  );
-  if (!callerDeployment?.rpc?.tokenHash) {
-    return jsonError("RPC is not enabled for the caller deployment. Redeploy the caller app.", 401);
-  }
-  if (await hashRpcToken(token) !== callerDeployment.rpc.tokenHash) {
-    return jsonError("Invalid RPC bearer token.", 401);
-  }
+  const tokenHash = await hashRpcToken(token);
+  const resolvedCaller = await resolveCallerFromToken(c, tokenHash);
+  if (resolvedCaller instanceof Response) return resolvedCaller;
+  const caller = resolvedCaller;
 
   const targetDeployment = await loadDeploymentRecord(
     c.env,

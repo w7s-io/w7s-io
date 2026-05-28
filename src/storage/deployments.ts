@@ -187,8 +187,11 @@ export type ScheduleMapping = {
   deployedAt: string;
 };
 
-export type AiTokenMapping = {
+export type BindingTokenKind = "ai" | "rpc" | "queue" | "workflow";
+
+export type BindingTokenMapping = {
   version: 1;
+  kind: BindingTokenKind;
   tokenHash: string;
   orgSlug: string;
   repoSlug: string;
@@ -196,6 +199,8 @@ export type AiTokenMapping = {
   repository: string;
   deployedAt: string;
 };
+
+export type AiTokenMapping = Omit<BindingTokenMapping, "kind">;
 
 type CacheEntry<T> = {
   value: T;
@@ -334,6 +339,9 @@ export const workerScriptMappingKey = (scriptName: string) =>
 export const aiTokenMappingKey = (tokenHash: string) =>
   `ai_token:v1:${tokenHash.trim()}`;
 
+export const bindingTokenMappingKey = (kind: BindingTokenKind, tokenHash: string) =>
+  `binding_token:v1:${kind}:${tokenHash.trim()}`;
+
 export const scheduleMappingId = (
   record: Pick<DeploymentRecord, "environment" | "orgSlug" | "repoSlug">,
   schedule: DeploymentSchedule
@@ -363,6 +371,20 @@ export const managedResourceKey = (
 export const storeDeploymentRecord = async (env: Env, record: DeploymentRecord) => {
   const key = deploymentKey(record.environment, record.orgSlug, record.repoSlug);
   const cacheKey = scopedRuntimeCacheKey(env, key);
+  const storeBindingTokenMapping = (kind: BindingTokenKind, tokenHash: string) =>
+    env.DEPLOYMENTS_KV.put(
+      bindingTokenMappingKey(kind, tokenHash),
+      JSON.stringify({
+        version: 1,
+        kind,
+        tokenHash,
+        orgSlug: record.orgSlug,
+        repoSlug: record.repoSlug,
+        environment: record.environment,
+        repository: record.repository,
+        deployedAt: record.deployedAt
+      } satisfies BindingTokenMapping)
+    );
   await Promise.all([
     env.DEPLOYMENTS_KV.put(
       key,
@@ -397,6 +419,18 @@ export const storeDeploymentRecord = async (env: Env, record: DeploymentRecord) 
             deployedAt: record.deployedAt
           } satisfies AiTokenMapping)
         )
+      : Promise.resolve(),
+    record.ai
+      ? storeBindingTokenMapping("ai", record.ai.tokenHash)
+      : Promise.resolve(),
+    record.rpc
+      ? storeBindingTokenMapping("rpc", record.rpc.tokenHash)
+      : Promise.resolve(),
+    record.queue
+      ? storeBindingTokenMapping("queue", record.queue.tokenHash)
+      : Promise.resolve(),
+    record.workflow
+      ? storeBindingTokenMapping("workflow", record.workflow.tokenHash)
       : Promise.resolve()
   ]);
   writeRuntimeCache(
@@ -531,6 +565,28 @@ export const loadAiTokenMapping = async (env: Env, tokenHash: string) => {
     return null;
   }
   return record as AiTokenMapping;
+};
+
+export const loadBindingTokenMapping = async (
+  env: Env,
+  kind: BindingTokenKind,
+  tokenHash: string
+) => {
+  const raw = await env.DEPLOYMENTS_KV.get(bindingTokenMappingKey(kind, tokenHash), "json");
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as Partial<BindingTokenMapping>;
+  if (
+    record.version !== 1 ||
+    record.kind !== kind ||
+    typeof record.tokenHash !== "string" ||
+    typeof record.orgSlug !== "string" ||
+    typeof record.repoSlug !== "string" ||
+    typeof record.environment !== "string" ||
+    typeof record.repository !== "string"
+  ) {
+    return null;
+  }
+  return record as BindingTokenMapping;
 };
 
 export const storeCustomDomainMappings = async (

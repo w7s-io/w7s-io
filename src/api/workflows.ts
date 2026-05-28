@@ -4,13 +4,18 @@ import { hashBindingToken } from "../deploy/tokens";
 import type { Env, W7SWorkflowPayload } from "../env";
 import { jsonError, jsonSuccess, parseBearerToken } from "../http";
 import { requireSlug, sanitizeScriptPart } from "../names";
-import { loadDeploymentRecord } from "../storage/deployments";
+import { loadBindingTokenMapping, loadDeploymentRecord } from "../storage/deployments";
 import { recordUsageEvent } from "../usage";
 import { enforceUsageLimit } from "../usageEnforcement";
 import { enforceAppNotSuspended } from "../appLimits";
 import { enforceActiveWorkflowLimit, trackActiveWorkflow } from "../workflowLimits";
 
 type HonoContext = Context<{ Bindings: Env }>;
+type WorkflowCaller = {
+  orgSlug: string;
+  repoSlug: string;
+  environment: string;
+};
 
 const WORKFLOW_PREFIX = "/api/v1/workflows/";
 const MAX_INSTANCE_ID_LENGTH = 100;
@@ -54,7 +59,7 @@ const parseTarget = (request: Request) => {
   };
 };
 
-const parseCaller = (c: HonoContext) => {
+const parseHeaderCaller = (c: HonoContext): WorkflowCaller => {
   const caller = c.req.header("x-w7s-workflow-caller")?.trim() ?? "";
   const [owner, repo, extra] = caller.split("/");
   if (!owner || !repo || extra) {
@@ -65,6 +70,45 @@ const parseCaller = (c: HonoContext) => {
     repoSlug: requireSlug(repo, "workflow caller repo"),
     environment: requireSlug(c.req.header("x-w7s-workflow-environment") ?? "", "workflow caller environment")
   };
+};
+
+const resolveCallerFromToken = async (
+  c: HonoContext,
+  tokenHash: string
+): Promise<WorkflowCaller | Response> => {
+  const mapping = await loadBindingTokenMapping(c.env, "workflow", tokenHash);
+  const caller = mapping
+    ? {
+        orgSlug: mapping.orgSlug,
+        repoSlug: mapping.repoSlug,
+        environment: mapping.environment
+      }
+    : (() => {
+        try {
+          return parseHeaderCaller(c);
+        } catch {
+          return null;
+        }
+      })();
+
+  if (!caller) {
+    return jsonError("Invalid workflow bearer token. Redeploy the caller app to refresh W7S workflow credentials.", 401);
+  }
+
+  const callerDeployment = await loadDeploymentRecord(
+    c.env,
+    caller.environment,
+    caller.orgSlug,
+    caller.repoSlug
+  );
+  if (!callerDeployment?.workflow?.tokenHash) {
+    return jsonError("Workflows are not enabled for the caller deployment. Redeploy the caller app.", 401);
+  }
+  if (callerDeployment.workflow.tokenHash !== tokenHash) {
+    return jsonError("Invalid workflow bearer token.", 401);
+  }
+
+  return caller;
 };
 
 const isAuthorizedCaller = (params: {
@@ -140,27 +184,17 @@ const requireAuthorizedContext = async (c: HonoContext) => {
   const token = parseBearerToken(c.req.raw);
   if (!token) throw new Response(JSON.stringify({ status: "error", error: "Missing workflow bearer token." }), { status: 401 });
 
-  let caller: ReturnType<typeof parseCaller>;
   let target: ReturnType<typeof parseTarget>;
   try {
-    caller = parseCaller(c);
     target = parseTarget(c.req.raw);
   } catch (error) {
     throw new Response(JSON.stringify({ status: "error", error: error instanceof Error ? error.message : String(error) }), { status: 400 });
   }
 
-  const callerDeployment = await loadDeploymentRecord(
-    c.env,
-    caller.environment,
-    caller.orgSlug,
-    caller.repoSlug
-  );
-  if (!callerDeployment?.workflow?.tokenHash) {
-    throw new Response(JSON.stringify({ status: "error", error: "Workflows are not enabled for the caller deployment. Redeploy the caller app." }), { status: 401 });
-  }
-  if (await hashBindingToken(token) !== callerDeployment.workflow.tokenHash) {
-    throw new Response(JSON.stringify({ status: "error", error: "Invalid workflow bearer token." }), { status: 401 });
-  }
+  const tokenHash = await hashBindingToken(token);
+  const resolvedCaller = await resolveCallerFromToken(c, tokenHash);
+  if (resolvedCaller instanceof Response) throw resolvedCaller;
+  const caller = resolvedCaller;
 
   const targetDeployment = await loadDeploymentRecord(
     c.env,

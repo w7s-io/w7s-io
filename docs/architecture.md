@@ -159,7 +159,7 @@ GET https://<org>.w7s.cloud/<repo>/<path>
 ```text
 GET/POST env.W7S_RPC.fetch("/api/v1/rpc/<owner>/<repo>/<path>")
   -> require caller bearer token from W7S_RPC_TOKEN
-  -> load caller deployment in x-w7s-rpc-environment
+  -> resolve caller deployment from the token mapping
   -> verify token hash from the caller deployment record
   -> load target deployment in the same environment
   -> allow same-owner calls by default
@@ -172,7 +172,7 @@ GET/POST env.W7S_RPC.fetch("/api/v1/rpc/<owner>/<repo>/<path>")
 ```text
 POST env.W7S_QUEUE.fetch("/api/v1/queues/<owner>/<repo>/<queue>")
   -> require caller bearer token from W7S_QUEUE_TOKEN
-  -> load caller deployment in x-w7s-queue-environment
+  -> resolve caller deployment from the token mapping
   -> verify token hash from the caller deployment record
   -> load target deployment in the same environment
   -> require target w7s.json queues declaration
@@ -187,7 +187,7 @@ POST env.W7S_QUEUE.fetch("/api/v1/queues/<owner>/<repo>/<queue>")
 ```text
 POST env.W7S_WORKFLOW.fetch("/api/v1/workflows/<owner>/<repo>/<workflow>")
   -> require caller bearer token from W7S_WORKFLOW_TOKEN
-  -> load caller deployment in x-w7s-workflow-environment
+  -> resolve caller deployment from the token mapping
   -> verify token hash from the caller deployment record
   -> load target deployment in the same environment
   -> require target w7s.json workflows declaration

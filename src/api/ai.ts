@@ -4,7 +4,7 @@ import { hashBindingToken } from "../deploy/tokens";
 import type { Env } from "../env";
 import { jsonError, jsonSuccess, parseBearerToken } from "../http";
 import { requireSlug } from "../names";
-import { loadAiTokenMapping, loadDeploymentRecord } from "../storage/deployments";
+import { loadAiTokenMapping, loadBindingTokenMapping, loadDeploymentRecord } from "../storage/deployments";
 import { recordUsageEvent } from "../usage";
 import { enforceUsageLimit } from "../usageEnforcement";
 import { enforceAppNotSuspended } from "../appLimits";
@@ -56,7 +56,9 @@ const resolveCallerFromToken = async (
   c: HonoContext,
   tokenHash: string
 ): Promise<AiCaller | Response> => {
-  const mapping = await loadAiTokenMapping(c.env, tokenHash);
+  const mapping =
+    await loadBindingTokenMapping(c.env, "ai", tokenHash) ??
+    await loadAiTokenMapping(c.env, tokenHash);
   const caller = mapping
     ? {
         orgSlug: mapping.orgSlug,
