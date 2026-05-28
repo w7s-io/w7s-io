@@ -42,6 +42,8 @@ const appDeployBranch =
   process.env.GITHUB_REF_NAME?.trim() ||
   null;
 const appDeployedAt = process.env.W7S_DEPLOYED_AT?.trim() || null;
+const statusComponentsJson = process.env.W7S_STATUS_COMPONENTS_JSON?.trim() || "";
+const statusIncidentsJson = process.env.W7S_STATUS_INCIDENTS_JSON?.trim() || "";
 
 if (!apiToken) {
   throw new Error("CLOUDFLARE_API_TOKEN is required.");
@@ -190,7 +192,9 @@ const config = {
     ...(analyticsDataset ? { W7S_ANALYTICS_DATASET: analyticsDataset } : {}),
     ...(appCommitId ? { APP_COMMIT_ID: appCommitId } : {}),
     ...(appDeployBranch ? { APP_DEPLOY_BRANCH: appDeployBranch } : {}),
-    ...(appDeployedAt ? { APP_DEPLOYED_AT: appDeployedAt } : {})
+    ...(appDeployedAt ? { APP_DEPLOYED_AT: appDeployedAt } : {}),
+    ...(statusComponentsJson ? { W7S_STATUS_COMPONENTS_JSON: statusComponentsJson } : {}),
+    ...(statusIncidentsJson ? { W7S_STATUS_INCIDENTS_JSON: statusIncidentsJson } : {})
   },
   dispatch_namespaces: [
     {

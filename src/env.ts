@@ -46,6 +46,8 @@ export interface Env {
   W7S_WORKER_NAME?: string;
   W7S_RUNTIME_CACHE_SCOPE?: string;
   W7S_BASE_DOMAIN?: string;
+  W7S_STATUS_COMPONENTS_JSON?: string;
+  W7S_STATUS_INCIDENTS_JSON?: string;
   APP_COMMIT_ID?: string;
   APP_DEPLOY_BRANCH?: string;
   APP_DEPLOYED_AT?: string;

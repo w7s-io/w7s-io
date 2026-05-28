@@ -1,10 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { app } from "../worker";
 import { createTestEnv } from "./mocks";
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 describe("health endpoint", () => {
   it("exposes deploy metadata", async () => {
@@ -58,50 +54,6 @@ describe("landing page", () => {
 
 describe("status endpoint", () => {
   it("exposes a public component summary", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
-        const url = String(input);
-
-        if (url.includes("/api/v1/limits/")) {
-          return new Response(
-            JSON.stringify({ status: "error", error: "Missing bearer token." }),
-            { status: 401, headers: { "content-type": "application/json" } }
-          );
-        }
-
-        if (
-          url.includes("example-rpc-client") ||
-          url.includes("example-queue-worker") ||
-          url.includes("example-schedules")
-        ) {
-          return new Response(JSON.stringify({ status: "ok" }), {
-            status: 200,
-            headers: { "content-type": "application/json" }
-          });
-        }
-
-        if (url.includes("example-durable-counter")) {
-          return new Response(
-            JSON.stringify({
-              service: "example-durable-counter",
-              object: "Counter"
-            }),
-            { status: 200, headers: { "content-type": "application/json" } }
-          );
-        }
-
-        if (url.includes("example-workflows")) {
-          return new Response(JSON.stringify({ service: "example-workflows" }), {
-            status: 200,
-            headers: { "content-type": "application/json" }
-          });
-        }
-
-        return new Response("Deploy From GitHub", { status: 200 });
-      })
-    );
-
     const response = await app.fetch(
       new Request("https://w7s.cloud/api/v1/status"),
       createTestEnv()
@@ -118,5 +70,52 @@ describe("status endpoint", () => {
     expect(body.components).toHaveLength(12);
     expect(body.components.every((component) => component.status === "operational")).toBe(true);
     expect(body.incidents).toHaveLength(0);
+  });
+
+  it("reports configured incidents and component overrides", async () => {
+    const response = await app.fetch(
+      new Request("https://w7s.cloud/api/v1/status"),
+      createTestEnv({
+        W7S_STATUS_COMPONENTS_JSON: JSON.stringify({
+          queues: "partial_outage"
+        }),
+        W7S_STATUS_INCIDENTS_JSON: JSON.stringify([
+          {
+            id: "incident-1",
+            name: "Deploy queue latency",
+            status: "investigating",
+            impact: "minor",
+            created_at: "2026-05-27T00:00:00.000Z",
+            updated_at: "2026-05-27T00:01:00.000Z",
+            components: ["queues"],
+            component_names: ["Background queues"],
+            incident_updates: [
+              {
+                status: "investigating",
+                body: "Queue delivery is slower than expected.",
+                created_at: "2026-05-27T00:01:00.000Z"
+              }
+            ]
+          }
+        ])
+      })
+    );
+    const body = await response.json() as {
+      status: { indicator: string; description: string };
+      components: Array<{ id: string; name: string; status: string }>;
+      incidents: Array<{ component_names: string[] }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.status.indicator).toBe("minor");
+    expect(body.status.description).toBe("Partial outage detected");
+    expect(body.components.find((component) => component.id === "queues")).toMatchObject({
+      name: "Background queues",
+      status: "partial_outage"
+    });
+    expect(body.incidents).toHaveLength(2);
+    expect(body.incidents.flatMap((incident) => incident.component_names)).toContain(
+      "Background queues"
+    );
   });
 });
