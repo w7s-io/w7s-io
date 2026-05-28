@@ -328,8 +328,9 @@ describe("runtime router", () => {
       env
     );
 
-    expect(response.status).toBe(308);
+    expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://w7s-io.w7s.cloud/demo/?from=test");
+    expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
   it("serves branch environments from branch-prefixed hosts", async () => {

@@ -120,7 +120,13 @@ const deployShowcaseResponse = (request: Request, host: string, orgSlug: string)
 const redirectToDirectoryPath = (request: Request) => {
   const url = new URL(request.url);
   url.pathname = `${url.pathname}/`;
-  return Response.redirect(url.toString(), 308);
+  return new Response(null, {
+    status: 302,
+    headers: {
+      "cache-control": "no-store",
+      location: url.toString()
+    }
+  });
 };
 
 const addRuntimeTimingHeader = (
