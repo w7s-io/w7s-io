@@ -33,7 +33,7 @@ import {
   buildWorkflowUploadBindings,
   W7S_WORKFLOW_BINDING
 } from "../deploy/workflowBindings";
-import { buildAiUploadBindings } from "../deploy/aiBindings";
+import { buildAiUploadBindings, W7S_AI_BINDING } from "../deploy/aiBindings";
 import { generateBindingToken, hashBindingToken } from "../deploy/tokens";
 import { provisionAppQueues } from "../deploy/queueProvisioner";
 import {
@@ -228,10 +228,6 @@ export const handleDeploy = async (c: HonoContext) => {
   if (!hasNativeBackend && appManifest.bindings.hyperdrive.length > 0) {
     return jsonError("Hyperdrive bindings require a native backend deployment.", 400);
   }
-  if (!hasNativeBackend && appManifest.bindings.ai.length > 0) {
-    return jsonError("AI bindings require a native backend deployment.", 400);
-  }
-
   const deployLimitErrors = validateDeployLimits({
     archive,
     manifest: appManifest,
@@ -318,24 +314,15 @@ export const handleDeploy = async (c: HonoContext) => {
         allow: appManifest.workflow.allow,
         workflows: appManifest.workflows
       };
-      const aiDeclaration = appManifest.bindings.ai[0];
-      const aiToken = aiDeclaration ? generateBindingToken() : null;
-      const aiBindings = aiDeclaration && aiToken
-        ? buildAiUploadBindings({
-            env: c.env,
-            binding: aiDeclaration.binding,
-            token: aiToken,
-            orgSlug,
-            repoSlug,
-            environment
-          })
-        : [];
-      if (aiDeclaration && aiToken) {
-        deploymentAi = {
-          binding: aiDeclaration.binding,
-          tokenHash: await hashBindingToken(aiToken)
-        };
-      }
+      const aiToken = generateBindingToken();
+      const aiBindings = buildAiUploadBindings({
+        env: c.env,
+        token: aiToken
+      });
+      deploymentAi = {
+        binding: W7S_AI_BINDING,
+        tokenHash: await hashBindingToken(aiToken)
+      };
       const published = await publishIsolateWorker({
         env: c.env,
         archive,

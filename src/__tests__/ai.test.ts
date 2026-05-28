@@ -46,8 +46,8 @@ const aiRequest = (params: {
     headers: {
       authorization: `Bearer ${params.token}`,
       "content-type": "application/json",
-      "x-w7s-ai-caller": params.caller ?? "acme/jokes",
-      "x-w7s-ai-environment": params.environment ?? "production"
+      ...(params.caller ? { "x-w7s-ai-caller": params.caller } : {}),
+      ...(params.environment ? { "x-w7s-ai-environment": params.environment } : {})
     },
     body: JSON.stringify({
       model: params.model ?? "@w7s/meta/llama-3.1-8b-instruct-fp8",
@@ -110,6 +110,39 @@ describe("AI API", () => {
       ],
       doubles: [1, 200, expect.any(Number)]
     });
+  });
+
+  it("supports legacy caller headers when the AI token mapping is missing", async () => {
+    const calls: string[] = [];
+    const env = createTestEnv({
+      AI: {
+        run: async () => {
+          calls.push("run");
+          return { response: "legacy app still works" };
+        }
+      } as unknown as Ai
+    });
+    const record = await aiRecord({
+      orgSlug: "acme",
+      repoSlug: "jokes",
+      token: "legacy-token"
+    });
+    await env.DEPLOYMENTS_KV.put(
+      "deployment:v1:production:acme:jokes",
+      JSON.stringify(record)
+    );
+
+    const response = await app.fetch(
+      aiRequest({
+        token: "legacy-token",
+        caller: "acme/jokes",
+        environment: "production"
+      }),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    expect(calls).toEqual(["run"]);
   });
 
   it("rejects invalid AI tokens", async () => {

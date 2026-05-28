@@ -187,6 +187,16 @@ export type ScheduleMapping = {
   deployedAt: string;
 };
 
+export type AiTokenMapping = {
+  version: 1;
+  tokenHash: string;
+  orgSlug: string;
+  repoSlug: string;
+  environment: string;
+  repository: string;
+  deployedAt: string;
+};
+
 type CacheEntry<T> = {
   value: T;
   expiresAt: number;
@@ -321,6 +331,9 @@ export const queueMappingKey = (queueName: string) =>
 export const workerScriptMappingKey = (scriptName: string) =>
   `worker_script:v1:${sanitizeScriptPart(scriptName)}`;
 
+export const aiTokenMappingKey = (tokenHash: string) =>
+  `ai_token:v1:${tokenHash.trim()}`;
+
 export const scheduleMappingId = (
   record: Pick<DeploymentRecord, "environment" | "orgSlug" | "repoSlug">,
   schedule: DeploymentSchedule
@@ -369,6 +382,20 @@ export const storeDeploymentRecord = async (env: Env, record: DeploymentRecord) 
             commitSha: record.commitSha,
             deployedAt: record.deployedAt
           } satisfies WorkerScriptMapping)
+        )
+      : Promise.resolve(),
+    record.ai
+      ? env.DEPLOYMENTS_KV.put(
+          aiTokenMappingKey(record.ai.tokenHash),
+          JSON.stringify({
+            version: 1,
+            tokenHash: record.ai.tokenHash,
+            orgSlug: record.orgSlug,
+            repoSlug: record.repoSlug,
+            environment: record.environment,
+            repository: record.repository,
+            deployedAt: record.deployedAt
+          } satisfies AiTokenMapping)
         )
       : Promise.resolve()
   ]);
@@ -487,6 +514,23 @@ export const loadWorkerScriptMapping = async (env: Env, scriptName: string) => {
     return null;
   }
   return record as WorkerScriptMapping;
+};
+
+export const loadAiTokenMapping = async (env: Env, tokenHash: string) => {
+  const raw = await env.DEPLOYMENTS_KV.get(aiTokenMappingKey(tokenHash), "json");
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as Partial<AiTokenMapping>;
+  if (
+    record.version !== 1 ||
+    typeof record.tokenHash !== "string" ||
+    typeof record.orgSlug !== "string" ||
+    typeof record.repoSlug !== "string" ||
+    typeof record.environment !== "string" ||
+    typeof record.repository !== "string"
+  ) {
+    return null;
+  }
+  return record as AiTokenMapping;
 };
 
 export const storeCustomDomainMappings = async (

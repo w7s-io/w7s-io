@@ -4,7 +4,7 @@ import { hashBindingToken } from "../deploy/tokens";
 import type { Env } from "../env";
 import { jsonError, jsonSuccess, parseBearerToken } from "../http";
 import { requireSlug } from "../names";
-import { loadDeploymentRecord } from "../storage/deployments";
+import { loadAiTokenMapping, loadDeploymentRecord } from "../storage/deployments";
 import { recordUsageEvent } from "../usage";
 import { enforceUsageLimit } from "../usageEnforcement";
 import { enforceAppNotSuspended } from "../appLimits";
@@ -22,6 +22,12 @@ class AiRequestError extends Error {
   }
 }
 
+type AiCaller = {
+  orgSlug: string;
+  repoSlug: string;
+  environment: string;
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
@@ -33,7 +39,7 @@ const positiveInteger = (value: string | undefined, fallback: number) => {
 const maxAiRequestBytes = (env: Env) =>
   positiveInteger(env.W7S_AI_MAX_REQUEST_BYTES, DEFAULT_MAX_AI_REQUEST_BYTES);
 
-const parseCaller = (c: HonoContext) => {
+const parseHeaderCaller = (c: HonoContext): AiCaller => {
   const caller = c.req.header("x-w7s-ai-caller")?.trim() ?? "";
   const [owner, repo, extra] = caller.split("/");
   if (!owner || !repo || extra) {
@@ -44,6 +50,45 @@ const parseCaller = (c: HonoContext) => {
     repoSlug: requireSlug(repo, "AI caller repo"),
     environment: requireSlug(c.req.header("x-w7s-ai-environment") ?? "", "AI caller environment")
   };
+};
+
+const resolveCallerFromToken = async (
+  c: HonoContext,
+  tokenHash: string
+): Promise<AiCaller | Response> => {
+  const mapping = await loadAiTokenMapping(c.env, tokenHash);
+  const caller = mapping
+    ? {
+        orgSlug: mapping.orgSlug,
+        repoSlug: mapping.repoSlug,
+        environment: mapping.environment
+      }
+    : (() => {
+        try {
+          return parseHeaderCaller(c);
+        } catch {
+          return null;
+        }
+      })();
+
+  if (!caller) {
+    return jsonError("Invalid AI bearer token. Redeploy the app to refresh W7S AI credentials.", 401);
+  }
+
+  const deployment = await loadDeploymentRecord(
+    c.env,
+    caller.environment,
+    caller.orgSlug,
+    caller.repoSlug
+  );
+  if (!deployment?.ai?.tokenHash) {
+    return jsonError("AI is not enabled for this deployment. Redeploy the app to refresh W7S AI credentials.", 401);
+  }
+  if (deployment.ai.tokenHash !== tokenHash) {
+    return jsonError("Invalid AI bearer token.", 401);
+  }
+
+  return caller;
 };
 
 const publicModelName = (model: string) =>
@@ -109,7 +154,7 @@ const readAiRunRequest = async (request: Request, env: Env) => {
 
 const writeAiUsage = async (params: {
   env: Env;
-  caller: ReturnType<typeof parseCaller>;
+  caller: AiCaller;
   model: string;
   status: number;
   durationMs: number;
@@ -146,10 +191,9 @@ export const handleAiRun = async (c: HonoContext) => {
   const token = parseBearerToken(c.req.raw);
   if (!token) return jsonError("Missing AI bearer token.", 401);
 
-  let caller: ReturnType<typeof parseCaller>;
+  let caller: AiCaller;
   let aiRequest: Awaited<ReturnType<typeof readAiRunRequest>>;
   try {
-    caller = parseCaller(c);
     aiRequest = await readAiRunRequest(c.req.raw, c.env);
   } catch (error) {
     return jsonError(
@@ -158,18 +202,11 @@ export const handleAiRun = async (c: HonoContext) => {
     );
   }
 
-  const deployment = await loadDeploymentRecord(
-    c.env,
-    caller.environment,
-    caller.orgSlug,
-    caller.repoSlug
-  );
-  if (!deployment?.ai?.tokenHash) {
-    return jsonError("AI is not enabled for this deployment. Declare bindings.ai in w7s.json and redeploy.", 401);
-  }
-  if (await hashBindingToken(token) !== deployment.ai.tokenHash) {
-    return jsonError("Invalid AI bearer token.", 401);
-  }
+  const tokenHash = await hashBindingToken(token);
+  const resolvedCaller = await resolveCallerFromToken(c, tokenHash);
+  if (resolvedCaller instanceof Response) return resolvedCaller;
+  caller = resolvedCaller;
+
   if (!c.env.AI) {
     return jsonError("W7S AI is not configured for this core deployment.", 503);
   }

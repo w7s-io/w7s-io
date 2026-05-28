@@ -745,7 +745,10 @@ describe("deploy API", () => {
       allow: [],
       workflows: []
     });
-    expect(body.data?.deployment?.ai).toBeUndefined();
+    expect(record?.ai?.binding).toBe("W7S_AI");
+    expect(body.data?.deployment?.ai).toEqual({
+      binding: "W7S_AI"
+    });
   });
 
   it("stores declared workflows and uploads workflow runtime bindings", async () => {
@@ -825,7 +828,7 @@ describe("deploy API", () => {
     expect(record?.targets.worker?.tags).toEqual(uploadedMetadata[0]?.tags);
   });
 
-  it("uploads declared W7S AI runtime bindings", async () => {
+  it("uploads W7S AI runtime bindings for native backends", async () => {
     const uploadedMetadata: Array<{
       bindings?: Array<Record<string, string>>;
     }> = [];
@@ -854,12 +857,7 @@ describe("deploy API", () => {
     });
     const response = await app.fetch(
       deployRequest({
-        "backend/index.js": "export default { fetch(){ return new Response('backend') } }",
-        "w7s.json": JSON.stringify({
-          bindings: {
-            ai: ["W7S_AI"]
-          }
-        })
+        "backend/index.js": "export default { fetch(){ return new Response('backend') } }"
       }),
       env
     );
@@ -877,9 +875,13 @@ describe("deploy API", () => {
     expect(uploadedMetadata[0]?.bindings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: "service", name: "W7S_AI", service: "w7s-io" }),
-        expect.objectContaining({ type: "secret_text", name: "W7S_AI_TOKEN" }),
-        { type: "plain_text", name: "W7S_AI_CALLER", text: "w7s-io/demo" },
-        { type: "plain_text", name: "W7S_AI_ENVIRONMENT", text: "production" }
+        expect.objectContaining({ type: "secret_text", name: "W7S_AI_TOKEN" })
+      ])
+    );
+    expect(uploadedMetadata[0]?.bindings).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "W7S_AI_CALLER" }),
+        expect.objectContaining({ name: "W7S_AI_ENVIRONMENT" })
       ])
     );
   });
