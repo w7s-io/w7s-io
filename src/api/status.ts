@@ -130,6 +130,26 @@ const validStatus = (status: unknown): status is ComponentStatus =>
   status === "partial_outage" ||
   status === "major_outage";
 
+const validIncidentImpact = (impact: unknown): impact is StatusIncident["impact"] =>
+  impact === "minor" || impact === "major" || impact === "critical";
+
+const validIncident = (incident: unknown): incident is StatusIncident => {
+  if (!incident || typeof incident !== "object") return false;
+  const candidate = incident as Partial<StatusIncident>;
+
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.name === "string" &&
+    typeof candidate.status === "string" &&
+    validIncidentImpact(candidate.impact) &&
+    typeof candidate.created_at === "string" &&
+    typeof candidate.updated_at === "string" &&
+    Array.isArray(candidate.components) &&
+    Array.isArray(candidate.component_names) &&
+    Array.isArray(candidate.incident_updates)
+  );
+};
+
 const parseJson = <T>(raw: string | undefined): T | null => {
   if (!raw?.trim()) return null;
 
@@ -151,8 +171,11 @@ const componentStatusOverrides = (env: Env) => {
   );
 };
 
-const incidentOverrides = (env: Env) =>
-  parseJson<StatusIncident[]>(env.W7S_STATUS_INCIDENTS_JSON) ?? [];
+const incidentOverrides = (env: Env) => {
+  const parsed = parseJson<unknown>(env.W7S_STATUS_INCIDENTS_JSON);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter(validIncident);
+};
 
 const statusHeaders = {
   "access-control-allow-origin": "*",

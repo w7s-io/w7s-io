@@ -118,4 +118,21 @@ describe("status endpoint", () => {
       "Background queues"
     );
   });
+
+  it("ignores malformed incident overrides", async () => {
+    const response = await app.fetch(
+      new Request("https://w7s.cloud/api/v1/status"),
+      createTestEnv({
+        W7S_STATUS_INCIDENTS_JSON: JSON.stringify({ impact: "critical" })
+      })
+    );
+    const body = await response.json() as {
+      status: { description: string };
+      incidents: unknown[];
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.status.description).toBe("All systems operational");
+    expect(body.incidents).toHaveLength(0);
+  });
 });
