@@ -32,5 +32,6 @@ Start here:
 - authenticated log reads expose user Worker `console.*` output and uncaught exceptions through `/api/v1/logs/<owner>/<repo>`.
 - daily repo/owner/global usage rollups, hourly Cloudflare usage sync, app suspension state, short-window burst guards, and effective limit warnings are exposed through `GET /api/v1/usage/<owner>/<repo>`.
 - effective limit policies are exposed through `GET /api/v1/limits/<owner>/<repo>`.
+- optional Telegram manager notifications can report deploys, deploy warnings/errors, app suspensions, and usage collection failures when `W7S_TELEGRAM_BOT_TOKEN` and `W7S_TELEGRAM_CHAT_ID` are configured.
 
 The old workflow editor, `jsInterpreter`, plugin bridge, DB control, and telemetry stack are not part of this core.

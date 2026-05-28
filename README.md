@@ -238,8 +238,11 @@ await env.W7S_WORKFLOW.fetch(
 - `W7S_DISABLE_WORKER_LOGS`: set to `true` to skip adding Tail Worker consumers to uploaded user Workers
 - `W7S_USER_WORKER_CPU_MS`: dispatch custom CPU limit for user Workers, default `50`
 - `W7S_USER_WORKER_SUBREQUESTS`: dispatch subrequest limit for user Workers, default `25`
+- `W7S_TELEGRAM_EVENTS`: optional comma-separated manager notification allowlist, default all supported events
 - `CLOUDFLARE_API_TOKEN`: secret with dispatch namespace publish access
 - `CLOUDFLARE_ACCOUNT_ID`: Cloudflare account id
+- `W7S_TELEGRAM_BOT_TOKEN`: optional Telegram bot token for manager notifications
+- `W7S_TELEGRAM_CHAT_ID`: optional Telegram chat id that receives manager notifications
 
 ## GitHub Deploy
 
@@ -249,6 +252,11 @@ Required secrets:
 
 - `CLOUDFLARE_API_TOKEN`
 - `ACCOUNT_ID` or `CLOUDFLARE_ACCOUNT_ID`
+
+Optional notification secrets:
+
+- `W7S_TELEGRAM_BOT_TOKEN`
+- `W7S_TELEGRAM_CHAT_ID`
 
 Optional repo variables:
 
@@ -261,6 +269,7 @@ Optional repo variables:
 - `W7S_WORKFLOW_NAME`, default `w7s-workflows`
 - `W7S_USER_WORKER_CPU_MS`, default `50`
 - `W7S_USER_WORKER_SUBREQUESTS`, default `25`
+- `W7S_TELEGRAM_EVENTS`, comma-separated event allowlist. Supported values: `all`, `deploy_success`, `deploy_warning`, `deploy_error`, `app_suspended`, `usage_collection_error`.
 
 Set `W7S_ATTACH_WILDCARD_ROUTE=true` only when this worker should attach the `*.w7s.cloud/*` route. Cloudflare rejects the deploy if another worker already owns that route.
 

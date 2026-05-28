@@ -30,6 +30,7 @@ As of the latest docs update:
 - Short-window burst guards protect deploys, runtime requests, RPC, queues, schedules, workflows, and log ingestion.
 - Hourly Cloudflare usage collection stores `usage_cf_hourly:v1:*` and can write `app_limit_state:v1:*` to suspend apps until the next UTC day.
 - The scheduled handler also cleans stale static assets, stale dispatch Worker scripts, expired app suspension states, and old usage records.
+- Optional Telegram manager notifications are sent when `W7S_TELEGRAM_BOT_TOKEN` and `W7S_TELEGRAM_CHAT_ID` are configured. Events cover deploy success/warning/error, app suspension, and hourly usage collection failures.
 - Root `CNAME` files can attach app custom-domain routes when the W7S token can manage that Cloudflare zone.
 - Custom domains use soft TXT verification: the first claim works without TXT, `_w7s.<zone>` becomes an owner/repo allowlist when present, and hostname conflicts require TXT authorization.
 - Empty org roots such as `https://sadasant.w7s.cloud/` show deploy-help HTML instead of a plain 404.

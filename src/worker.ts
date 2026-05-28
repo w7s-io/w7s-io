@@ -16,6 +16,7 @@ import { W7SWorkflow } from "./runtime/workflowDelivery";
 import { resolveRuntimeRequest } from "./runtime/router";
 import { landingHtml } from "./static/landing";
 import { handleTailEvents } from "./logs";
+import { notifyDeployResponse } from "./notifications";
 
 export { W7SWorkflow };
 
@@ -35,7 +36,14 @@ app.get("/api/v1/health", health);
 app.options("/api/v1/status", handleStatusOptions);
 app.get("/api/v1/status", handleStatusGet);
 
-app.post("/api/v1/deploy", handleDeploy);
+app.post("/api/v1/deploy", async (c) => {
+  const response = await handleDeploy(c);
+  const ctx = optionalExecutionCtx(c);
+  const notification = notifyDeployResponse(c.env, c.req.raw, response.clone());
+  if (ctx) ctx.waitUntil(notification);
+  else await notification;
+  return response;
+});
 app.all("/api/v1/rpc/*", handleRpc);
 app.post("/api/v1/queues/*", handleQueueSend);
 app.post("/api/v1/workflows/*", handleWorkflowCreate);

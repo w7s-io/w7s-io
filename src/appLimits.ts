@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { json } from "./http";
 import { sanitizeScriptPart } from "./names";
+import { notifyAppSuspended } from "./notifications";
 import type { UsageLimitWarning } from "./usageLimits";
 
 export type AppLimitState = {
@@ -227,6 +228,15 @@ export const suspendAppForLimits = async (
     reason: params.reason,
     metrics: params.metrics,
     updatedAt: at.toISOString(),
+    resumeAfter: resumeAfter.toISOString()
+  });
+  await notifyAppSuspended(env, {
+    environment: params.environment,
+    orgSlug: params.orgSlug,
+    repoSlug: params.repoSlug,
+    reason: params.reason,
+    metrics: params.metrics,
+    at,
     resumeAfter: resumeAfter.toISOString()
   });
 };

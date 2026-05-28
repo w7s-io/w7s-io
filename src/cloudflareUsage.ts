@@ -1,6 +1,7 @@
 import { clearAppLimitState, suspendAppForLimits } from "./appLimits";
 import type { Env } from "./env";
 import { sanitizeScriptPart } from "./names";
+import { notifyUsageCollectionFailures } from "./notifications";
 import {
   loadUsageDailyRollup,
   rebuildUsageAggregatesForDate,
@@ -792,6 +793,11 @@ export const collectHourlyCloudflareUsage = async (
   const failures = settled.filter((entry): entry is PromiseRejectedResult => entry.status === "rejected");
   if (failures.length > 0) {
     console.warn(`W7S Cloudflare usage collection failed for ${failures.length} deployment(s).`);
+    await notifyUsageCollectionFailures(env, {
+      hour,
+      deployments: deployments.length,
+      failures: failures.length
+    });
   }
   return {
     collected: true,

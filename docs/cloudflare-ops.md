@@ -47,6 +47,15 @@ The token must be able to:
 
 DNS record permissions are not required by the current deploy workflow because wildcard DNS and app custom-domain DNS are manual.
 
+Optional manager notification secrets:
+
+```text
+W7S_TELEGRAM_BOT_TOKEN
+W7S_TELEGRAM_CHAT_ID
+```
+
+`W7S_TELEGRAM_BOT_TOKEN` is the Telegram bot token. `W7S_TELEGRAM_CHAT_ID` must be the private chat, group, or channel id the bot can message. For a private manager chat, the manager must first send a message such as `/start` to the bot, then read the chat id from `getUpdates` or another Telegram admin tool.
+
 ## Optional GitHub Variables
 
 ```text
@@ -58,6 +67,7 @@ W7S_ANALYTICS_DATASET           optional Analytics Engine dataset name
 W7S_WORKFLOW_NAME               default: w7s-workflows
 W7S_ATTACH_WILDCARD_ROUTE       default: false
 W7S_COMPATIBILITY_DATE          default: 2026-05-23
+W7S_TELEGRAM_EVENTS             optional comma-separated notification event allowlist
 ```
 
 Current cutover state uses:
@@ -87,6 +97,15 @@ The generated config includes:
 - runtime vars such as `W7S_BASE_DOMAIN`, `W7S_WORKER_NAME`, `W7S_USER_WORKER_CPU_MS`, `W7S_USER_WORKER_SUBREQUESTS`, `APP_COMMIT_ID`, `APP_DEPLOY_BRANCH`, and `APP_DEPLOYED_AT`;
 - a per-minute core Cron Trigger used to dispatch app-declared schedules;
 - Worker secrets needed for user deploys.
+
+If Telegram notification secrets are configured, W7S sends manager notifications for:
+
+- deploy success and deploy warnings;
+- deploy failures;
+- app suspension after usage limits are exceeded;
+- hourly Cloudflare usage collection failures.
+
+Use `W7S_TELEGRAM_EVENTS` to limit those messages. Supported values are `all`, `deploy_success`, `deploy_warning`, `deploy_error`, `app_suspended`, and `usage_collection_error`.
 
 Routes are reconciled after `wrangler deploy` instead of being managed by the generated Wrangler config. This prevents core deploys from deleting W7S app custom-domain routes such as `community.w7s.io/*`.
 

@@ -45,6 +45,9 @@ const appDeployedAt = process.env.W7S_DEPLOYED_AT?.trim() || null;
 const statusComponentsJson = process.env.W7S_STATUS_COMPONENTS_JSON?.trim() || "";
 const statusRegionsJson = process.env.W7S_STATUS_REGIONS_JSON?.trim() || "";
 const statusIncidentsJson = process.env.W7S_STATUS_INCIDENTS_JSON?.trim() || "";
+const telegramEvents = process.env.W7S_TELEGRAM_EVENTS?.trim() || "";
+const telegramBotToken = process.env.W7S_TELEGRAM_BOT_TOKEN?.trim() || "";
+const telegramChatId = process.env.W7S_TELEGRAM_CHAT_ID?.trim() || "";
 
 if (!apiToken) {
   throw new Error("CLOUDFLARE_API_TOKEN is required.");
@@ -196,7 +199,8 @@ const config = {
     ...(appDeployedAt ? { APP_DEPLOYED_AT: appDeployedAt } : {}),
     ...(statusComponentsJson ? { W7S_STATUS_COMPONENTS_JSON: statusComponentsJson } : {}),
     ...(statusRegionsJson ? { W7S_STATUS_REGIONS_JSON: statusRegionsJson } : {}),
-    ...(statusIncidentsJson ? { W7S_STATUS_INCIDENTS_JSON: statusIncidentsJson } : {})
+    ...(statusIncidentsJson ? { W7S_STATUS_INCIDENTS_JSON: statusIncidentsJson } : {}),
+    ...(telegramEvents ? { W7S_TELEGRAM_EVENTS: telegramEvents } : {})
   },
   dispatch_namespaces: [
     {
@@ -238,7 +242,9 @@ await writeFile(
   `${JSON.stringify(
     {
       CLOUDFLARE_API_TOKEN: apiToken,
-      CLOUDFLARE_ACCOUNT_ID: accountId
+      CLOUDFLARE_ACCOUNT_ID: accountId,
+      ...(telegramBotToken ? { W7S_TELEGRAM_BOT_TOKEN: telegramBotToken } : {}),
+      ...(telegramChatId ? { W7S_TELEGRAM_CHAT_ID: telegramChatId } : {})
     },
     null,
     2
