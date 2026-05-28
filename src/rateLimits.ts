@@ -62,6 +62,9 @@ const BURST_LIMITS: BurstLimitPolicy[] = [
   { metric: "workflow.delivery", scope: "repo", windowSeconds: 60, units: 120 },
   { metric: "workflow.delivery", scope: "owner", windowSeconds: 60, units: 600 },
   { metric: "workflow.delivery", scope: "global", windowSeconds: 60, units: 5_000 },
+  { metric: "ai.run", scope: "repo", windowSeconds: 60, units: 30 },
+  { metric: "ai.run", scope: "owner", windowSeconds: 60, units: 150 },
+  { metric: "ai.run", scope: "global", windowSeconds: 60, units: 1_000 },
   { metric: "log.write", scope: "repo", windowSeconds: 60, units: 500 },
   { metric: "log.write", scope: "owner", windowSeconds: 60, units: 2_000 },
   { metric: "log.write", scope: "global", windowSeconds: 60, units: 10_000 }
