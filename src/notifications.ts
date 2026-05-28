@@ -20,6 +20,7 @@ type RepoTelegramEvent =
 type NotifyOptions = {
   dedupeKey?: string;
   dedupeTtlSeconds?: number;
+  parseMode?: "Markdown";
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -149,6 +150,7 @@ const sendTelegramMessage = async (
         body: JSON.stringify({
           chat_id: chatId,
           text: text.slice(0, 3900),
+          ...(options?.parseMode ? { parse_mode: options.parseMode } : {}),
           disable_web_page_preview: true
         })
       }
@@ -585,11 +587,14 @@ const botInstructions = (chatId: string, fromId?: string | null) => [
   "",
   "Use this chat id in your GitHub Actions workflow:",
   "",
+  "```",
   `telegram-chat-id: "${chatId}"`,
+  "```",
   ...(fromId && fromId !== chatId ? ["", `Your Telegram user id is ${fromId}.`] : []),
   "",
   "Example:",
   "",
+  "```",
   "name: Deploy",
   "on:",
   "  push:",
@@ -606,6 +611,7 @@ const botInstructions = (chatId: string, fromId?: string | null) => [
   "          token: ${{ github.token }}",
   `          telegram-chat-id: "${chatId}"`,
   "          telegram-events: deploy_success,deploy_warning,deploy_error,app_suspended,payment_request",
+  "```",
   "",
   "The bot can only send private messages after you have started this chat."
 ].join("\n");
@@ -620,7 +626,9 @@ const handleTelegramUpdate = async (env: Env, update: JsonRecord) => {
   const chatId = stringValue(chat?.id) ?? (numberValue(chat?.id) !== null ? String(numberValue(chat?.id)) : null);
   if (!chatId) return;
   const fromId = stringValue(from?.id) ?? (numberValue(from?.id) !== null ? String(numberValue(from?.id)) : null);
-  await sendTelegramMessage(env, chatId, botInstructions(chatId, fromId));
+  await sendTelegramMessage(env, chatId, botInstructions(chatId, fromId), {
+    parseMode: "Markdown"
+  });
 };
 
 export const handleTelegramWebhook = async (c: Context<{ Bindings: Env }>) => {

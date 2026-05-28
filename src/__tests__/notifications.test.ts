@@ -215,8 +215,10 @@ describe("Telegram notifications", () => {
 
     expect(response.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const body = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body)) as { chat_id: string; text: string };
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body)) as { chat_id: string; text: string; parse_mode?: string };
     expect(body.chat_id).toBe("77777");
+    expect(body.parse_mode).toBe("Markdown");
+    expect(body.text).toContain('```\ntelegram-chat-id: "77777"\n```');
     expect(body.text).toContain('telegram-chat-id: "77777"');
     expect(body.text).toContain("w7s-io/w7s-cloud@v1");
   });
