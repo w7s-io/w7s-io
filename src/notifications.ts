@@ -20,7 +20,7 @@ type RepoTelegramEvent =
 type NotifyOptions = {
   dedupeKey?: string;
   dedupeTtlSeconds?: number;
-  parseMode?: "Markdown";
+  parseMode?: "Markdown" | "MarkdownV2";
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -69,6 +69,7 @@ const VALID_REPO_EVENTS = new Set<RepoTelegramEvent>([
 
 const TELEGRAM_API_BASE = "https://api.telegram.org";
 const TELEGRAM_SUBSCRIPTION_PREFIX = "telegram_subscription:v1";
+const TELEGRAM_MARKDOWN_V2_SPECIALS = /([_*\[\]()~`>#+\-=|{}.!\\])/g;
 
 const asRecord = (value: unknown): JsonRecord | null =>
   value && typeof value === "object" && !Array.isArray(value)
@@ -83,6 +84,24 @@ const numberValue = (value: unknown) =>
 
 const arrayValue = (value: unknown) =>
   Array.isArray(value) ? value : [];
+
+const telegramText = (value: string) =>
+  value.replace(TELEGRAM_MARKDOWN_V2_SPECIALS, "\\$1");
+
+const telegramCode = (value: string) =>
+  `\`${value.replace(/([`\\])/g, "\\$1")}\``;
+
+const telegramPre = (value: string) =>
+  `\`\`\`\n${value.replace(/([`\\])/g, "\\$1")}\n\`\`\``;
+
+const telegramHeading = (value: string) =>
+  `*${telegramText(value)}*`;
+
+const telegramField = (label: string, value: string) =>
+  `${telegramHeading(`${label}:`)} ${telegramCode(value)}`;
+
+const telegramPlainField = (label: string, value: string) =>
+  `${telegramHeading(`${label}:`)} ${telegramText(value)}`;
 
 const shortSha = (value: unknown) => {
   const sha = stringValue(value);
@@ -140,9 +159,8 @@ const sendTelegramMessage = async (
   try {
     const dedupeKey = await readDedupeKey(env, options);
     if (options?.dedupeKey && options.dedupeTtlSeconds && !dedupeKey) return true;
-    const response = await fetch(
-      `${TELEGRAM_API_BASE}/bot${botToken}/sendMessage`,
-      {
+    const send = (parseMode?: NotifyOptions["parseMode"]) =>
+      fetch(`${TELEGRAM_API_BASE}/bot${botToken}/sendMessage`, {
         method: "POST",
         headers: {
           "content-type": "application/json"
@@ -150,11 +168,14 @@ const sendTelegramMessage = async (
         body: JSON.stringify({
           chat_id: chatId,
           text: text.slice(0, 3900),
-          ...(options?.parseMode ? { parse_mode: options.parseMode } : {}),
+          ...(parseMode ? { parse_mode: parseMode } : {}),
           disable_web_page_preview: true
         })
-      }
-    );
+      });
+    let response = await send(options?.parseMode);
+    if (!response.ok && options?.parseMode) {
+      response = await send();
+    }
     if (!response.ok) {
       console.warn(`W7S Telegram notification failed with HTTP ${response.status}.`);
       return false;
@@ -308,6 +329,7 @@ const notifyTelegramSubscribers = async (
     text: string;
     dedupeKey?: string;
     dedupeTtlSeconds?: number;
+    parseMode?: NotifyOptions["parseMode"];
   }
 ) => {
   const subscriptions = await listTelegramSubscriptions(env, params);
@@ -317,7 +339,8 @@ const notifyTelegramSubscribers = async (
         dedupeKey: params.dedupeKey
           ? `subscriber:${subscription.chatId}:${params.dedupeKey}`
           : undefined,
-        dedupeTtlSeconds: params.dedupeTtlSeconds
+        dedupeTtlSeconds: params.dedupeTtlSeconds,
+        parseMode: params.parseMode
       })
     )
   );
@@ -343,8 +366,8 @@ const warningLines = (label: string, warnings: unknown[]) => {
     .filter((message): message is string => Boolean(message))
     .slice(0, 3);
   return [
-    `${label}: ${warnings.length}`,
-    ...messages.map((message) => `- ${message}`)
+    telegramField(label, String(warnings.length)),
+    ...messages.map((message) => `\\- ${telegramText(message)}`)
   ];
 };
 
@@ -393,14 +416,14 @@ const deploymentMessage = (
   const repoSlug = stringValue(deployment.repoSlug);
   const url = stringValue(data?.url);
   const lines = [
-    event === "deploy_warning" ? "W7S deploy completed with warnings" : "W7S deploy succeeded",
-    `Repository: ${repository}`,
-    `Environment: ${stringValue(deployment.environment) ?? "unknown"}`,
-    `Branch: ${stringValue(deployment.branch) ?? "unknown"}`,
-    `Commit: ${shortSha(deployment.commitSha) ?? "unknown"}`,
-    `Targets: ${deployTargetSummary(deployment)}`,
-    `Status: HTTP ${status}`,
-    ...(url ? [`URL: ${url}`] : []),
+    telegramHeading(event === "deploy_warning" ? "W7S deploy completed with warnings" : "W7S deploy succeeded"),
+    telegramField("Repository", repository),
+    telegramField("Environment", stringValue(deployment.environment) ?? "unknown"),
+    telegramField("Branch", stringValue(deployment.branch) ?? "unknown"),
+    telegramField("Commit", shortSha(deployment.commitSha) ?? "unknown"),
+    telegramField("Targets", deployTargetSummary(deployment)),
+    telegramField("Status", `HTTP ${status}`),
+    ...(url ? [telegramField("URL", url)] : []),
     ...warningLines("Deployment warnings", deploymentWarnings),
     ...warningLines("Custom domain warnings", customDomainWarnings),
     ...warningLines("Blocked custom domains", blockedCustomDomains)
@@ -413,7 +436,8 @@ const deploymentMessage = (
     environment: stringValue(deployment.environment),
     branch: stringValue(deployment.branch),
     commitSha: stringValue(deployment.commitSha),
-    text: lines.join("\n")
+    text: lines.join("\n"),
+    parseMode: "MarkdownV2" as const
   };
 };
 
@@ -430,13 +454,14 @@ const deployErrorMessage = (
     repository,
     environment: deployEnvironmentFromRequest(request),
     text: [
-      "W7S deploy failed",
-      `Repository: ${repository}`,
-      ...(branch ? [`Branch: ${branch}`] : []),
-      ...(sha ? [`Commit: ${shortSha(sha)}`] : []),
-      `Status: HTTP ${status}`,
-      `Error: ${error}`
-    ].join("\n")
+      telegramHeading("W7S deploy failed"),
+      telegramField("Repository", repository),
+      ...(branch ? [telegramField("Branch", branch)] : []),
+      ...(sha ? [telegramField("Commit", shortSha(sha) ?? "unknown")] : []),
+      telegramField("Status", `HTTP ${status}`),
+      telegramPlainField("Error", error)
+    ].join("\n"),
+    parseMode: "MarkdownV2" as const
   };
 };
 
@@ -473,14 +498,17 @@ export const notifyDeployResponse = async (
       });
     }
     await Promise.all([
-      notifyTelegramManager(env, message.event, message.text),
+      notifyTelegramManager(env, message.event, message.text, {
+        parseMode: message.parseMode
+      }),
       message.orgSlug && message.repoSlug && message.environment
         ? notifyTelegramSubscribers(env, {
             event: message.event,
             environment: message.environment,
             orgSlug: message.orgSlug,
             repoSlug: message.repoSlug,
-            text: message.text
+            text: message.text,
+            parseMode: message.parseMode
           })
         : Promise.resolve()
     ]);
@@ -493,7 +521,8 @@ export const notifyDeployResponse = async (
     await Promise.all([
       notifyTelegramManager(env, "deploy_error", message.text, {
         dedupeKey: `deploy_error:${message.repository}:${response.status}:${message.text}`,
-        dedupeTtlSeconds: 600
+        dedupeTtlSeconds: 600,
+        parseMode: message.parseMode
       }),
       parts
         ? notifyTelegramSubscribers(env, {
@@ -503,7 +532,8 @@ export const notifyDeployResponse = async (
             repoSlug: parts.repoSlug,
             text: message.text,
             dedupeKey: `deploy_error:${message.environment}:${message.repository}:${response.status}:${message.text}`,
-            dedupeTtlSeconds: 600
+            dedupeTtlSeconds: 600,
+            parseMode: message.parseMode
           })
         : Promise.resolve()
     ]);
@@ -524,16 +554,16 @@ export const notifyAppSuspended = async (
 ) => {
   const repository = `${params.orgSlug}/${params.repoSlug}`;
   const metricLines = (params.metrics ?? []).slice(0, 5).map((metric) =>
-    `- ${metric.metric}: ${metric.used}/${metric.limit} (${metric.status})`
+    `\\- ${telegramCode(metric.metric)}: ${telegramCode(`${metric.used}/${metric.limit}`)} ${telegramText(`(${metric.status})`)}`
   );
   const at = params.at ?? new Date();
   const text = [
-    "W7S app suspended",
-    `Repository: ${repository}`,
-    `Environment: ${params.environment}`,
-    `Reason: ${params.reason ?? "usage limit exceeded"}`,
-    ...(params.resumeAfter ? [`Resume after: ${params.resumeAfter}`] : []),
-    ...(metricLines.length > 0 ? ["Metrics:", ...metricLines] : [])
+    telegramHeading("W7S app suspended"),
+    telegramField("Repository", repository),
+    telegramField("Environment", params.environment),
+    telegramPlainField("Reason", params.reason ?? "usage limit exceeded"),
+    ...(params.resumeAfter ? [telegramField("Resume after", params.resumeAfter)] : []),
+    ...(metricLines.length > 0 ? [telegramHeading("Metrics:"), ...metricLines] : [])
   ].join("\n");
   const dedupeKey = `app_suspended:${params.environment}:${repository}:${at.toISOString().slice(0, 10)}`;
   await Promise.all([
@@ -543,7 +573,8 @@ export const notifyAppSuspended = async (
       text,
       {
         dedupeKey,
-        dedupeTtlSeconds: 86_400
+        dedupeTtlSeconds: 86_400,
+        parseMode: "MarkdownV2"
       }
     ),
     notifyTelegramSubscribers(env, {
@@ -553,7 +584,8 @@ export const notifyAppSuspended = async (
       repoSlug: params.repoSlug,
       text,
       dedupeKey,
-      dedupeTtlSeconds: 86_400
+      dedupeTtlSeconds: 86_400,
+      parseMode: "MarkdownV2"
     })
   ]);
 };
@@ -570,50 +602,52 @@ export const notifyUsageCollectionFailures = async (
     env,
     "usage_collection_error",
     [
-      "W7S usage collection failures",
-      `Hour: ${params.hour}`,
-      `Deployments scanned: ${params.deployments}`,
-      `Failures: ${params.failures}`
+      telegramHeading("W7S usage collection failures"),
+      telegramField("Hour", params.hour),
+      telegramField("Deployments scanned", String(params.deployments)),
+      telegramField("Failures", String(params.failures))
     ].join("\n"),
     {
       dedupeKey: `usage_collection_error:${params.hour}`,
-      dedupeTtlSeconds: 7_200
+      dedupeTtlSeconds: 7_200,
+      parseMode: "MarkdownV2"
     }
   );
 };
 
+const botWorkflowExample = (chatId: string) =>
+  [
+    "name: Deploy",
+    "on:",
+    "  push:",
+    "  workflow_dispatch:",
+    "permissions:",
+    "  contents: read",
+    "jobs:",
+    "  deploy:",
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    "      - uses: actions/checkout@v5",
+    "      - uses: w7s-io/w7s-cloud@v1",
+    "        with:",
+    "          token: ${{ github.token }}",
+    `          telegram-chat-id: "${chatId}"`,
+    "          telegram-events: deploy_success,deploy_warning,deploy_error,app_suspended,payment_request"
+  ].join("\n");
+
 const botInstructions = (chatId: string, fromId?: string | null) => [
-  "W7S Telegram notifications",
+  telegramHeading("W7S Telegram notifications"),
   "",
-  "Use this chat id in your GitHub Actions workflow:",
+  telegramText("Use this chat id in your GitHub Actions workflow:"),
   "",
-  "```",
-  `telegram-chat-id: "${chatId}"`,
-  "```",
-  ...(fromId && fromId !== chatId ? ["", `Your Telegram user id is ${fromId}.`] : []),
+  telegramPre(`telegram-chat-id: "${chatId}"`),
+  ...(fromId && fromId !== chatId ? ["", telegramPlainField("Your Telegram user id is", fromId)] : []),
   "",
-  "Example:",
+  telegramHeading("Example:"),
   "",
-  "```",
-  "name: Deploy",
-  "on:",
-  "  push:",
-  "  workflow_dispatch:",
-  "permissions:",
-  "  contents: read",
-  "jobs:",
-  "  deploy:",
-  "    runs-on: ubuntu-latest",
-  "    steps:",
-  "      - uses: actions/checkout@v5",
-  "      - uses: w7s-io/w7s-cloud@v1",
-  "        with:",
-  "          token: ${{ github.token }}",
-  `          telegram-chat-id: "${chatId}"`,
-  "          telegram-events: deploy_success,deploy_warning,deploy_error,app_suspended,payment_request",
-  "```",
+  telegramPre(botWorkflowExample(chatId)),
   "",
-  "The bot can only send private messages after you have started this chat."
+  telegramText("The bot can only send private messages after you have started this chat.")
 ].join("\n");
 
 const handleTelegramUpdate = async (env: Env, update: JsonRecord) => {
@@ -627,7 +661,7 @@ const handleTelegramUpdate = async (env: Env, update: JsonRecord) => {
   if (!chatId) return;
   const fromId = stringValue(from?.id) ?? (numberValue(from?.id) !== null ? String(numberValue(from?.id)) : null);
   await sendTelegramMessage(env, chatId, botInstructions(chatId, fromId), {
-    parseMode: "Markdown"
+    parseMode: "MarkdownV2"
   });
 };
 

@@ -84,12 +84,13 @@ describe("Telegram notifications", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://api.telegram.org/botbot-token/sendMessage");
-    const body = JSON.parse(String(init.body)) as { chat_id: string; text: string };
+    const body = JSON.parse(String(init.body)) as { chat_id: string; text: string; parse_mode?: string };
     expect(body.chat_id).toBe("12345");
-    expect(body.text).toContain("W7S deploy completed with warnings");
-    expect(body.text).toContain("Repository: w7s-io/demo");
-    expect(body.text).toContain("Targets: static 2 files, backend");
-    expect(body.text).toContain("Deployment warnings: 1");
+    expect(body.parse_mode).toBe("MarkdownV2");
+    expect(body.text).toContain("*W7S deploy completed with warnings*");
+    expect(body.text).toContain("*Repository:* `w7s-io/demo`");
+    expect(body.text).toContain("*Targets:* `static 2 files, backend`");
+    expect(body.text).toContain("*Deployment warnings:* `1`");
   });
 
   it("deduplicates repeated deploy error notifications", async () => {
@@ -139,10 +140,11 @@ describe("Telegram notifications", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    const body = JSON.parse(String(init.body)) as { text: string };
-    expect(body.text).toContain("W7S app suspended");
-    expect(body.text).toContain("Repository: w7s-io/demo");
-    expect(body.text).toContain("runtime.request: 10001/10000");
+    const body = JSON.parse(String(init.body)) as { text: string; parse_mode?: string };
+    expect(body.parse_mode).toBe("MarkdownV2");
+    expect(body.text).toContain("*W7S app suspended*");
+    expect(body.text).toContain("*Repository:* `w7s-io/demo`");
+    expect(body.text).toContain("`runtime.request`: `10001/10000`");
   });
 
   it("links a deploy action Telegram chat id to future repo alerts", async () => {
@@ -179,12 +181,14 @@ describe("Telegram notifications", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    const firstBody = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body)) as { chat_id: string; text: string };
-    const secondBody = JSON.parse(String((fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1].body)) as { chat_id: string; text: string };
+    const firstBody = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body)) as { chat_id: string; text: string; parse_mode?: string };
+    const secondBody = JSON.parse(String((fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1].body)) as { chat_id: string; text: string; parse_mode?: string };
     expect(firstBody.chat_id).toBe("55555");
-    expect(firstBody.text).toContain("W7S deploy succeeded");
+    expect(firstBody.parse_mode).toBe("MarkdownV2");
+    expect(firstBody.text).toContain("*W7S deploy succeeded*");
     expect(secondBody.chat_id).toBe("55555");
-    expect(secondBody.text).toContain("W7S app suspended");
+    expect(secondBody.parse_mode).toBe("MarkdownV2");
+    expect(secondBody.text).toContain("*W7S app suspended*");
   });
 
   it("handles Telegram webhook updates with setup instructions", async () => {
@@ -217,7 +221,7 @@ describe("Telegram notifications", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const body = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body)) as { chat_id: string; text: string; parse_mode?: string };
     expect(body.chat_id).toBe("77777");
-    expect(body.parse_mode).toBe("Markdown");
+    expect(body.parse_mode).toBe("MarkdownV2");
     expect(body.text).toContain('```\ntelegram-chat-id: "77777"\n```');
     expect(body.text).toContain('telegram-chat-id: "77777"');
     expect(body.text).toContain("w7s-io/w7s-cloud@v1");
