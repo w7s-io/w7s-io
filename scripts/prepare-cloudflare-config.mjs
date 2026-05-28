@@ -48,6 +48,7 @@ const statusIncidentsJson = process.env.W7S_STATUS_INCIDENTS_JSON?.trim() || "";
 const telegramEvents = process.env.W7S_TELEGRAM_EVENTS?.trim() || "";
 const telegramBotToken = process.env.W7S_TELEGRAM_BOT_TOKEN?.trim() || "";
 const telegramChatId = process.env.W7S_TELEGRAM_CHAT_ID?.trim() || "";
+const telegramWebhookSecret = process.env.W7S_TELEGRAM_WEBHOOK_SECRET?.trim() || "";
 
 if (!apiToken) {
   throw new Error("CLOUDFLARE_API_TOKEN is required.");
@@ -244,7 +245,8 @@ await writeFile(
       CLOUDFLARE_API_TOKEN: apiToken,
       CLOUDFLARE_ACCOUNT_ID: accountId,
       ...(telegramBotToken ? { W7S_TELEGRAM_BOT_TOKEN: telegramBotToken } : {}),
-      ...(telegramChatId ? { W7S_TELEGRAM_CHAT_ID: telegramChatId } : {})
+      ...(telegramChatId ? { W7S_TELEGRAM_CHAT_ID: telegramChatId } : {}),
+      ...(telegramWebhookSecret ? { W7S_TELEGRAM_WEBHOOK_SECRET: telegramWebhookSecret } : {})
     },
     null,
     2

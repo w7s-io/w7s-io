@@ -52,9 +52,10 @@ Optional manager notification secrets:
 ```text
 W7S_TELEGRAM_BOT_TOKEN
 W7S_TELEGRAM_CHAT_ID
+W7S_TELEGRAM_WEBHOOK_SECRET
 ```
 
-`W7S_TELEGRAM_BOT_TOKEN` is the Telegram bot token. `W7S_TELEGRAM_CHAT_ID` must be the private chat, group, or channel id the bot can message. For a private manager chat, the manager must first send a message such as `/start` to the bot, then read the chat id from `getUpdates` or another Telegram admin tool.
+`W7S_TELEGRAM_BOT_TOKEN` is the Telegram bot token. `W7S_TELEGRAM_CHAT_ID` must be the private chat, group, or channel id the bot can message. For a private manager chat, the manager must first send a message such as `/start` to the bot. `W7S_TELEGRAM_WEBHOOK_SECRET` is optional but recommended for the webhook route.
 
 ## Optional GitHub Variables
 
@@ -106,6 +107,14 @@ If Telegram notification secrets are configured, W7S sends manager notifications
 - hourly Cloudflare usage collection failures.
 
 Use `W7S_TELEGRAM_EVENTS` to limit those messages. Supported values are `all`, `deploy_success`, `deploy_warning`, `deploy_error`, `app_suspended`, and `usage_collection_error`.
+
+The bot webhook lives at:
+
+```text
+POST /api/v1/telegram/webhook
+```
+
+When configured in Telegram with the webhook secret, users can send `/start` to the bot and receive their chat id plus a GitHub Actions deploy snippet using `telegram-chat-id`. The deploy action forwards that id to W7S, and W7S stores it by repo/environment for deploy notifications, app suspension alerts, and future payment-request notifications.
 
 Routes are reconciled after `wrangler deploy` instead of being managed by the generated Wrangler config. This prevents core deploys from deleting W7S app custom-domain routes such as `community.w7s.io/*`.
 

@@ -243,6 +243,7 @@ await env.W7S_WORKFLOW.fetch(
 - `CLOUDFLARE_ACCOUNT_ID`: Cloudflare account id
 - `W7S_TELEGRAM_BOT_TOKEN`: optional Telegram bot token for manager notifications
 - `W7S_TELEGRAM_CHAT_ID`: optional Telegram chat id that receives manager notifications
+- `W7S_TELEGRAM_WEBHOOK_SECRET`: optional Telegram webhook secret token
 
 ## GitHub Deploy
 
@@ -257,6 +258,7 @@ Optional notification secrets:
 
 - `W7S_TELEGRAM_BOT_TOKEN`
 - `W7S_TELEGRAM_CHAT_ID`
+- `W7S_TELEGRAM_WEBHOOK_SECRET`
 
 Optional repo variables:
 
@@ -272,6 +274,24 @@ Optional repo variables:
 - `W7S_TELEGRAM_EVENTS`, comma-separated event allowlist. Supported values: `all`, `deploy_success`, `deploy_warning`, `deploy_error`, `app_suspended`, `usage_collection_error`.
 
 Set `W7S_ATTACH_WILDCARD_ROUTE=true` only when this worker should attach the `*.w7s.cloud/*` route. Cloudflare rejects the deploy if another worker already owns that route.
+
+## Telegram Notifications
+
+W7S can send Telegram notifications to the platform manager and to repo subscribers.
+
+Manager notifications use `W7S_TELEGRAM_BOT_TOKEN` plus `W7S_TELEGRAM_CHAT_ID` and cover deploy success/warnings/errors, app suspensions, and usage collection failures.
+
+Repo subscribers are linked during an authenticated deploy. The reusable action sends the chat id in `x-w7s-telegram-chat-id`, and W7S stores it under the repo/environment so future repo alerts can be pushed to the same Telegram chat.
+
+```yaml
+- uses: w7s-io/w7s-cloud@v1
+  with:
+    token: ${{ github.token }}
+    telegram-chat-id: "123456789"
+    telegram-events: deploy_success,deploy_warning,deploy_error,app_suspended,payment_request
+```
+
+The bot webhook is `POST /api/v1/telegram/webhook`. When `W7S_TELEGRAM_WEBHOOK_SECRET` is configured, Telegram must send it as `x-telegram-bot-api-secret-token`. Users can send `/start` to the bot to receive their chat id and a copy-pasteable GitHub Actions snippet.
 
 Wildcard DNS is intentionally managed manually. Before enabling the wildcard Worker route, create a proxied Cloudflare DNS record:
 

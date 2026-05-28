@@ -35,6 +35,7 @@ jobs:
       W7S_TELEGRAM_EVENTS: ${{ vars.W7S_TELEGRAM_EVENTS }}
       W7S_TELEGRAM_BOT_TOKEN: ${{ secrets.W7S_TELEGRAM_BOT_TOKEN }}
       W7S_TELEGRAM_CHAT_ID: ${{ secrets.W7S_TELEGRAM_CHAT_ID }}
+      W7S_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.W7S_TELEGRAM_WEBHOOK_SECRET }}
 
     steps:
       - name: Checkout

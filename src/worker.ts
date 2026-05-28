@@ -16,7 +16,11 @@ import { W7SWorkflow } from "./runtime/workflowDelivery";
 import { resolveRuntimeRequest } from "./runtime/router";
 import { landingHtml } from "./static/landing";
 import { handleTailEvents } from "./logs";
-import { notifyDeployResponse } from "./notifications";
+import {
+  handleTelegramWebhook,
+  handleTelegramWebhookInfo,
+  notifyDeployResponse
+} from "./notifications";
 
 export { W7SWorkflow };
 
@@ -52,6 +56,8 @@ app.get("/api/v1/usage/*", handleUsageGet);
 app.get("/api/v1/limits/*", handleLimitsGet);
 app.get("/api/v1/analytics/*", handleAnalyticsGet);
 app.get("/api/v1/logs/*", handleLogsGet);
+app.get("/api/v1/telegram/webhook", handleTelegramWebhookInfo);
+app.post("/api/v1/telegram/webhook", handleTelegramWebhook);
 
 const optionalExecutionCtx = (c: Context<{ Bindings: Env }>) => {
   try {

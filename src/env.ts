@@ -52,6 +52,7 @@ export interface Env {
   W7S_TELEGRAM_BOT_TOKEN?: string;
   W7S_TELEGRAM_CHAT_ID?: string;
   W7S_TELEGRAM_EVENTS?: string;
+  W7S_TELEGRAM_WEBHOOK_SECRET?: string;
   APP_COMMIT_ID?: string;
   APP_DEPLOY_BRANCH?: string;
   APP_DEPLOYED_AT?: string;
