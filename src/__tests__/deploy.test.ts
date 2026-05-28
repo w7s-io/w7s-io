@@ -979,8 +979,7 @@ describe("deploy API", () => {
         settings: {
           batch_size: 10,
           max_retries: 3,
-          retry_delay: 10,
-          visibility_timeout_ms: 300000
+          retry_delay: 10
         }
       }
     ]);

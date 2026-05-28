@@ -291,7 +291,6 @@ Queue sends reject JSON envelopes larger than `W7S_QUEUE_MAX_MESSAGE_BYTES`, def
 W7S_QUEUE_BATCH_SIZE               10
 W7S_QUEUE_MAX_RETRIES              3
 W7S_QUEUE_RETRY_DELAY_SECONDS      10
-W7S_QUEUE_VISIBILITY_TIMEOUT_MS    300000
 ```
 
 Workflow starts reject instance payloads larger than `W7S_WORKFLOW_MAX_PAYLOAD_BYTES`, default `65536`. W7S also tracks active workflow instances in KV and blocks new starts for a target repo when `W7S_WORKFLOW_ACTIVE_LIMIT` is reached, default `50`. Active markers expire after `W7S_WORKFLOW_ACTIVE_TTL_SECONDS`, default `86400`, and are cleared when the W7S workflow delivery finishes. Workflow delivery retry/timeout defaults are:

@@ -34,8 +34,7 @@ const positiveInteger = (value: string | undefined, fallback: number) => {
 const queueConsumerSettings = (env: Env) => ({
   batch_size: positiveInteger(env.W7S_QUEUE_BATCH_SIZE, 10),
   max_retries: positiveInteger(env.W7S_QUEUE_MAX_RETRIES, 3),
-  retry_delay: positiveInteger(env.W7S_QUEUE_RETRY_DELAY_SECONDS, 10),
-  visibility_timeout_ms: positiveInteger(env.W7S_QUEUE_VISIBILITY_TIMEOUT_MS, 300_000)
+  retry_delay: positiveInteger(env.W7S_QUEUE_RETRY_DELAY_SECONDS, 10)
 });
 
 const shortHash = (value: string) => {
