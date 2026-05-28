@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { app } from "../worker";
 import { createTestEnv } from "./mocks";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("health endpoint", () => {
   it("exposes deploy metadata", async () => {
@@ -49,5 +53,70 @@ describe("landing page", () => {
     expect(body).toContain("branches:");
     expect(body).not.toContain("install-command");
     expect(body).not.toContain("build-command");
+  });
+});
+
+describe("status endpoint", () => {
+  it("exposes a public component summary", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+
+        if (url.includes("/api/v1/limits/")) {
+          return new Response(
+            JSON.stringify({ status: "error", error: "Missing bearer token." }),
+            { status: 401, headers: { "content-type": "application/json" } }
+          );
+        }
+
+        if (
+          url.includes("example-rpc-client") ||
+          url.includes("example-queue-worker") ||
+          url.includes("example-schedules")
+        ) {
+          return new Response(JSON.stringify({ status: "ok" }), {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          });
+        }
+
+        if (url.includes("example-durable-counter")) {
+          return new Response(
+            JSON.stringify({
+              service: "example-durable-counter",
+              object: "Counter"
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+
+        if (url.includes("example-workflows")) {
+          return new Response(JSON.stringify({ service: "example-workflows" }), {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          });
+        }
+
+        return new Response("Deploy From GitHub", { status: 200 });
+      })
+    );
+
+    const response = await app.fetch(
+      new Request("https://w7s.cloud/api/v1/status"),
+      createTestEnv()
+    );
+    const body = await response.json() as {
+      status: { description: string };
+      components: Array<{ status: string }>;
+      incidents: unknown[];
+    };
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+    expect(body.status.description).toBe("All systems operational");
+    expect(body.components).toHaveLength(12);
+    expect(body.components.every((component) => component.status === "operational")).toBe(true);
+    expect(body.incidents).toHaveLength(0);
   });
 });

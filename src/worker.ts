@@ -8,6 +8,7 @@ import { handleUsageGet } from "./api/usage";
 import { handleLimitsGet } from "./api/limits";
 import { handleAnalyticsGet } from "./api/analytics";
 import { handleLogsGet } from "./api/logs";
+import { handleStatusGet, handleStatusOptions } from "./api/status";
 import { json } from "./http";
 import { handleQueueBatch } from "./runtime/queueDelivery";
 import { handleScheduled } from "./runtime/scheduleDelivery";
@@ -31,6 +32,8 @@ const health = (c: Context<{ Bindings: Env }>) =>
 
 app.get("/health", health);
 app.get("/api/v1/health", health);
+app.options("/api/v1/status", handleStatusOptions);
+app.get("/api/v1/status", handleStatusGet);
 
 app.post("/api/v1/deploy", handleDeploy);
 app.all("/api/v1/rpc/*", handleRpc);
