@@ -16,6 +16,11 @@ import { handleScheduled } from "./runtime/scheduleDelivery";
 import { W7SWorkflow } from "./runtime/workflowDelivery";
 import { resolveRuntimeRequest } from "./runtime/router";
 import { landingHtml } from "./static/landing";
+import {
+  htmlNoPreviewHeaders,
+  isSocialPreviewCrawler,
+  socialPreviewNoContentResponse
+} from "./noPreview";
 import { handleTailEvents } from "./logs";
 import {
   handleTelegramWebhook,
@@ -77,13 +82,11 @@ app.all("*", async (c) => {
     return c.notFound();
   }
 
-  const headers = new Headers({
-    "content-type": "text/html; charset=utf-8",
-    "cache-control": "no-cache"
-  });
+  if (isSocialPreviewCrawler(c.req.raw)) return socialPreviewNoContentResponse();
+
   return new Response(c.req.method === "HEAD" ? null : landingHtml(), {
     status: 200,
-    headers
+    headers: htmlNoPreviewHeaders()
   });
 });
 

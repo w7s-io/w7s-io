@@ -10,6 +10,7 @@ import type { DeploymentRecord, StaticSiteManifest } from "../storage/deployment
 import { loadAppLimitState, suspendAppForLimits } from "../appLimits";
 import { recordUsageEvent } from "../usage";
 import { usageLimitPolicyKey } from "../usageLimits";
+import { NO_PREVIEW_ROBOTS } from "../noPreview";
 
 const storeStaticDeployment = async (
   env: ReturnType<typeof createTestEnv>,
@@ -409,6 +410,11 @@ describe("runtime router", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("x-robots-tag")).toBe(NO_PREVIEW_ROBOTS);
+    expect(body).toContain(`<meta name="robots" content="${NO_PREVIEW_ROBOTS}" />`);
+    expect(body).not.toContain("og:");
+    expect(body).not.toContain("twitter:");
     expect(body).toContain("<h1>The Cloud that <em>just works</em>.</h1>");
     expect(body).toContain("Deploy target");
     expect(body).toContain("<h2>Nothing is deployed here yet.</h2>");
@@ -439,6 +445,25 @@ describe("runtime router", () => {
     expect(body).not.toContain("install-command");
     expect(body).not.toContain("build-command");
     expect(body).not.toContain("example-fullstack-ts");
+  });
+
+  it("returns no content for social preview crawlers on undeployed app URLs", async () => {
+    const env = createTestEnv();
+
+    const response = await app.fetch(
+      new Request("https://sadasant.w7s.cloud/missing-repo/", {
+        headers: {
+          host: "sadasant.w7s.cloud",
+          "user-agent": "TelegramBot (like TwitterBot)"
+        }
+      }),
+      env
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("x-robots-tag")).toBe(NO_PREVIEW_ROBOTS);
+    expect(await response.text()).toBe("");
   });
 
   it("shows contextual deploy help for missing repo-prefixed deployments", async () => {

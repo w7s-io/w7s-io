@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { app } from "../worker";
 import { createTestEnv } from "./mocks";
+import { NO_PREVIEW_ROBOTS } from "../noPreview";
 
 describe("health endpoint", () => {
   it("exposes deploy metadata", async () => {
@@ -31,6 +32,12 @@ describe("landing page", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("x-robots-tag")).toBe(NO_PREVIEW_ROBOTS);
+    expect(body).toContain(`<meta name="robots" content="${NO_PREVIEW_ROBOTS}" />`);
+    expect(body).toContain('<meta name="description" content="" />');
+    expect(body).not.toContain("og:");
+    expect(body).not.toContain("twitter:");
     expect(body).toContain("<title>W7S Cloud</title>");
     expect(body).toContain("<h1>The Cloud that <em>just works</em>.</h1>");
     expect(body).toContain("GitHub Actions builds your app");
@@ -52,6 +59,22 @@ describe("landing page", () => {
     expect(body).toContain("branches:");
     expect(body).not.toContain("install-command");
     expect(body).not.toContain("build-command");
+  });
+
+  it("returns no content for social preview crawlers on the default page", async () => {
+    const response = await app.fetch(
+      new Request("https://w7s.cloud/", {
+        headers: {
+          "user-agent": "Twitterbot/1.0"
+        }
+      }),
+      createTestEnv()
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("x-robots-tag")).toBe(NO_PREVIEW_ROBOTS);
+    expect(await response.text()).toBe("");
   });
 });
 

@@ -1,4 +1,5 @@
 import { deployWorkflowHtml } from "./deployWorkflow";
+import { NO_PREVIEW_ROBOTS } from "../noPreview";
 
 export type DeployShowcaseTarget = {
   requestedUrl: string;
@@ -47,6 +48,10 @@ export const landingHtml = (target?: DeployShowcaseTarget) => `<!doctype html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="${NO_PREVIEW_ROBOTS}" />
+    <meta name="googlebot" content="${NO_PREVIEW_ROBOTS}" />
+    <meta name="bingbot" content="${NO_PREVIEW_ROBOTS}" />
+    <meta name="description" content="" />
     <title>W7S Cloud</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

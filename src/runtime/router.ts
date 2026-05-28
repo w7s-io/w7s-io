@@ -9,6 +9,11 @@ import { cleanHost, resolveRuntimeHost } from "./host";
 import { resolveStaticAssetResponse } from "./static";
 import { normalizeSlug } from "../names";
 import { landingHtml, type DeployShowcaseTarget } from "../static/landing";
+import {
+  htmlNoPreviewHeaders,
+  isSocialPreviewCrawler,
+  socialPreviewNoContentResponse
+} from "../noPreview";
 import { dispatchWorker } from "./dispatch";
 import { enforceAppNotSuspended, suspendAppForLimits } from "../appLimits";
 import { checkBlockedUsageLimit, costGuardExceededMessage } from "../usageEnforcement";
@@ -104,18 +109,17 @@ const deployShowcaseTarget = (request: Request, host: string, orgSlug: string): 
 };
 
 const deployShowcaseResponse = (request: Request, host: string, orgSlug: string) =>
-  new Response(
-    request.method === "HEAD"
-      ? null
-      : landingHtml(deployShowcaseTarget(request, host, orgSlug)),
-    {
-      status: 200,
-      headers: {
-        "content-type": "text/html; charset=utf-8",
-        "cache-control": "no-cache"
-      }
-    }
-  );
+  isSocialPreviewCrawler(request)
+    ? socialPreviewNoContentResponse()
+    : new Response(
+        request.method === "HEAD"
+          ? null
+          : landingHtml(deployShowcaseTarget(request, host, orgSlug)),
+        {
+          status: 200,
+          headers: htmlNoPreviewHeaders()
+        }
+      );
 
 const redirectToDirectoryPath = (request: Request) => {
   const url = new URL(request.url);
