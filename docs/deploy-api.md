@@ -376,7 +376,7 @@ const response = await env.W7S_AI.fetch("https://w7s.internal/api/v1/ai/run", {
     "x-w7s-ai-environment": env.W7S_AI_ENVIRONMENT
   },
   body: JSON.stringify({
-    model: "@cf/meta/llama-3.1-8b-instruct-fp8",
+    model: "@w7s/meta/llama-3.1-8b-instruct-fp8",
     input: { prompt: "Write one short deployment joke." }
   })
 });
@@ -388,7 +388,7 @@ The response shape is:
 {
   "status": "success",
   "data": {
-    "model": "@cf/meta/llama-3.1-8b-instruct-fp8",
+    "model": "@w7s/meta/llama-3.1-8b-instruct-fp8",
     "result": {
       "response": "..."
     }

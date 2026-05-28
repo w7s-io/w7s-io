@@ -11,7 +11,9 @@ import { enforceAppNotSuspended } from "../appLimits";
 
 type HonoContext = Context<{ Bindings: Env }>;
 
-const DEFAULT_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8";
+const W7S_MODEL_PREFIX = "@w7s/";
+const PROVIDER_MODEL_PREFIX = "@cf/";
+const DEFAULT_AI_MODEL = "@w7s/meta/llama-3.1-8b-instruct-fp8";
 const DEFAULT_MAX_AI_REQUEST_BYTES = 32 * 1024;
 
 class AiRequestError extends Error {
@@ -44,17 +46,28 @@ const parseCaller = (c: HonoContext) => {
   };
 };
 
+const publicModelName = (model: string) =>
+  model.startsWith(PROVIDER_MODEL_PREFIX)
+    ? `${W7S_MODEL_PREFIX}${model.slice(PROVIDER_MODEL_PREFIX.length)}`
+    : model;
+
+const providerModelName = (model: string) =>
+  model.startsWith(W7S_MODEL_PREFIX)
+    ? `${PROVIDER_MODEL_PREFIX}${model.slice(W7S_MODEL_PREFIX.length)}`
+    : model;
+
 const allowedModels = (env: Env) => {
   const configured = env.W7S_AI_ALLOWED_MODELS?.trim();
-  if (!configured) return [env.W7S_AI_DEFAULT_MODEL?.trim() || DEFAULT_AI_MODEL];
+  if (!configured) return [publicModelName(env.W7S_AI_DEFAULT_MODEL?.trim() || DEFAULT_AI_MODEL)];
   return configured
     .split(",")
     .map((entry) => entry.trim())
+    .map(publicModelName)
     .filter(Boolean);
 };
 
 const defaultModel = (env: Env) =>
-  env.W7S_AI_DEFAULT_MODEL?.trim() || allowedModels(env)[0] || DEFAULT_AI_MODEL;
+  publicModelName(env.W7S_AI_DEFAULT_MODEL?.trim() || allowedModels(env)[0] || DEFAULT_AI_MODEL);
 
 const readAiRunRequest = async (request: Request, env: Env) => {
   const text = await request.text();
@@ -72,7 +85,7 @@ const readAiRunRequest = async (request: Request, env: Env) => {
   if (modelValue !== undefined && typeof modelValue !== "string") {
     throw new AiRequestError("model must be a string.");
   }
-  const model = modelValue?.trim() || defaultModel(env);
+  const model = publicModelName(modelValue?.trim() || defaultModel(env));
   const input = record.input ?? record.inputs;
   if (!isRecord(input)) {
     throw new AiRequestError("input must be a JSON object.");
@@ -110,7 +123,7 @@ const writeAiUsage = async (params: {
     orgSlug: params.caller.orgSlug,
     repoSlug: params.caller.repoSlug,
     outcome,
-    source: "workers_ai",
+    source: "w7s_ai",
     target: params.model,
     method: "POST",
     status: params.status,
@@ -188,7 +201,7 @@ export const handleAiRun = async (c: HonoContext) => {
 
   try {
     const result = await c.env.AI.run(
-      aiRequest.model,
+      providerModelName(aiRequest.model),
       aiRequest.input,
       aiRequest.options as AiOptions
     );

@@ -50,7 +50,7 @@ const aiRequest = (params: {
       "x-w7s-ai-environment": params.environment ?? "production"
     },
     body: JSON.stringify({
-      model: params.model ?? "@cf/meta/llama-3.1-8b-instruct-fp8",
+      model: params.model ?? "@w7s/meta/llama-3.1-8b-instruct-fp8",
       input: params.input ?? { prompt: "Tell a deployment joke." }
     })
   });
@@ -83,7 +83,7 @@ describe("AI API", () => {
     await expect(response.json()).resolves.toEqual({
       status: "success",
       data: {
-        model: "@cf/meta/llama-3.1-8b-instruct-fp8",
+        model: "@w7s/meta/llama-3.1-8b-instruct-fp8",
         result: {
           response: "Deployment jokes always resolve at the edge."
         }
@@ -104,8 +104,8 @@ describe("AI API", () => {
         "acme",
         "jokes",
         "success",
-        "workers_ai",
-        "@cf/meta/llama-3.1-8b-instruct-fp8",
+        "w7s_ai",
+        "@w7s/meta/llama-3.1-8b-instruct-fp8",
         "POST"
       ],
       doubles: [1, 200, expect.any(Number)]
