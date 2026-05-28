@@ -31,6 +31,7 @@ export type DeploymentRecord = {
   deployedAt: string;
   customDomains?: string[];
   bindings?: DeploymentBindings;
+  ai?: DeploymentAiConfig;
   rpc?: DeploymentRpc;
   queue?: DeploymentQueueConfig;
   workflow?: DeploymentWorkflowConfig;
@@ -58,6 +59,11 @@ export type DeploymentRpc = {
   binding: string;
   tokenHash: string;
   allow: string[];
+};
+
+export type DeploymentAiConfig = {
+  binding: string;
+  tokenHash: string;
 };
 
 export type DeploymentQueueConfig = {

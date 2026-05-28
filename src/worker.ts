@@ -4,6 +4,7 @@ import { handleDeploy } from "./api/deploy";
 import { handleRpc } from "./api/rpc";
 import { handleQueueSend } from "./api/queues";
 import { handleWorkflowCreate, handleWorkflowStatus } from "./api/workflows";
+import { handleAiRun } from "./api/ai";
 import { handleUsageGet } from "./api/usage";
 import { handleLimitsGet } from "./api/limits";
 import { handleAnalyticsGet } from "./api/analytics";
@@ -49,6 +50,7 @@ app.post("/api/v1/deploy", async (c) => {
   return response;
 });
 app.all("/api/v1/rpc/*", handleRpc);
+app.post("/api/v1/ai/run", handleAiRun);
 app.post("/api/v1/queues/*", handleQueueSend);
 app.post("/api/v1/workflows/*", handleWorkflowCreate);
 app.get("/api/v1/workflows/*", handleWorkflowStatus);

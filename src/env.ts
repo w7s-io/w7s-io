@@ -19,6 +19,7 @@ export interface Env {
   STATIC_ASSETS?: R2Bucket;
   W7S_ANALYTICS?: AnalyticsEngineDataset;
   W7S_WORKFLOWS?: Workflow<W7SWorkflowPayload>;
+  AI?: Ai;
   CLOUDFLARE_API_TOKEN?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_DISPATCH_NAMESPACE?: string;
@@ -40,6 +41,9 @@ export interface Env {
   W7S_WORKFLOW_MAX_RETRIES?: string;
   W7S_WORKFLOW_RETRY_DELAY_SECONDS?: string;
   W7S_WORKFLOW_TIMEOUT_SECONDS?: string;
+  W7S_AI_DEFAULT_MODEL?: string;
+  W7S_AI_ALLOWED_MODELS?: string;
+  W7S_AI_MAX_REQUEST_BYTES?: string;
   W7S_STATIC_RETENTION_DAYS?: string;
   W7S_USAGE_RETENTION_DAYS?: string;
   W7S_WORKER_SCRIPT_RETENTION_DAYS?: string;

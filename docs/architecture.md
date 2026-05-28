@@ -99,6 +99,10 @@ Those can be rebuilt later as W7S-deployed apps/components on top of this core.
   - Adds `W7S_QUEUE` and `W7S_QUEUE_TOKEN` bindings to native Workers.
 - `src/deploy/workflowBindings.ts`
   - Adds `W7S_WORKFLOW` and `W7S_WORKFLOW_TOKEN` bindings to native Workers.
+- `src/deploy/aiBindings.ts`
+  - Adds declared W7S AI service bindings, per-deployment bearer tokens, and caller metadata to native Workers.
+- `src/api/ai.ts`
+  - Verifies W7S AI caller tokens, applies app suspension and `ai.run` limits, and calls the core Workers AI binding.
 - `src/runtime/queueDelivery.ts`
   - Receives Cloudflare Queue batches in the W7S core Worker.
   - Dispatches queue batches to target app consumer routes.

@@ -114,6 +114,7 @@ export const DEFAULT_DAILY_USAGE_LIMITS: UsageLimitPolicy[] = [
   { metric: "schedule.delivery", dailyUnits: 2_000, warningThreshold: 0.8, source: "default" },
   { metric: "workflow.create", dailyUnits: 1_000, warningThreshold: 0.8, source: "default" },
   { metric: "workflow.delivery", dailyUnits: 1_000, warningThreshold: 0.8, source: "default" },
+  { metric: "ai.run", dailyUnits: 100, warningThreshold: 0.8, source: "default" },
   { metric: "log.write", dailyUnits: 5_000, warningThreshold: 0.8, source: "default" }
 ];
 

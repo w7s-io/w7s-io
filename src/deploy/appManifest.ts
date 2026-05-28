@@ -33,6 +33,10 @@ export type HyperdriveBindingDeclaration = {
   id: string;
 };
 
+export type AiBindingDeclaration = {
+  binding: string;
+};
+
 export type QueueDeclaration = {
   name: string;
   consumer: string;
@@ -55,6 +59,7 @@ export type AppManifest = {
     d1: D1BindingDeclaration[];
     durableObjects: DurableObjectBindingDeclaration[];
     hyperdrive: HyperdriveBindingDeclaration[];
+    ai: AiBindingDeclaration[];
   };
   queues: QueueDeclaration[];
   schedules: ScheduleDeclaration[];
@@ -78,7 +83,8 @@ const emptyManifest = (): AppManifest => ({
     r2: [],
     d1: [],
     durableObjects: [],
-    hyperdrive: []
+    hyperdrive: [],
+    ai: []
   },
   queues: [],
   schedules: [],
@@ -261,6 +267,28 @@ const parseHyperdriveBindings = (value: unknown): HyperdriveBindingDeclaration[]
   });
 };
 
+const parseAiBindings = (value: unknown): AiBindingDeclaration[] => {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("bindings.ai must be an array.");
+  const seenBindings = new Set<string>();
+  return value.map((entry, index) => {
+    const declaration =
+      typeof entry === "string"
+        ? { binding: ensureBindingName(entry, `bindings.ai[${index}]`) }
+        : (() => {
+            const record = asRecord(entry, `bindings.ai[${index}]`);
+            return {
+              binding: ensureBindingName(record.binding, `bindings.ai[${index}].binding`)
+            };
+          })();
+    if (seenBindings.has(declaration.binding)) {
+      throw new Error(`bindings.ai[${index}].binding duplicates ${declaration.binding}.`);
+    }
+    seenBindings.add(declaration.binding);
+    return declaration;
+  });
+};
+
 const parseEnvNames = (value: unknown, field: string) => {
   if (value === undefined) return [];
   if (!Array.isArray(value)) throw new Error(`${field} must be an array.`);
@@ -399,7 +427,8 @@ export const readAppManifest = (archive: DeployArchive) => {
       r2: parseR2Bindings(bindings.r2),
       d1: parseD1Bindings(bindings.d1),
       durableObjects: parseDurableObjectBindings(bindings.durableObjects ?? bindings.durable_objects),
-      hyperdrive: parseHyperdriveBindings(bindings.hyperdrive)
+      hyperdrive: parseHyperdriveBindings(bindings.hyperdrive),
+      ai: parseAiBindings(bindings.ai)
     },
     queues: parseQueues(record.queues),
     schedules: parseSchedules(record.schedules),

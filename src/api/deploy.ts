@@ -33,6 +33,7 @@ import {
   buildWorkflowUploadBindings,
   W7S_WORKFLOW_BINDING
 } from "../deploy/workflowBindings";
+import { buildAiUploadBindings } from "../deploy/aiBindings";
 import { generateBindingToken, hashBindingToken } from "../deploy/tokens";
 import { provisionAppQueues } from "../deploy/queueProvisioner";
 import {
@@ -227,6 +228,9 @@ export const handleDeploy = async (c: HonoContext) => {
   if (!hasNativeBackend && appManifest.bindings.hyperdrive.length > 0) {
     return jsonError("Hyperdrive bindings require a native backend deployment.", 400);
   }
+  if (!hasNativeBackend && appManifest.bindings.ai.length > 0) {
+    return jsonError("AI bindings require a native backend deployment.", 400);
+  }
 
   const deployLimitErrors = validateDeployLimits({
     archive,
@@ -246,6 +250,7 @@ export const handleDeploy = async (c: HonoContext) => {
   let customDomainWarnings: Awaited<ReturnType<typeof planCustomDomainClaims>>["warnings"] = [];
   let blockedCustomDomains: Awaited<ReturnType<typeof planCustomDomainClaims>>["blocked"] = [];
   let deploymentBindings: DeploymentRecord["bindings"];
+  let deploymentAi: DeploymentRecord["ai"];
   let deploymentRpc: DeploymentRecord["rpc"];
   let deploymentQueue: DeploymentRecord["queue"];
   let deploymentWorkflow: DeploymentRecord["workflow"];
@@ -313,12 +318,36 @@ export const handleDeploy = async (c: HonoContext) => {
         allow: appManifest.workflow.allow,
         workflows: appManifest.workflows
       };
+      const aiDeclaration = appManifest.bindings.ai[0];
+      const aiToken = aiDeclaration ? generateBindingToken() : null;
+      const aiBindings = aiDeclaration && aiToken
+        ? buildAiUploadBindings({
+            env: c.env,
+            binding: aiDeclaration.binding,
+            token: aiToken,
+            orgSlug,
+            repoSlug,
+            environment
+          })
+        : [];
+      if (aiDeclaration && aiToken) {
+        deploymentAi = {
+          binding: aiDeclaration.binding,
+          tokenHash: await hashBindingToken(aiToken)
+        };
+      }
       const published = await publishIsolateWorker({
         env: c.env,
         archive,
         scriptName,
         entrypoint,
-        bindings: [...provisionedBindings.uploadBindings, ...rpcBindings, ...queueBindings, ...workflowBindings],
+        bindings: [
+          ...provisionedBindings.uploadBindings,
+          ...rpcBindings,
+          ...queueBindings,
+          ...workflowBindings,
+          ...aiBindings
+        ],
         durableObjectMigrations: provisionedBindings.durableObjectMigrations,
         tags: scriptTags
       });
@@ -380,6 +409,7 @@ export const handleDeploy = async (c: HonoContext) => {
     deployedAt,
     ...(attachedCustomDomains.length > 0 ? { customDomains: attachedCustomDomains } : {}),
     ...(deploymentBindings ? { bindings: deploymentBindings } : {}),
+    ...(deploymentAi ? { ai: deploymentAi } : {}),
     ...(deploymentRpc ? { rpc: deploymentRpc } : {}),
     ...(deploymentQueue ? { queue: deploymentQueue } : {}),
     ...(deploymentWorkflow ? { workflow: deploymentWorkflow } : {}),
@@ -436,6 +466,7 @@ export const handleDeploy = async (c: HonoContext) => {
   return jsonSuccess({
     deployment: {
       ...record,
+      ...(record.ai ? { ai: { binding: record.ai.binding } } : {}),
       ...(record.rpc ? { rpc: { binding: record.rpc.binding, allow: record.rpc.allow } } : {}),
       ...(record.queue
         ? {

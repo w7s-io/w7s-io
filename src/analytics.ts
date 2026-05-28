@@ -5,6 +5,7 @@ export type AnalyticsEventName =
   | "runtime_request"
   | "runtime_showcase"
   | "rpc"
+  | "ai_run"
   | "queue_send"
   | "queue_delivery"
   | "schedule_delivery"

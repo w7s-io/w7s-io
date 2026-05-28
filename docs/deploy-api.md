@@ -180,7 +180,8 @@ Example:
         "binding": "DB",
         "id": "cloudflare-hyperdrive-id"
       }
-    ]
+    ],
+    "ai": ["W7S_AI"]
   },
   "queues": ["jobs"],
   "schedules": [
@@ -200,7 +201,7 @@ Example:
 }
 ```
 
-`bindings.kv` entries create Workers KV namespaces. `bindings.r2` entries create R2 buckets. `bindings.d1` entries create D1 databases. `bindings.durableObjects` entries bind Durable Object classes exported by the native Worker. `bindings.hyperdrive` entries bind existing Cloudflare Hyperdrive configurations by ID. String storage entries use generated resource names; object entries can provide explicit names:
+`bindings.kv` entries create Workers KV namespaces. `bindings.r2` entries create R2 buckets. `bindings.d1` entries create D1 databases. `bindings.durableObjects` entries bind Durable Object classes exported by the native Worker. `bindings.hyperdrive` entries bind existing Cloudflare Hyperdrive configurations by ID. `bindings.ai` entries expose the W7S-provided AI service binding without repo-managed provider credentials. String storage entries use generated resource names; object entries can provide explicit names:
 
 ```json
 {
@@ -343,6 +344,59 @@ Unsupported imports:
 `node:` runtime imports are allowed for built Cloudflare Workers when the required compatibility flag is present in `dist/server/wrangler.json`.
 
 If a repo needs dependencies, it should bundle in CI and upload the bundled backend files.
+
+## Backend AI
+
+Native backends can opt into the W7S-provided AI service binding:
+
+```json
+{
+  "bindings": {
+    "ai": ["W7S_AI"]
+  }
+}
+```
+
+W7S injects:
+
+- `W7S_AI`: service binding to the W7S core Worker;
+- `W7S_AI_TOKEN`: secret bearer token for the current deployment;
+- `W7S_AI_CALLER`: `<owner>/<repo>`;
+- `W7S_AI_ENVIRONMENT`: deployment environment.
+
+Call the AI runner through the service binding:
+
+```ts
+const response = await env.W7S_AI.fetch("https://w7s.internal/api/v1/ai/run", {
+  method: "POST",
+  headers: {
+    authorization: `Bearer ${env.W7S_AI_TOKEN}`,
+    "content-type": "application/json",
+    "x-w7s-ai-caller": env.W7S_AI_CALLER,
+    "x-w7s-ai-environment": env.W7S_AI_ENVIRONMENT
+  },
+  body: JSON.stringify({
+    model: "@cf/meta/llama-3.1-8b-instruct-fp8",
+    input: { prompt: "Write one short deployment joke." }
+  })
+});
+```
+
+The response shape is:
+
+```json
+{
+  "status": "success",
+  "data": {
+    "model": "@cf/meta/llama-3.1-8b-instruct-fp8",
+    "result": {
+      "response": "..."
+    }
+  }
+}
+```
+
+W7S verifies the caller token, applies app suspension and `ai.run` usage limits, and then calls the core AI binding. Repos do not need provider account IDs, provider API tokens, or GitHub secrets for this binding.
 
 ## Backend RPC
 

@@ -725,7 +725,7 @@ describe("deploy API", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json() as {
-      data?: { deployment?: { rpc?: Record<string, unknown>; queue?: Record<string, unknown>; workflow?: Record<string, unknown> } };
+      data?: { deployment?: { ai?: Record<string, unknown>; rpc?: Record<string, unknown>; queue?: Record<string, unknown>; workflow?: Record<string, unknown> } };
     };
     const record = await loadDeploymentRecord(env, "production", "w7s-io", "demo");
     expect(record?.targets.worker?.entrypoint).toBe("backend/index.js");
@@ -745,6 +745,7 @@ describe("deploy API", () => {
       allow: [],
       workflows: []
     });
+    expect(body.data?.deployment?.ai).toBeUndefined();
   });
 
   it("stores declared workflows and uploads workflow runtime bindings", async () => {
@@ -822,6 +823,65 @@ describe("deploy API", () => {
       { service: "w7s-io" }
     ]);
     expect(record?.targets.worker?.tags).toEqual(uploadedMetadata[0]?.tags);
+  });
+
+  it("uploads declared W7S AI runtime bindings", async () => {
+    const uploadedMetadata: Array<{
+      bindings?: Array<Record<string, string>>;
+    }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "w7s-io/demo" });
+        }
+        if (
+          url.includes("/workers/dispatch/namespaces/w7s-isolate/scripts/") &&
+          init?.method === "PUT"
+        ) {
+          const form = init.body as FormData;
+          const metadata = form.get("metadata") as Blob;
+          uploadedMetadata.push(JSON.parse(await metadata.text()));
+          return Response.json({ success: true, result: { startup_time_ms: 5 } });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv({
+      CLOUDFLARE_API_TOKEN: "cf-token",
+      CLOUDFLARE_ACCOUNT_ID: "acct-123"
+    });
+    const response = await app.fetch(
+      deployRequest({
+        "backend/index.js": "export default { fetch(){ return new Response('backend') } }",
+        "w7s.json": JSON.stringify({
+          bindings: {
+            ai: ["W7S_AI"]
+          }
+        })
+      }),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      data?: { deployment?: { ai?: Record<string, unknown> } };
+    };
+    const record = await loadDeploymentRecord(env, "production", "w7s-io", "demo");
+    expect(record?.ai?.binding).toBe("W7S_AI");
+    expect(record?.ai?.tokenHash).toEqual(expect.any(String));
+    expect(body.data?.deployment?.ai).toEqual({
+      binding: "W7S_AI"
+    });
+    expect(uploadedMetadata[0]?.bindings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "service", name: "W7S_AI", service: "w7s-io" }),
+        expect.objectContaining({ type: "secret_text", name: "W7S_AI_TOKEN" }),
+        { type: "plain_text", name: "W7S_AI_CALLER", text: "w7s-io/demo" },
+        { type: "plain_text", name: "W7S_AI_ENVIRONMENT", text: "production" }
+      ])
+    );
   });
 
   it("provisions declared queues and uploads queue runtime bindings", async () => {

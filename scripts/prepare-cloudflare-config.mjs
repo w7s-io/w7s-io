@@ -22,6 +22,9 @@ const workflowActiveTtlSeconds = process.env.W7S_WORKFLOW_ACTIVE_TTL_SECONDS?.tr
 const workflowMaxRetries = process.env.W7S_WORKFLOW_MAX_RETRIES?.trim() || "3";
 const workflowRetryDelaySeconds = process.env.W7S_WORKFLOW_RETRY_DELAY_SECONDS?.trim() || "10";
 const workflowTimeoutSeconds = process.env.W7S_WORKFLOW_TIMEOUT_SECONDS?.trim() || "300";
+const aiDefaultModel = process.env.W7S_AI_DEFAULT_MODEL?.trim() || "@cf/meta/llama-3.1-8b-instruct-fp8";
+const aiAllowedModels = process.env.W7S_AI_ALLOWED_MODELS?.trim() || aiDefaultModel;
+const aiMaxRequestBytes = process.env.W7S_AI_MAX_REQUEST_BYTES?.trim() || "32768";
 const staticRetentionDays = process.env.W7S_STATIC_RETENTION_DAYS?.trim() || "7";
 const usageRetentionDays = process.env.W7S_USAGE_RETENTION_DAYS?.trim() || "14";
 const workerScriptRetentionDays = process.env.W7S_WORKER_SCRIPT_RETENTION_DAYS?.trim() || "7";
@@ -190,6 +193,9 @@ const config = {
     W7S_WORKFLOW_MAX_RETRIES: workflowMaxRetries,
     W7S_WORKFLOW_RETRY_DELAY_SECONDS: workflowRetryDelaySeconds,
     W7S_WORKFLOW_TIMEOUT_SECONDS: workflowTimeoutSeconds,
+    W7S_AI_DEFAULT_MODEL: aiDefaultModel,
+    W7S_AI_ALLOWED_MODELS: aiAllowedModels,
+    W7S_AI_MAX_REQUEST_BYTES: aiMaxRequestBytes,
     W7S_STATIC_RETENTION_DAYS: staticRetentionDays,
     W7S_USAGE_RETENTION_DAYS: usageRetentionDays,
     W7S_WORKER_SCRIPT_RETENTION_DAYS: workerScriptRetentionDays,
@@ -224,6 +230,9 @@ const config = {
       preview_bucket_name: staticBucketName
     }
   ],
+  ai: {
+    binding: "AI"
+  },
   ...(analyticsDataset
     ? {
         analytics_engine_datasets: [
@@ -282,6 +291,9 @@ console.log(
       workflowMaxRetries,
       workflowRetryDelaySeconds,
       workflowTimeoutSeconds,
+      aiDefaultModel,
+      aiAllowedModels,
+      aiMaxRequestBytes,
       staticRetentionDays,
       usageRetentionDays,
       workerScriptRetentionDays,
