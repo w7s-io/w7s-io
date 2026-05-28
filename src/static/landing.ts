@@ -401,6 +401,32 @@ export const landingHtml = (target?: DeployShowcaseTarget) => `<!doctype html>
         color: var(--text-faint);
         font-size: 13px;
       }
+      .legal-footer {
+        width: min(1400px, calc(100vw - 48px));
+        margin: 0 auto;
+        padding: 0 0 30px;
+        color: var(--text-faint);
+        font-size: 11px;
+      }
+      .legal-footer-inner {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        border-top: 1px solid var(--border);
+        padding-top: 20px;
+      }
+      .legal-footer nav {
+        gap: 16px;
+      }
+      .legal-footer a {
+        color: var(--text-faint);
+        text-decoration: none;
+      }
+      .legal-footer a:hover {
+        color: var(--amber);
+      }
       @media (max-width: 980px) {
         .hero,
         .panel {
@@ -420,6 +446,12 @@ export const landingHtml = (target?: DeployShowcaseTarget) => `<!doctype html>
         main {
           width: min(100vw - 32px, 1400px);
           padding-top: 54px;
+        }
+        .legal-footer {
+          width: min(100vw - 32px, 1400px);
+        }
+        .legal-footer nav {
+          display: flex;
         }
         h1 {
           font-size: clamp(46px, 17vw, 72px);
@@ -514,6 +546,15 @@ export const landingHtml = (target?: DeployShowcaseTarget) => `<!doctype html>
           </article>
         </section>
       </main>
+      <footer class="legal-footer">
+        <div class="legal-footer-inner">
+          <span>© 2026 W7S LLC</span>
+          <nav aria-label="Legal">
+            <a href="https://w7s.io/terms">Terms</a>
+            <a href="https://w7s.io/privacy">Privacy</a>
+          </nav>
+        </div>
+      </footer>
     </div>
   </body>
 </html>`;

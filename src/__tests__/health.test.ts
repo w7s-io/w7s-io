@@ -41,6 +41,9 @@ describe("landing page", () => {
     expect(body).toContain("schedule:");
     expect(body).toContain("issues: write");
     expect(body).toContain("w7s-io/w7s-cloud@v1");
+    expect(body).toContain("© 2026 W7S LLC");
+    expect(body).toContain('href="https://w7s.io/terms"');
+    expect(body).toContain('href="https://w7s.io/privacy"');
     expect(body.indexOf("<pre><code>")).toBeLessThan(body.indexOf("Add this GitHub Actions workflow"));
     expect(body).toContain('<strong class="workflow-action">w7s-io/w7s-cloud@v1</strong>');
     expect(body).toContain("token: ${{ github.token }}");
