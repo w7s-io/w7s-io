@@ -21,6 +21,22 @@ type StatusComponent = ComponentDefinition & {
   updated_at: string;
 };
 
+type RegionDefinition = {
+  id: string;
+  name: string;
+  group: string;
+  description: string;
+  endpoint: string;
+  latitude: number;
+  longitude: number;
+};
+
+type StatusRegion = RegionDefinition & {
+  status: ComponentStatus;
+  checked_at: string;
+  updated_at: string;
+};
+
 type StatusIncident = {
   id: string;
   name: string;
@@ -124,6 +140,63 @@ const COMPONENTS: ComponentDefinition[] = [
   }
 ];
 
+const REGIONS: RegionDefinition[] = [
+  {
+    id: "north-america",
+    name: "North America",
+    group: "W7S Edge",
+    description: "Regional public routing for North American traffic.",
+    endpoint: "North America edge",
+    latitude: 39,
+    longitude: -98
+  },
+  {
+    id: "latin-america",
+    name: "Latin America",
+    group: "W7S Edge",
+    description: "Regional public routing for Latin American traffic.",
+    endpoint: "Latin America edge",
+    latitude: -15,
+    longitude: -60
+  },
+  {
+    id: "europe",
+    name: "Europe",
+    group: "W7S Edge",
+    description: "Regional public routing for European traffic.",
+    endpoint: "Europe edge",
+    latitude: 50,
+    longitude: 10
+  },
+  {
+    id: "africa",
+    name: "Africa",
+    group: "W7S Edge",
+    description: "Regional public routing for African traffic.",
+    endpoint: "Africa edge",
+    latitude: 1,
+    longitude: 20
+  },
+  {
+    id: "asia-pacific",
+    name: "Asia Pacific",
+    group: "W7S Edge",
+    description: "Regional public routing for Asia Pacific traffic.",
+    endpoint: "Asia Pacific edge",
+    latitude: 23,
+    longitude: 105
+  },
+  {
+    id: "oceania",
+    name: "Oceania",
+    group: "W7S Edge",
+    description: "Regional public routing for Oceania traffic.",
+    endpoint: "Oceania edge",
+    latitude: -25,
+    longitude: 134
+  }
+];
+
 const validStatus = (status: unknown): status is ComponentStatus =>
   status === "operational" ||
   status === "degraded_performance" ||
@@ -171,6 +244,17 @@ const componentStatusOverrides = (env: Env) => {
   );
 };
 
+const regionStatusOverrides = (env: Env) => {
+  const parsed = parseJson<Record<string, unknown>>(env.W7S_STATUS_REGIONS_JSON);
+  if (!parsed) return {};
+
+  return Object.fromEntries(
+    Object.entries(parsed).filter((entry): entry is [string, ComponentStatus] =>
+      validStatus(entry[1])
+    )
+  );
+};
+
 const incidentOverrides = (env: Env) => {
   const parsed = parseJson<unknown>(env.W7S_STATUS_INCIDENTS_JSON);
   if (!Array.isArray(parsed)) return [];
@@ -209,10 +293,24 @@ const buildComponents = (env: Env, checkedAt: string): StatusComponent[] => {
   }));
 };
 
-const overallStatus = (components: StatusComponent[], incidents: StatusIncident[]) => {
-  const worstComponent = components.reduce<ComponentStatus>(
-    (worst, component) =>
-      statusRank[component.status] > statusRank[worst] ? component.status : worst,
+const buildRegions = (env: Env, checkedAt: string): StatusRegion[] => {
+  const overrides = regionStatusOverrides(env);
+
+  return REGIONS.map((region) => ({
+    ...region,
+    status: overrides[region.id] ?? "operational",
+    checked_at: checkedAt,
+    updated_at: checkedAt
+  }));
+};
+
+const overallStatus = (
+  resources: Array<{ status: ComponentStatus }>,
+  incidents: StatusIncident[]
+) => {
+  const worstResource = resources.reduce<ComponentStatus>(
+    (worst, resource) =>
+      statusRank[resource.status] > statusRank[worst] ? resource.status : worst,
     "operational"
   );
   const hasCriticalIncident = incidents.some((incident) => incident.impact === "critical");
@@ -226,21 +324,21 @@ const overallStatus = (components: StatusComponent[], incidents: StatusIncident[
     };
   }
 
-  if (worstComponent === "major_outage") {
+  if (worstResource === "major_outage") {
     return {
       indicator: "major",
       description: "Active outage detected"
     };
   }
 
-  if (hasMajorIncident || worstComponent === "partial_outage") {
+  if (hasMajorIncident || worstResource === "partial_outage") {
     return {
       indicator: "minor",
       description: "Partial outage detected"
     };
   }
 
-  if (hasMinorIncident || worstComponent === "degraded_performance") {
+  if (hasMinorIncident || worstResource === "degraded_performance") {
     return {
       indicator: "minor",
       description: "Some systems degraded"
@@ -253,29 +351,33 @@ const overallStatus = (components: StatusComponent[], incidents: StatusIncident[
   };
 };
 
-const componentIncidents = (components: StatusComponent[], checkedAt: string): StatusIncident[] => {
-  const impacted = components.filter((component) => component.status !== "operational");
+const resourceIncidents = (
+  resources: Array<{ id: string; name: string; status: ComponentStatus }>,
+  checkedAt: string,
+  options: { id: string; name: string; body: string }
+): StatusIncident[] => {
+  const impacted = resources.filter((resource) => resource.status !== "operational");
   if (!impacted.length) return [];
 
-  const impact = impacted.reduce<"minor" | "major">((worst, component) => {
-    const nextImpact = componentImpact(component.status);
+  const impact = impacted.reduce<"minor" | "major">((worst, resource) => {
+    const nextImpact = componentImpact(resource.status);
     return nextImpact === "major" ? "major" : worst;
   }, "minor");
 
   return [
     {
-      id: `component-status-${checkedAt}`,
-      name: "W7S component status update",
+      id: `${options.id}-${checkedAt}`,
+      name: options.name,
       status: "investigating",
       impact,
       created_at: checkedAt,
       updated_at: checkedAt,
-      components: impacted.map((component) => component.id),
-      component_names: impacted.map((component) => component.name),
+      components: impacted.map((resource) => resource.id),
+      component_names: impacted.map((resource) => resource.name),
       incident_updates: [
         {
           status: "investigating",
-          body: "One or more W7S components is currently not marked operational.",
+          body: options.body,
           created_at: checkedAt
         }
       ]
@@ -286,7 +388,20 @@ const componentIncidents = (components: StatusComponent[], checkedAt: string): S
 const statusSummary = (env: Env) => {
   const checkedAt = new Date().toISOString();
   const components = buildComponents(env, checkedAt);
-  const incidents = [...incidentOverrides(env), ...componentIncidents(components, checkedAt)];
+  const regions = buildRegions(env, checkedAt);
+  const incidents = [
+    ...incidentOverrides(env),
+    ...resourceIncidents(components, checkedAt, {
+      id: "component-status",
+      name: "W7S component status update",
+      body: "One or more W7S components is currently not marked operational."
+    }),
+    ...resourceIncidents(regions, checkedAt, {
+      id: "region-status",
+      name: "W7S edge region status update",
+      body: "One or more W7S edge regions is currently not marked operational."
+    })
+  ];
 
   return {
     page: {
@@ -296,8 +411,9 @@ const statusSummary = (env: Env) => {
       time_zone: "Etc/UTC",
       updated_at: checkedAt
     },
-    status: overallStatus(components, incidents),
+    status: overallStatus([...components, ...regions], incidents),
     components,
+    regions,
     incidents,
     scheduled_maintenances: []
   };

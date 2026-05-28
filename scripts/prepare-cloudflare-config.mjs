@@ -43,6 +43,7 @@ const appDeployBranch =
   null;
 const appDeployedAt = process.env.W7S_DEPLOYED_AT?.trim() || null;
 const statusComponentsJson = process.env.W7S_STATUS_COMPONENTS_JSON?.trim() || "";
+const statusRegionsJson = process.env.W7S_STATUS_REGIONS_JSON?.trim() || "";
 const statusIncidentsJson = process.env.W7S_STATUS_INCIDENTS_JSON?.trim() || "";
 
 if (!apiToken) {
@@ -194,6 +195,7 @@ const config = {
     ...(appDeployBranch ? { APP_DEPLOY_BRANCH: appDeployBranch } : {}),
     ...(appDeployedAt ? { APP_DEPLOYED_AT: appDeployedAt } : {}),
     ...(statusComponentsJson ? { W7S_STATUS_COMPONENTS_JSON: statusComponentsJson } : {}),
+    ...(statusRegionsJson ? { W7S_STATUS_REGIONS_JSON: statusRegionsJson } : {}),
     ...(statusIncidentsJson ? { W7S_STATUS_INCIDENTS_JSON: statusIncidentsJson } : {})
   },
   dispatch_namespaces: [

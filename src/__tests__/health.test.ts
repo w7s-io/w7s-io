@@ -61,6 +61,7 @@ describe("status endpoint", () => {
     const body = await response.json() as {
       status: { description: string };
       components: Array<{ status: string }>;
+      regions: Array<{ status: string }>;
       incidents: unknown[];
     };
 
@@ -68,7 +69,9 @@ describe("status endpoint", () => {
     expect(response.headers.get("access-control-allow-origin")).toBe("*");
     expect(body.status.description).toBe("All systems operational");
     expect(body.components).toHaveLength(12);
+    expect(body.regions).toHaveLength(6);
     expect(body.components.every((component) => component.status === "operational")).toBe(true);
+    expect(body.regions.every((region) => region.status === "operational")).toBe(true);
     expect(body.incidents).toHaveLength(0);
   });
 
@@ -117,6 +120,32 @@ describe("status endpoint", () => {
     expect(body.incidents.flatMap((incident) => incident.component_names)).toContain(
       "Background queues"
     );
+  });
+
+  it("reports configured regional status overrides", async () => {
+    const response = await app.fetch(
+      new Request("https://w7s.cloud/api/v1/status"),
+      createTestEnv({
+        W7S_STATUS_REGIONS_JSON: JSON.stringify({
+          europe: "degraded_performance"
+        })
+      })
+    );
+    const body = await response.json() as {
+      status: { indicator: string; description: string };
+      regions: Array<{ id: string; name: string; status: string }>;
+      incidents: Array<{ component_names: string[] }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.status.indicator).toBe("minor");
+    expect(body.status.description).toBe("Some systems degraded");
+    expect(body.regions.find((region) => region.id === "europe")).toMatchObject({
+      name: "Europe",
+      status: "degraded_performance"
+    });
+    expect(body.incidents).toHaveLength(1);
+    expect(body.incidents[0]?.component_names).toContain("Europe");
   });
 
   it("ignores malformed incident overrides", async () => {
