@@ -9,8 +9,10 @@ https://<org>.w7s.cloud/<repo>/<path>
 Non-production branch deployments use a branch-prefixed host:
 
 ```text
-https://<branch-name>--<org>.w7s.cloud/<repo>/<path>
+https://<branch-environment>--<org>.w7s.cloud/<repo>/<path>
 ```
+
+The branch portion is the W7S environment name, not the raw Git branch. W7S lowercases it, replaces runs of characters outside `a-z`, `0-9`, and `-` with `-`, collapses repeated hyphens, trims leading/trailing hyphens, and caps it at 63 characters. For example, `feature/API.v2_test` becomes `feature-api-v2-test`.
 
 If a GitHub repo has the same name as the org/user, W7S also mounts that repo at the org root:
 
@@ -41,7 +43,7 @@ Supported host forms:
 - `<org>.w7s.cloud`
   - environment candidates: `production`
 - `<branch>--<org>.w7s.cloud`
-  - environment candidates: `<branch>`, then `production`
+  - environment candidates: sanitized `<branch>`, then `production`
 - `dev-<org>.w7s.cloud`
   - environment candidates: `dev`, then `production`
 - `staging-<org>.w7s.cloud`

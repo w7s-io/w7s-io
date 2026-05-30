@@ -334,7 +334,7 @@ describe("deploy API", () => {
     expect(body.data?.url).toBe("https://guerrerocarlos.w7s.cloud/");
   });
 
-  it("returns branch-prefixed URLs for non-production branch deployments", async () => {
+  it("returns DNS-safe branch-prefixed URLs for non-production branch deployments", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -352,17 +352,49 @@ describe("deploy API", () => {
           "frontend/dist/index.html": "<h1>Hello</h1>"
         },
         {
-          "x-github-branch": "feature/login"
+          "x-github-branch": "Feature/API.v2_test"
         }
       ),
       env
     );
 
     expect(response.status).toBe(200);
-    const body = await response.json() as { data?: { url?: string } };
-    expect(body.data?.url).toBe("https://feature-login--w7s-io.w7s.cloud/demo/");
-    const record = await loadDeploymentRecord(env, "feature-login", "w7s-io", "demo");
-    expect(record?.branch).toBe("feature/login");
+    const body = await response.json() as { data?: { deployment?: DeploymentRecord; url?: string } };
+    expect(body.data?.url).toBe("https://feature-api-v2-test--w7s-io.w7s.cloud/demo/");
+    expect(body.data?.deployment?.environment).toBe("feature-api-v2-test");
+    const record = await loadDeploymentRecord(env, "feature-api-v2-test", "w7s-io", "demo");
+    expect(record?.branch).toBe("Feature/API.v2_test");
+  });
+
+  it("normalizes explicit environment overrides for deploy storage and URLs", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("https://api.github.com/repos/")) {
+          return Response.json({ full_name: "w7s-io/demo" });
+        }
+        return Response.json({ success: true, result: {} });
+      })
+    );
+    const env = createTestEnv();
+    const response = await app.fetch(
+      deployRequest(
+        {
+          "frontend/dist/index.html": "<h1>Hello</h1>"
+        },
+        {
+          "x-w7s-environment": "Review/API.v2_test"
+        }
+      ),
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data?: { deployment?: DeploymentRecord; url?: string } };
+    expect(body.data?.url).toBe("https://review-api-v2-test--w7s-io.w7s.cloud/demo/");
+    expect(body.data?.deployment?.environment).toBe("review-api-v2-test");
+    await expect(loadDeploymentRecord(env, "review-api-v2-test", "w7s-io", "demo")).resolves.toBeTruthy();
   });
 
   it("attaches first unverified custom domain claims with setup warnings", async () => {

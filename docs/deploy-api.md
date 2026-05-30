@@ -52,7 +52,9 @@ Optional overrides:
 Default behavior:
 
 - `main` and `master` deploy to `production`;
-- all other branches deploy to a sanitized branch name.
+- all other branches deploy to a sanitized branch environment.
+
+Environment names are DNS-safe. W7S lowercases the branch or explicit override, replaces runs of characters outside `a-z`, `0-9`, and `-` with `-`, collapses repeated hyphens, trims leading/trailing hyphens, and caps the result at 63 characters.
 
 Production deployments are served from:
 
@@ -63,13 +65,13 @@ https://<org>.w7s.cloud/<repo>/
 Non-production branch deployments are served from:
 
 ```text
-https://<branch-name>--<org>.w7s.cloud/<repo>/
+https://<branch-environment>--<org>.w7s.cloud/<repo>/
 ```
 
-For example, branch `feature/login` is served from:
+For example, branch `feature/API.v2_test` is stored as environment `feature-api-v2-test` and served from:
 
 ```text
-https://feature-login--<org>.w7s.cloud/<repo>/
+https://feature-api-v2-test--<org>.w7s.cloud/<repo>/
 ```
 
 ## Archive Layout

@@ -41,7 +41,7 @@ Optional environment override:
 - query: `?environment=staging`
 - header: `x-w7s-environment: staging`
 
-Without an override, `main` and `master` deploy to `production`; other branches deploy to a sanitized branch environment.
+Without an override, `main` and `master` deploy to `production`; other branches deploy to a sanitized branch environment. Environment names are lowercased, runs of non-`a-z0-9-` characters become `-`, repeated hyphens collapse, and the result is capped at 63 characters. For example, `feature/API.v2_test` becomes `feature-api-v2-test`.
 
 Production deployments are served from:
 
@@ -52,7 +52,7 @@ https://<org>.w7s.cloud/<repo>/
 Non-production branch deployments are served from:
 
 ```text
-https://<branch-name>--<org>.w7s.cloud/<repo>/
+https://<branch-environment>--<org>.w7s.cloud/<repo>/
 ```
 
 ## Usage API

@@ -1,4 +1,4 @@
-import { normalizeSlug } from "../names";
+import { normalizeEnvironmentSlug, normalizeSlug } from "../names";
 
 const DEFAULT_BASE_DOMAIN = "w7s.cloud";
 const RESERVED_ORG_LABELS = new Set(["www", "api", "app"]);
@@ -26,7 +26,7 @@ export const resolveRuntimeHost = (
 
   const branchSeparator = label.lastIndexOf("--");
   if (branchSeparator > 0) {
-    const environment = normalizeSlug(label.slice(0, branchSeparator));
+    const environment = normalizeEnvironmentSlug(label.slice(0, branchSeparator));
     const orgSlug = normalizeSlug(label.slice(branchSeparator + 2));
     if (!environment || !orgSlug || RESERVED_ORG_LABELS.has(orgSlug)) return null;
     return {

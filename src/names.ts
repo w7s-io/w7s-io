@@ -1,4 +1,5 @@
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{0,99})$/i;
+const ENVIRONMENT_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62})$/;
 
 export const normalizeSlug = (value: string) =>
   value
@@ -16,8 +17,26 @@ export const requireSlug = (value: string, field: string) => {
   return slug;
 };
 
+export const normalizeEnvironmentSlug = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 63)
+    .replace(/-+$/g, "");
+
+export const requireEnvironmentSlug = (value: string, field = "environment") => {
+  const slug = normalizeEnvironmentSlug(value);
+  if (!slug || !ENVIRONMENT_PATTERN.test(slug)) {
+    throw new Error(`Invalid ${field}.`);
+  }
+  return slug;
+};
+
 export const branchToEnvironment = (branch: string) => {
-  const normalized = normalizeSlug(branch);
+  const normalized = normalizeEnvironmentSlug(branch);
   if (!normalized || normalized === "main" || normalized === "master") {
     return "production";
   }
@@ -30,7 +49,7 @@ export const resolveEnvironment = (params: {
   headerValue?: string | null;
 }) => {
   const override = (params.queryValue ?? params.headerValue ?? "").trim();
-  if (override) return requireSlug(override, "environment");
+  if (override) return requireEnvironmentSlug(override);
   return branchToEnvironment(params.branch);
 };
 
