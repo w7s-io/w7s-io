@@ -61,7 +61,7 @@ Configure npm trusted publishing for:
 Package: w7s-local
 Provider: GitHub Actions
 Organization or user: w7s-io
-Repository: w7s-io
+Repository: w7s-core
 Workflow filename: publish-w7s-local.yml
 Environment name: leave empty
 Allowed actions: npm publish

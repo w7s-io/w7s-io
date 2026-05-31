@@ -17,7 +17,7 @@ concurrency:
 jobs:
   publish:
     name: Publish npm package
-    if: github.repository == 'w7s-io/w7s-io'
+    if: github.repository == 'w7s-io/w7s-core'
     runs-on: ubuntu-latest
 
     steps:

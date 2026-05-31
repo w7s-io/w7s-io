@@ -81,7 +81,7 @@ npm trusted publisher settings:
 Package: w7s-local
 Provider: GitHub Actions
 Organization or user: w7s-io
-Repository: w7s-io
+Repository: w7s-core
 Workflow filename: publish-w7s-local.yml
 Environment name: leave empty
 Allowed actions: npm publish
@@ -136,8 +136,8 @@ The checked-in `wrangler.jsonc` contains current production bindings for local W
 5. Watch the GitHub Actions deploy run:
 
    ```sh
-   gh run list --repo w7s-io/w7s-io --limit 3
-   gh run watch <run-id> --repo w7s-io/w7s-io --exit-status
+   gh run list --repo w7s-io/w7s-core --limit 3
+   gh run watch <run-id> --repo w7s-io/w7s-core --exit-status
    ```
 
 6. Verify health:

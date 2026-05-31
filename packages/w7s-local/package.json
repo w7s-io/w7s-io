@@ -8,12 +8,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/w7s-io/w7s-io.git",
+    "url": "git+https://github.com/w7s-io/w7s-core.git",
     "directory": "packages/w7s-local"
   },
-  "homepage": "https://github.com/w7s-io/w7s-io/tree/main/packages/w7s-local#readme",
+  "homepage": "https://github.com/w7s-io/w7s-core/tree/main/packages/w7s-local#readme",
   "bugs": {
-    "url": "https://github.com/w7s-io/w7s-io/issues"
+    "url": "https://github.com/w7s-io/w7s-core/issues"
   },
   "keywords": [
     "w7s",
