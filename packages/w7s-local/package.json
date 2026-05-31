@@ -1,0 +1,39 @@
+{
+  "name": "w7s-local",
+  "version": "0.1.0",
+  "description": "workerd-powered local W7S routing simulator for app development.",
+  "type": "module",
+  "bin": {
+    "w7s-local": "bin/w7s-local.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w7s-io/w7s-io.git",
+    "directory": "packages/w7s-local"
+  },
+  "homepage": "https://github.com/w7s-io/w7s-io/tree/main/packages/w7s-local#readme",
+  "bugs": {
+    "url": "https://github.com/w7s-io/w7s-io/issues"
+  },
+  "keywords": [
+    "w7s",
+    "workerd",
+    "cloudflare-workers",
+    "local-development"
+  ],
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "workerd": "^1.20260530.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT"
+}

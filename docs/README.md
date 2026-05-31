@@ -9,7 +9,7 @@ Start here:
 3. [Runtime Routing](./runtime-routing.md): how `https://<org>.w7s.cloud/<repo>/*` and same-name org root apps are resolved.
 4. [Cloudflare Operations](./cloudflare-ops.md): bindings, GitHub Actions, wildcard cutover, DNS, and required permissions.
 5. [Usage Accounting](./usage-accounting.md): per-app daily usage rollups, warning thresholds, and hard daily limits.
-6. [Development And Testing](./development-and-testing.md): local commands, tests, and safe change workflow.
+6. [Development And Testing](./development-and-testing.md): local commands, `w7s-local`, tests, and safe change workflow.
 7. [Agent Handoff](./agent-handoff.md): current state, known limitations, and common next tasks.
 
 ## Current Model

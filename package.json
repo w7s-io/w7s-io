@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "local:dev": "node packages/w7s-local/bin/w7s-local.js",
     "deploy": "wrangler deploy",
     "prepare:cloudflare": "node scripts/prepare-cloudflare-config.mjs",
     "reconcile:cloudflare-routes": "node scripts/reconcile-cloudflare-routes.mjs",

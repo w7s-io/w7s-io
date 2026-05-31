@@ -1,0 +1,89 @@
+name: Publish w7s-local
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-w7s-local
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish npm package
+    if: github.repository == 'w7s-io/w7s-io'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check
+        run: npm run check
+
+      - name: Check package CLI
+        run: |
+          node --check packages/w7s-local/src/cli.js
+          node --check packages/w7s-local/bin/w7s-local.js
+
+      - name: Verify npm bootstrap
+        run: |
+          package_name="$(node -p "require('./packages/w7s-local/package.json').name")"
+          if ! npm view "$package_name" version >/dev/null 2>&1; then
+            echo "::error::$package_name does not exist on npm yet. Bootstrap it once with a maintainer npm account, then configure npm trusted publishing for this workflow."
+            exit 1
+          fi
+
+      - name: Determine next package version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_name="$(node -p "require('./packages/w7s-local/package.json').name")"
+          base_version="$(node -p "require('./packages/w7s-local/package.json').version")"
+          published_version="$(npm view "$package_name" version 2>/dev/null || true)"
+
+          if [ -n "$published_version" ]; then
+            next_version="$(node -e '
+              const version = process.argv[1];
+              const match = version.match(/^(\d+)\.(\d+)\.(\d+)$/);
+              if (!match) throw new Error(`Unsupported published version: ${version}`);
+              console.log(`${match[1]}.${match[2]}.${Number(match[3]) + 1}`);
+            ' "$published_version")"
+          else
+            next_version="$base_version"
+          fi
+
+          echo "package_name=$package_name" >> "$GITHUB_OUTPUT"
+          echo "published_version=$published_version" >> "$GITHUB_OUTPUT"
+          echo "next_version=$next_version" >> "$GITHUB_OUTPUT"
+
+      - name: Apply package version
+        working-directory: packages/w7s-local
+        run: npm version "${{ steps.version.outputs.next_version }}" --no-git-tag-version --allow-same-version
+
+      - name: Check package contents
+        working-directory: packages/w7s-local
+        run: npm pack --dry-run
+
+      - name: Publish package
+        working-directory: packages/w7s-local
+        run: npm publish
