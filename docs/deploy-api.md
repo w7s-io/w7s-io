@@ -312,10 +312,10 @@ W7S reads root `CNAME` first, then static-output and legacy `frontend` CNAME pat
 
 Custom-domain ownership is intentionally low-friction:
 
-- the first repo to claim a hostname can attach it without a TXT record;
+- a repo can attach a hostname without a TXT record;
 - W7S returns `customDomainWarnings` recommending a TXT allowlist for future safety;
 - if `_w7s.<zone>` exists, only GitHub owners or repos listed in that TXT record can use hostnames on that zone;
-- if another repo already claimed the hostname and no TXT allowlist exists, the new deploy succeeds but the hostname is reported in `blockedCustomDomains`.
+- if no TXT allowlist exists, the latest deployment wins and replaces any previous unverified hostname claim.
 
 Example TXT record for `whereis.carlosguerrero.com`:
 
@@ -628,7 +628,7 @@ For same-name repos, the public URL is the org root. A deploy from `guerrerocarl
 - `400 Invalid custom domain in CNAME file`
   - A `CNAME` file does not contain a valid hostname.
 - `200 success` with `blockedCustomDomains`
-  - The app deployed, but one or more `CNAME` hostnames were not attached because the TXT allowlist did not authorize the repo or the hostname is already claimed by another repo.
+  - The app deployed, but one or more `CNAME` hostnames were not attached because the TXT allowlist did not authorize the repo.
 - `500 Unable to find a Cloudflare zone for custom domain`
   - W7S could not attach the Worker route for that hostname.
 - `500 Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID`

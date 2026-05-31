@@ -33,7 +33,7 @@ As of the latest docs update:
 - Optional Telegram manager notifications are sent when `W7S_TELEGRAM_BOT_TOKEN` and `W7S_TELEGRAM_CHAT_ID` are configured. Events cover deploy success/warning/error, app suspension, and hourly usage collection failures.
 - The Telegram bot webhook is `POST /api/v1/telegram/webhook`. Repo subscribers can pass `telegram-chat-id` through `w7s-io/w7s-cloud@v1`; W7S stores the chat id by repo/environment for deploy notifications, app suspension alerts, and future payment-request notifications.
 - Root `CNAME` files can attach app custom-domain routes when the W7S token can manage that Cloudflare zone.
-- Custom domains use soft TXT verification: the first claim works without TXT, `_w7s.<zone>` becomes an owner/repo allowlist when present, and hostname conflicts require TXT authorization.
+- Custom domains use soft TXT verification: the latest deploy wins when TXT is absent, `_w7s.<zone>` becomes an owner/repo allowlist when present, and TXT mismatches block hostname attachment.
 - Empty org roots such as `https://sadasant.w7s.cloud/` show deploy-help HTML instead of a plain 404.
 - The demo repo `guerrerocarlos/w7s-io-demo` deploys successfully through the reusable deploy action.
 - The example repo `w7s-io/example-fullstack-ts` exists as a reusable fullstack TypeScript starter.
@@ -66,7 +66,7 @@ The point of this repo is to keep the core deploy/routing plane small.
 - Workflows are delivered through W7S core to app HTTP consumer routes. The first implementation is a durable one-step dispatch with retries, not a user-defined multi-step WorkflowEntrypoint inside the app Worker.
 - Static hosting supports `frontend/dist`, `dist/client`, `dist`, `build`, and `out`.
 - Custom-domain DNS is manual; W7S only stores the host mapping and attaches a Worker route.
-- W7S custom-domain verification is soft. A missing TXT record allows the first claim, so serious custom-domain users should add `_w7s.<zone>` with a GitHub owner or `owner/repo` allowlist.
+- W7S custom-domain verification is soft. A missing TXT record lets the latest deploy replace previous unverified claims, so serious custom-domain users should add `_w7s.<zone>` with a GitHub owner or `owner/repo` allowlist.
 - RPC currently uses a low-level `env.W7S_RPC.fetch(...)` convention. There is no typed client package yet.
 - Queues currently use a low-level `env.W7S_QUEUE.fetch(...)` convention. There is no typed queue client package yet.
 - Workflows currently use a low-level `env.W7S_WORKFLOW.fetch(...)` convention. There is no typed workflow client package yet.

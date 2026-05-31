@@ -631,7 +631,7 @@ describe("deploy API", () => {
     await expect(loadCustomDomainMapping(env, "whereis.carlosguerrero.com")).resolves.toBeNull();
   });
 
-  it("keeps existing custom domain mappings on unverified conflicts", async () => {
+  it("replaces existing unverified custom domain mappings with the latest deploy", async () => {
     vi.stubGlobal("fetch", stubCustomDomainFetch({ repository: "guerrerocarlos/whereis" }));
     const env = createTestEnv({
       CLOUDFLARE_API_TOKEN: "cf-token"
@@ -658,18 +658,19 @@ describe("deploy API", () => {
     const body = await response.json() as {
       data?: {
         customDomains?: string[];
-        blockedCustomDomains?: Array<{ reason?: string; currentRepository?: string }>;
+        customDomainWarnings?: Array<{ currentRepository?: string }>;
+        blockedCustomDomains?: unknown[];
       };
     };
-    expect(body.data?.customDomains).toBeUndefined();
-    expect(body.data?.blockedCustomDomains).toEqual([
+    expect(body.data?.customDomains).toEqual(["whereis.carlosguerrero.com"]);
+    expect(body.data?.customDomainWarnings).toEqual([
       expect.objectContaining({
-        reason: "already_claimed",
         currentRepository: "guerrerocarlos/old-site"
       })
     ]);
+    expect(body.data?.blockedCustomDomains).toBeUndefined();
     const mapping = await loadCustomDomainMapping(env, "whereis.carlosguerrero.com");
-    expect(mapping?.repoSlug).toBe("old-site");
+    expect(mapping?.repoSlug).toBe("whereis");
   });
 
   it("replaces existing custom domain mappings when TXT authorizes the new repo", async () => {

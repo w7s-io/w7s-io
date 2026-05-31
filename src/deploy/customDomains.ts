@@ -24,13 +24,14 @@ export type CustomDomainWarning = {
   domain: string;
   txtName: string;
   txtValue: string;
+  currentRepository?: string;
   message: string;
 };
 
 export type BlockedCustomDomain = {
   hostname: string;
   domain: string;
-  reason: "already_claimed" | "txt_allowlist_mismatch";
+  reason: "txt_allowlist_mismatch";
   txtName: string;
   txtValue: string;
   currentRepository?: string;
@@ -226,26 +227,17 @@ export const planCustomDomainClaims = async (params: {
       continue;
     }
 
-    if (existing && !sameRepo) {
-      plan.blocked.push({
-        hostname,
-        domain: zone.name,
-        reason: "already_claimed",
-        txtName,
-        txtValue,
-        currentRepository: existing.repository,
-        message: `${hostname} is already claimed by ${existing.repository}. Add TXT ${txtName}=${txtValue} to move it.`
-      });
-      continue;
-    }
-
     plan.attached.push(hostname);
     plan.warnings.push({
       hostname,
       domain: zone.name,
       txtName,
       txtValue,
-      message: `Add TXT ${txtName}=${txtValue} to restrict future claims for this domain.`
+      ...(existing && !sameRepo ? { currentRepository: existing.repository } : {}),
+      message:
+        existing && !sameRepo
+          ? `${hostname} replaced the unverified custom-domain claim by ${existing.repository}. Add TXT ${txtName}=${txtValue} to restrict future claims for this domain.`
+          : `Add TXT ${txtName}=${txtValue} to restrict future claims for this domain.`
     });
   }
 

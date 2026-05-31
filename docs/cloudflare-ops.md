@@ -184,7 +184,7 @@ During deploy, W7S:
 5. attaches a Worker route for `<hostname>/*` to the `w7s-io` Worker when the claim is allowed;
 6. stores `custom_domain:v1:<hostname>` in KV.
 
-The first repo to claim a hostname is allowed without a TXT record. The deploy response includes a warning recommending a TXT allowlist:
+A repo can claim a hostname without a TXT record, and the latest deployment replaces previous unverified claims. The deploy response includes a warning recommending a TXT allowlist:
 
 ```text
 Name: _w7s.carlosguerrero.com
@@ -199,7 +199,7 @@ guerrerocarlos,omattic
 guerrerocarlos/whereis,omattic
 ```
 
-An owner token, such as `guerrerocarlos`, authorizes every repo under that owner. A repo token, such as `guerrerocarlos/whereis`, authorizes only that repo. If two repos claim the same hostname and no TXT record exists, the existing KV mapping keeps ownership until the domain owner adds TXT authorization for the new repo.
+An owner token, such as `guerrerocarlos`, authorizes every repo under that owner. A repo token, such as `guerrerocarlos/whereis`, authorizes only that repo. If two repos claim the same hostname and no TXT record exists, the latest deployment replaces the previous unverified KV mapping. Add `_w7s.<zone>` to make the TXT allowlist authoritative.
 
 W7S does not create DNS records. The domain owner must create DNS, normally:
 
